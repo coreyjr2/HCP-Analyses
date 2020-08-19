@@ -51,9 +51,10 @@ N_RUNS_TASK = 2
 # Time series data are organized by experiment, with each experiment
 # having an LR and RL (phase-encode direction) acquistion
 BOLD_NAMES = [ "rfMRI_REST1_LR", "rfMRI_REST1_RL", "rfMRI_REST2_LR", "rfMRI_REST2_RL", "tfMRI_MOTOR_RL", "tfMRI_MOTOR_LR","tfMRI_WM_RL", "tfMRI_WM_LR", "tfMRI_EMOTION_RL", "tfMRI_EMOTION_LR", "tfMRI_GAMBLING_RL", "tfMRI_GAMBLING_LR", "tfMRI_LANGUAGE_RL", "tfMRI_LANGUAGE_LR", "tfMRI_RELATIONAL_RL", "tfMRI_RELATIONAL_LR", "tfMRI_SOCIAL_RL", "tfMRI_SOCIAL_LR"]
-# You may want to limit the subjects used during code development.
 # This will use all subjects:
 subjects = range(N_SUBJECTS)
+# You may want to limit the subjects used during code development.
+test_subjects = 5
 
 
 #Let's load the data in
@@ -159,31 +160,6 @@ def load_evs(subject, name, condition):
     evs.append(ev)
   return evs
 
-
-'''Now let's extract the time series for one subject'''
-ts_sub0 = load_timeseries(subject=0, name="rest", runs=1)
-print(ts_sub0.shape)  # n_parcel x n_timepoint
-
-ts_sub0_fc = np.zeros((N_PARCELS, N_PARCELS))
-for parcel, ts in enumerate(timeseries_rest):
-  fc[sub] = np.corrcoef(ts_sub0_fc)
-
-
-plt.imshow(ts_sub0_fc, interpolation="none", cmap="coolwarm", vmin=-1, vmax=1)
-plt.colorbar()
-plt.show()
-
-'''Now let's extract the time series for one parcel in one subject'''
-seed_ts_df = pd.DataFrame(ts_sub0 [0,:])
-seed_ts_df.plot()
-plt.title('Time series for a the first subject')
-plt.xlabel('Time')
-plt.ylabel('Normalized signal')
-plt.tight_layout()
-plt.show()
-'''You can see how this is a lot of data for all 
-participants at all timepoints!'''
-
 '''load the time series for all participants'''
 timeseries_rest = []
 for subject in subjects:
@@ -200,9 +176,36 @@ for sub, ts in enumerate(timeseries_rest):
 #take the mean across subjects in fc, which is a 3 dimensional object
 #doing this in the first dimension takes the average across participants
 group_fc = fc.mean(axis=0)
+#Now let's plot the average FC across all participants
 plt.imshow(group_fc, interpolation="none", cmap="coolwarm", vmin=-1, vmax=1)
 plt.colorbar()
 plt.show()
+
+
+'''Now let's extract the time series for one subject'''
+ 
+
+'''let's look at the functional connectivity for just this participant'''
+ts_sub0_fc = np.zeros((N_PARCELS, N_PARCELS))
+for parcel in enumerate(timeseries_rest):
+  ts_sub0_fc = np.corrcoef(ts)
+plt.imshow(ts_sub0_fc, interpolation="none", cmap="coolwarm", vmin=-1, vmax=1)
+plt.colorbar()
+plt.show()
+
+'''Now let's extract the time series for one parcel in one subject'''
+seed_ts_df = pd.DataFrame(ts_sub0 [0,:])
+seed_ts_df.plot()
+plt.title('Time series for a the first subject')
+plt.xlabel('Time')
+plt.ylabel('Normalized signal')
+plt.tight_layout()
+plt.show()
+'''You can see how this is a lot of data for all 
+participants at all timepoints!'''
+
+
+
 
 # @title load conte 69
 # First load the Glasser annotation file
