@@ -57,14 +57,13 @@ subjects = range(N_SUBJECTS)
 test_subjects = 5
 
 
-#Let's load the data in
+'''let's generate some information about the regions'''
 regions = np.load("/Volumes/Byrgenwerth/Datasets/HCP/hcp_rest/regions.npy").T
 region_info = dict(
     name=regions[0].tolist(),
     network=regions[1],
     myelin=regions[2].astype(np.float),
 )
-
 
 '''Now let's define a few helper functions'''
 def get_image_ids(name):
@@ -169,12 +168,18 @@ for subject in subjects:
 '''calculate the functional connecitvity matrix across all 
 all participants'''
 fc = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
+
+'''What this code will iterate over the subject dimension (the first) 
+and the time series dimension (the second) and then calculate the correlation coefficient
+for every subject's time series'''
 for sub, ts in enumerate(timeseries_rest):
   fc[sub] = np.corrcoef(ts)
+'''as a result, we get an object called fc, which is dimensions 339x360x360. 
+This represents the fc matrix for all 339 subjects'''
 
-'''plot group level FC'''
-#take the mean across subjects in fc, which is a 3 dimensional object
-#doing this in the first dimension takes the average across participants
+'''Now with that object, we can plot group level FC.
+We will take the mean across subjects in fc, which is a 3 dimensional object.
+doing this in the first dimension takes the average across participants'''
 group_fc = fc.mean(axis=0)
 #Now let's plot the average FC across all participants
 plt.imshow(group_fc, interpolation="none", cmap="coolwarm", vmin=-1, vmax=1)
@@ -183,7 +188,7 @@ plt.show()
 
 
 '''Now let's extract the time series for one subject'''
- 
+ts_sub0 = load_timeseries(0, "rest")
 
 '''let's look at the functional connectivity for just this participant'''
 ts_sub0_fc = np.zeros((N_PARCELS, N_PARCELS))
@@ -205,7 +210,7 @@ plt.show()
 participants at all timepoints!'''
 
 
-
+'''Now we will plot the nodal degree of the FC matrix'''
 
 # @title load conte 69
 # First load the Glasser annotation file
@@ -219,3 +224,15 @@ mask = Glasser != 0
 GlasserROIs = np.asarray(np.unique(Glasser), dtype=float)
 # Map ROI values to vertices indexes (Nvertices x 1)
 Glasser_masked = map_to_labels(GlasserROIs, Glasser, mask=mask, fill=np.nan)
+
+# I used the absolute value to facilitate the calculation 
+# this is not optimal, is only use as a visualization example
+Degree = np.append(0, abs(group_fc).sum(axis=0))
+
+# map the nodal degree to the vertices
+DegreeVertx = map_to_labels(Degree, Glasser, mask=mask, fill=np.nan)
+
+# Plot Surface
+plot_hemispheres(surf_lh, surf_rh, array_name=DegreeVertx, size=(1000, 200), label_text={'left':['Degree']},interactive=False,
+                 embed_nb=True, cmap='magma', color_bar='left',color_range=(10,120), zoom=1.25, nan_color=(1, 1, 1, 1)
+                )
