@@ -59,6 +59,11 @@ subjects = range(N_SUBJECTS)
 # You may want to limit the subjects used during code development.
 test_subjects = 5
 
+
+'''create a list of the subject ID's'''
+subj_list = np.array(np.unique(wm_behavior['Subject']))
+
+
 '''this is useful for visualizing:'''
 with np.load(f"{HCP_DIR}hcp_atlas.npz") as dobj:
   atlas = dict(**dobj)
@@ -193,6 +198,32 @@ plt.colorbar()
 plt.show()
 
 
+
+'''We need to vectorize the matrices so they play nicer with data in later analyses'''
+from nilearn.connectome import sym_matrix_to_vec
+#all_fc_data = {}
+all_fc_data = np.zeros((339, 64620))
+
+prova = sym_matrix_to_vec(fc[0], discard_diagonal=True)
+for subject in range(subj_list.shape[0]):
+    #all_fc_data[subject,:] = sym_matrix_to_vec(fc[subject,:,:], discard_diagonal=True)
+    all_fc_data[subject,:] = fc[subject][np.triu_indices_from(fc[subject], k=1)]
+
+all_fc_data = pd.DataFrame(data=all_fc_data, index=subj_list)
+all_fc_data.head()
+
+s = 1
+plt.imshow(sp.spatial.distance.squareform(all_fc_data.iloc[s,:]), interpolation="none", cmap="bwr", vmin=-1, vmax=1)
+plt.colorbar()
+plt.show()
+
+
+
+
+
+
+
+
 '''Now let's try something a little different. Why don't we see
 how one particular parcel (of the 360) relates to the total cconnectivity
 in the rest of the brain, split by right and left hemispheres.'''
@@ -236,6 +267,15 @@ participants at all timepoints!'''
 
 
 
+
+
+
+
+
+
+####################################
+ ####### Taks Data Analysis #######
+####################################
 
 '''Now let's switch to doing some task-based 
 analysis. Here are some helper functions for that.'''
@@ -304,14 +344,13 @@ def selective_average(timeseries_data, ev, skip=0):
 
   return avg_data
 
-'''Now let's load some motor task data'''
+'''Now let's load some wm task data'''
 '''I cannot figure out why this is happening, but in order for task analyses to
 run we have to cahnge the directory to be in the task section, or else it will
 get mad at us.'''
 
 HCP_DIR = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_task/"
 '''REMEMBER TO CHANGE THIS!!!'''
-
 
 '''Let's load the working memory data'''
 timeseries_wm = []
@@ -337,6 +376,13 @@ plt.imshow(group_fc_wm, interpolation="none", cmap="coolwarm", vmin=-1, vmax=1)
 plt.colorbar()
 plt.show()
 
+
+
+
+##########################################
+ ####### Behavioral Data Analysis #######
+##########################################
+
 '''Now let's load the behavioral data'''
 wm_behavior = np.genfromtxt(f"{HCP_DIR_BEHAVIOR}/behavior/wm.csv",
                             delimiter=",",
@@ -358,6 +404,23 @@ for variable in wm_behavior.columns:
 in the working memory task?'''
 print(np.unique(wm_behavior["ConditionName"]))
 
+'''let's now find each subject's total accuracy 
+for each condition for each subject'''
+wm_organized = wm_behavior.groupby(['Subject', 'ConditionName'])['ACC'].mean().reset_index()
+print(wm_organized)
+
+
+'''doing some more data wrangling. Let's make objects for each condition.'''
+wm_0bk_body = wm_organized.loc[wm_organized['ConditionName'] == '0BK_BODY']
+wm_0bk_face = wm_organized.loc[wm_organized['ConditionName'] == '0BK_FACE']
+wm_0bk_place = wm_organized.loc[wm_organized['ConditionName'] == '0BK_PLACE']
+wm_0bk_tool = wm_organized.loc[wm_organized['ConditionName'] == '0BK_TOOL']
+wm_2bk_body = wm_organized.loc[wm_organized['ConditionName'] == '2BK_BODY']
+wm_2bk_face = wm_organized.loc[wm_organized['ConditionName'] == '2BK_FACE']
+wm_2bk_place = wm_organized.loc[wm_organized['ConditionName'] == '2BK_PLACE']
+wm_2bk_tool = wm_organized.loc[wm_organized['ConditionName'] == '2BK_TOOL']
+
+'''Now that 
 
 
 '''How correlated are the timeseries of the rest and the wm activity?'''
@@ -370,7 +433,7 @@ np.corrcoef(group_fc_vector, group_fc_wm_vector)
 
 # Get unique network labels
 network_names = np.unique(region_info["network"])
-
+print(network_names)
 
 
 
