@@ -14,6 +14,7 @@ import nibabel as nib
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import sklearn as sk
 # Necessary for visualization
 from nilearn import plotting, datasets
 # Surface plot with BrainSpace
@@ -60,8 +61,6 @@ subjects = range(N_SUBJECTS)
 test_subjects = 5
 
 
-'''create a list of the subject ID's'''
-subj_list = np.array(np.unique(wm_behavior['Subject']))
 
 
 '''this is useful for visualizing:'''
@@ -170,6 +169,11 @@ def load_evs(subject, name, condition):
     evs.append(ev)
   return evs
 
+
+##########################
+#### Load in the data ####
+##########################
+
 '''load the time series for all participants'''
 timeseries_rest = []
 for subject in subjects:
@@ -185,6 +189,7 @@ and the time series dimension (the second) and then calculate the correlation co
 for every subject's time series'''
 for sub, ts in enumerate(timeseries_rest):
   fc[sub] = np.corrcoef(ts)
+fc.shape  
 '''as a result, we get an object called fc, which is dimensions 339x360x360. 
 This represents the fc matrix for all 339 subjects'''
 
@@ -199,37 +204,12 @@ plt.show()
 
 
 
-'''We need to vectorize the matrices so they play nicer with data in later analyses'''
-from nilearn.connectome import sym_matrix_to_vec
-#all_fc_data = {}
-all_fc_data = np.zeros((339, 64620))
-
-fc = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-for sub, ts in enumerate(timeseries_rest):
-  fc[sub] = np.corrcoef(ts)
-
-fc.shape
-
-
-prova = sym_matrix_to_vec(fc[0], discard_diagonal=True)
-for subject in range(subj_list.shape[0]):
-    all_fc_data[subject,:] = sym_matrix_to_vec(fc[subject,:,:], discard_diagonal=True)
-    all_fc_data[subject,:] = fc[subject][np.triu_indices_from(fc[subject], k=1)]
-
-all_fc_data = pd.DataFrame(data=all_fc_data, index=subj_list)
-all_fc_data.head()
-
 import scipy as sp
 
 s = 1
 plt.imshow(sp.spatial.distance.squareform(all_fc_data.iloc[s,:]), interpolation="none", cmap="bwr", vmin=-1, vmax=1)
 plt.colorbar()
 plt.show()
-
-
-
-
-
 
 
 
@@ -273,10 +253,6 @@ plt.tight_layout()
 plt.show()
 '''You can see how this is a lot of data for all 
 participants at all timepoints!'''
-
-
-
-
 
 
 
@@ -398,6 +374,11 @@ wm_behavior = np.genfromtxt(f"{HCP_DIR_BEHAVIOR}/behavior/wm.csv",
                             names=True,
                             dtype=None,
                             encoding="utf")
+
+
+'''create a list of the subject ID's'''
+subj_list = np.array(np.unique(wm_behavior['Subject']))
+
 print(wm_behavior[:5])
 print(wm_behavior.dtype.names)
 '''Looks good. Let's make it a pandas object, because that is easier to work with.'''
@@ -449,215 +430,67 @@ print(network_names)
  ####### BBuilding a predictive model #######
 ##############################################
 
-'''Here will build a CPM model akin to that described in 
-Shen et al., 2017'''
 
-'''define some helper functions'''
-
-def mk_kfold_indices(subj_list, k = 10):
-    """
-    Splits list of subjects into k folds for cross-validation.
-    """
-    
-    n_subs = len(subj_list)
-    n_subs_per_fold = n_subs//k # floor integer for n_subs_per_fold
-
-    indices = [[fold_no]*n_subs_per_fold for fold_no in range(k)] # generate repmat list of indices
-    remainder = n_subs % k # figure out how many subs are left over
-    remainder_inds = list(range(remainder))
-    indices = [item for sublist in indices for item in sublist]    
-    [indices.append(ind) for ind in remainder_inds] # add indices for remainder subs
-
-    assert len(indices)==n_subs, "Length of indices list does not equal number of subjects, something went wrong"
-
-    np.random.shuffle(indices) # shuffles in place
-
-    return np.array(indices)
-
-def split_train_test(subj_list, indices, test_fold):
-    """
-    For a subj list, k-fold indices, and given fold, returns lists of train_subs and test_subs
-    """
-
-    train_inds = np.where(indices!=test_fold)
-    test_inds = np.where(indices==test_fold)
-
-    train_subs = []
-    for sub in subj_list[train_inds]:
-        train_subs.append(sub)
-
-    test_subs = []
-    for sub in subj_list[test_inds]:
-        test_subs.append(sub)
-
-    return (train_subs, test_subs)
+'''Let's build a practice model to predict the accuracy score of the 0-back WM task using the activity 
+from the resting state scans. We'll test out a basic GLM, ridge, and lasso regression.'''
 
 
-def get_train_test_data(all_fc_data, train_subs, test_subs, behav_data, behav):
-
-    """
-    Extracts requested FC and behavioral data for a list of train_subs and test_subs
-    """
-
-    train_vcts = all_fc_data.loc[train_subs, :]
-    test_vcts = all_fc_data.loc[test_subs, :]
-
-    train_behav = behav_data.loc[train_subs, behav]
-
-    return (train_vcts, train_behav, test_vcts)
-
-def select_features(train_vcts, train_behav, r_thresh=0.2, corr_type='pearson', verbose=False):
-    
-    """
-    Runs the CPM feature selection step: 
-    - correlates each edge with behavior, and returns a mask of edges that are correlated above some threshold, one for each tail (positive and negative)
-    """
-
-    assert train_vcts.index.equals(train_behav.index), "Row indices of FC vcts and behavior don't match!"
-
-    # Correlate all edges with behav vector
-    if corr_type =='pearson':
-        cov = np.dot(train_behav.T - train_behav.mean(), train_vcts - train_vcts.mean(axis=0)) / (train_behav.shape[0]-1)
-        corr = cov / np.sqrt(np.var(train_behav, ddof=1) * np.var(train_vcts, axis=0, ddof=1))
-    elif corr_type =='spearman':
-        corr = []
-        for edge in train_vcts.columns:
-            r_val = sp.stats.spearmanr(train_vcts.loc[:,edge], train_behav)[0]
-            corr.append(r_val)
-
-    # Define positive and negative masks
-    mask_dict = {}
-    mask_dict["pos"] = corr > r_thresh
-    mask_dict["neg"] = corr < -r_thresh
-    
-    if verbose:
-        print("Found ({}/{}) edges positively/negatively correlated with behavior in the training set".format(mask_dict["pos"].sum(), mask_dict["neg"].sum())) # for debugging
-
-    return mask_dict
-
-def build_model(train_vcts, mask_dict, train_behav):
-    """
-    Builds a CPM model:
-    - takes a feature mask, sums all edges in the mask for each subject, and uses simple linear regression to relate summed network strength to behavior
-    """
-
-    assert train_vcts.index.equals(train_behav.index), "Row indices of FC vcts and behavior don't match!"
-
-    model_dict = {}
-
-    # Loop through pos and neg tails
-    X_glm = np.zeros((train_vcts.shape[0], len(mask_dict.items())))
-
-    t = 0
-    for tail, mask in mask_dict.items():
-        X = train_vcts.values[:, mask].sum(axis=1)
-        X_glm[:, t] = X
-        y = train_behav
-        (slope, intercept) = np.polyfit(X, y, 1)
-        model_dict[tail] = (slope, intercept)
-        t+=1
-
-    X_glm = np.c_[X_glm, np.ones(X_glm.shape[0])]
-    model_dict["glm"] = tuple(np.linalg.lstsq(X_glm, y, rcond=None)[0])
-
-    return model_dict
-
-def apply_model(test_vcts, mask_dict, model_dict):
-    """
-    Applies a previously trained linear regression model to a test set to generate predictions of behavior.
-    """
-
-    behav_pred = {}
-
-    X_glm = np.zeros((test_vcts.shape[0], len(mask_dict.items())))
-
-    # Loop through pos and neg tails
-    t = 0
-    for tail, mask in mask_dict.items():
-        X = test_vcts.loc[:, mask].sum(axis=1)
-        X_glm[:, t] = X
-
-        slope, intercept = model_dict[tail]
-        behav_pred[tail] = slope*X + intercept
-        t+=1
-
-    X_glm = np.c_[X_glm, np.ones(X_glm.shape[0])]
-    behav_pred["glm"] = np.dot(X_glm, model_dict["glm"])
-
-    return behav_pred
+'''We need to vectorize the matrices so they play nicer with data in later analyses'''
+from nilearn.connectome import sym_matrix_to_vec
+all_fc_data = {}
+all_fc_data = np.zeros((339, 64620))
 
 
-def cpm_wrapper(all_fc_data, all_behav_data, behav, k=10, **cpm_kwargs):
-
-    assert all_fc_data.index.equals(all_behav_data.index), "Row (subject) indices of FC vcts and behavior don't match!"
-
-    subj_list = all_fc_data.index # get subj_list from df index
-    
-    indices = mk_kfold_indices(subj_list, k=k)
-    
-    # Initialize df for storing observed and predicted behavior
-    col_list = []
-    for tail in ["pos", "neg", "glm"]:
-        col_list.append(behav + " predicted (" + tail + ")")
-    col_list.append(behav + " observed")
-    behav_obs_pred = pd.DataFrame(index=subj_list, columns = col_list)
-    
-    # Initialize array for storing feature masks
-    n_edges = all_fc_data.shape[1]
-    all_masks = {}
-    all_masks["pos"] = np.zeros((k, n_edges))
-    all_masks["neg"] = np.zeros((k, n_edges))
-    
-    for fold in range(k):
-        print("doing fold {}".format(fold))
-        train_subs, test_subs = split_train_test(subj_list, indices, test_fold=fold)
-        train_vcts, train_behav, test_vcts = get_train_test_data(all_fc_data, train_subs, test_subs, all_behav_data, behav=behav)
-        mask_dict = select_features(train_vcts, train_behav, **cpm_kwargs)
-        all_masks["pos"][fold,:] = mask_dict["pos"]
-        all_masks["neg"][fold,:] = mask_dict["neg"]
-        model_dict = build_model(train_vcts, mask_dict, train_behav)
-        behav_pred = apply_model(test_vcts, mask_dict, model_dict)
-        for tail, predictions in behav_pred.items():
-            behav_obs_pred.loc[test_subs, behav + " predicted (" + tail + ")"] = predictions
-            
-    behav_obs_pred.loc[subj_list, behav + " observed"] = all_behav_data[behav]
-    
-    return behav_obs_pred, all_masks
+prova = sym_matrix_to_vec(fc[0], discard_diagonal=True)
+for subject in range(subj_list.shape[0]):
+    all_fc_data[subject,:] = sym_matrix_to_vec(fc[subject,:,:], discard_diagonal=True)
+    all_fc_data[subject,:] = fc[subject][np.triu_indices_from(fc[subject], k=1)]
 
 
+all_fc_data = pd.DataFrame(data=all_fc_data, index=subj_list)
+all_fc_data.head()
 
-'''Okay, now let's get to doing the analysis'''
-
-condition = 'REST'
-behav = 'ListSort_Unadj'
-
-def fixed_bugged_column(df, column):
-    df[column] = df[column].apply(lambda x: float(x.split()[0].replace(',', ''))) 
-    for lines in range(len(df[column])): 
-        if df[column][lines]>100:  
-            df[column][lines]=df[column][lines] / 10**(len(str(df[column][lines])) - 4)    
-    for lines in range(len(df[column])):  
-          if df[column][lines]>100:
-                df[column][lines]=df[column][lines] / 10**(len(str(df[column][lines])) - 4)  
-                
-#Let's call the WM data from before
-wm_0bk_body = pd.DataFrame(data=wm_0bk_body, index=subj_list)
-
-#fixed_bugged_column(all_behav_data, behav)  
-
-
-
-             
-wm_behavior.set_index('Subject', inplace=True)
+#Make it so the indicies match              
+wm_0bk_body.set_index('Subject', inplace=True)
 all_fc_data.set_index('Subject', inplace=True)
 
-wm_behavior[behav].fillna((wm_behavior[behav].mean()), inplace=True)
+'''Let's take a subset of each dataset. If we get too crazy the computer will 
+probably crash given all this data. Let's just try ten subjects.'''
+fc_subset = all_fc_data.iloc[0:9,:]
+wm_0bk_body_subset = wm_0bk_body.iloc[0:9,1]
 
-sns.distplot(wm_behavior[behav])
-plt.show()
+#Start building our model
+from sklearn.model_selection import cross_val_score
+from sklearn.linear_model import LinearRegression
 
+'''Let's start with regular linear regression'''
+lin_reg = LinearRegression()
+sorted(sk.metrics.SCORERS.keys())
+MSEs = cross_val_score(lin_reg, fc_subset, 
+                       wm_0bk_body_subset,
+                       scoring = 'neg_mean_squared_error',
+                       cv=2)
+mean_MSE = np.mean(MSEs)
+print(mean_MSE)
 
-cpm_kwargs = {'r_thresh': 0.15, 'corr_type': 'pearson'} # these are the defaults, but it's still good to be explicit
+'''Now let's try ridge regression'''
+from sklearn.model_selection import GridSearchCV
+from sklearn.linear_model import Ridge
+ridge = Ridge()
+#Make a dictionary of alphas
+ridge_parameters = {'alpha': [1e-15, 1e-10, 1e-4, 1e-3, 1e-2, 1, 5, 10, 20]}
+ridge_regressor = GridSearchCV(ridge, ridge_parameters, scoring = 'neg_mean_squared_error',cv=2)
+ridge_regressor.fit(fc_subset, wm_0bk_body_subset)
+print(ridge_regressor.best_params_)
+print(ridge_regressor.best_score_)
 
-behav_obs_pred, all_masks = cpm_wrapper(all_fc_data, wm_0bk_body, behav=behav, **cpm_kwargs)
+'''Straightforward enough! Let's try to use a lasso regression'''
+from sklearn.linear_model import Lasso
+lasso = Lasso()
+#Make a dictionary of alphas
+lasso_parameters = {'alpha': [1e-15, 1e-10, 1e-4, 1e-3, 1e-2, 1, 5, 10, 20]}
+lasso_regressor = GridSearchCV(lasso, lasso_parameters, scoring = 'neg_mean_squared_error',cv=2)
+lasso_regressor.fit(fc_subset, wm_0bk_body_subset)
+print(lasso_regressor.best_params_)
+print(lasso_regressor.best_score_)
 
