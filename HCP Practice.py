@@ -54,7 +54,24 @@ N_RUNS_REST = 4
 N_RUNS_TASK = 2
 # Time series data are organized by experiment, with each experiment
 # having an LR and RL (phase-encode direction) acquistion
-BOLD_NAMES = [ "rfMRI_REST1_LR", "rfMRI_REST1_RL", "rfMRI_REST2_LR", "rfMRI_REST2_RL", "tfMRI_MOTOR_RL", "tfMRI_MOTOR_LR","tfMRI_WM_RL", "tfMRI_WM_LR", "tfMRI_EMOTION_RL", "tfMRI_EMOTION_LR", "tfMRI_GAMBLING_RL", "tfMRI_GAMBLING_LR", "tfMRI_LANGUAGE_RL", "tfMRI_LANGUAGE_LR", "tfMRI_RELATIONAL_RL", "tfMRI_RELATIONAL_LR", "tfMRI_SOCIAL_RL", "tfMRI_SOCIAL_LR"]
+BOLD_NAMES = [ "rfMRI_REST1_LR", 
+              "rfMRI_REST1_RL", 
+              "rfMRI_REST2_LR", 
+              "rfMRI_REST2_RL", 
+              "tfMRI_MOTOR_RL", 
+              "tfMRI_MOTOR_LR",
+              "tfMRI_WM_RL", 
+              "tfMRI_WM_LR",
+              "tfMRI_EMOTION_RL", 
+              "tfMRI_EMOTION_LR",
+              "tfMRI_GAMBLING_RL", 
+              "tfMRI_GAMBLING_LR", 
+              "tfMRI_LANGUAGE_RL", 
+              "tfMRI_LANGUAGE_LR", 
+              "tfMRI_RELATIONAL_RL", 
+              "tfMRI_RELATIONAL_LR", 
+              "tfMRI_SOCIAL_RL", 
+              "tfMRI_SOCIAL_LR"]
 # This will use all subjects:
 subjects = range(N_SUBJECTS)
 # You may want to limit the subjects used during code development.
@@ -74,6 +91,8 @@ region_info = dict(
     network=regions[1],
     myelin=regions[2].astype(np.float),
 )
+
+print(region_info)
 
 '''Now let's define a few helper functions'''
 def get_image_ids(name):
@@ -256,8 +275,6 @@ participants at all timepoints!'''
 
 
 
-
-
 ####################################
  ####### Taks Data Analysis #######
 ####################################
@@ -361,9 +378,6 @@ plt.imshow(group_fc_wm, interpolation="none", cmap="coolwarm", vmin=-1, vmax=1)
 plt.colorbar()
 plt.show()
 
-
-
-
 ##########################################
  ####### Behavioral Data Analysis #######
 ##########################################
@@ -379,6 +393,8 @@ wm_behavior = np.genfromtxt(f"{HCP_DIR_BEHAVIOR}/behavior/wm.csv",
 '''create a list of the subject ID's'''
 subj_list = np.array(np.unique(wm_behavior['Subject']))
 
+
+print(wm_behavior)
 print(wm_behavior[:5])
 print(wm_behavior.dtype.names)
 '''Looks good. Let's make it a pandas object, because that is easier to work with.'''
@@ -472,6 +488,8 @@ MSEs = cross_val_score(lin_reg, fc_subset,
                        cv=2)
 mean_MSE = np.mean(MSEs)
 print(mean_MSE)
+
+'''yo, why is the is the MSE negative here?'''
 
 '''Now let's try ridge regression'''
 from sklearn.model_selection import GridSearchCV
