@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Aug 17 10:20:56 2020
+Created on Wed Oct 21 13:04:52 2020
 
 @author: cjrichier
 """
 
-'''This is a practice analysis with the Human Connectome Project'''
+###HCP task data analysis###
 
 #Load the needed libraries
 import os
@@ -17,14 +17,7 @@ import pandas as pd
 import sklearn as sk
 # Necessary for visualization
 from nilearn import plotting, datasets
-# Surface plot with BrainSpace
-from brainspace.datasets import load_conte69
-from brainspace.plotting import plot_hemispheres, plot_surf
-from brainspace.utils.parcellation import map_to_labels
-from brainspace.mesh import mesh_cluster
-from brainspace.gradient import GradientMaps
-import panel as pn
-pn.extension('vtk')
+
 import csv
 import urllib.request as urllib2
 # matplotlib
@@ -250,105 +243,6 @@ def load_evs(subject, name, condition):
   return evs
 
 
-##########################
-#### Load in the data ####
-##########################
-
-'''load the time series for all participants'''
-timeseries_rest = []
-for subject in subjects:
-  ts_concat = load_timeseries(subject, "rest")
-  timeseries_rest.append(ts_concat)
-
-'''Alternatively, just load the time series for a subset of participants'''
-timeseries_rest_subset = []
-for subject in test_subjects:
-    timeseries_rest_subset.append(load_rest_timeseries(subject, "rest", concat=True))
-
-'''calculate the functional connecitvity matrix across all 
-all participants'''
-fc_rest = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-
-'''calculate the functional connecitvity matrix across all 
-all participants'''
-fc_rest_subset = np.zeros((SUBJECT_SUBSET, N_PARCELS, N_PARCELS))
-
-
-'''What this code will iterate over the subject dimension (the first) 
-and the time series dimension (the second) and then calculate the correlation coefficient
-for every subject's time series'''
-for sub, ts in enumerate(timeseries_rest):
-  fc_rest[sub] = np.corrcoef(ts)
-fc_rest.shape  
-'''as a result, we get an object called fc, which is dimensions 339x360x360. 
-This represents the fc matrix for all 339 subjects'''
-
-'''Now let's do this for the subset'''
-for sub, ts in enumerate(timeseries_rest_subset):
-  fc_rest_subset[sub] = np.corrcoef(ts)
-fc_rest_subset.shape  
-
-'''Now with that object, we can plot group level FC.
-We will take the mean across subjects in fc, which is a 3 dimensional object.
-doing this in the first dimension takes the average across participants'''
-group_fc_rest = fc_rest.mean(axis=0)
-#Now let's plot the average FC across all participants
-plt.imshow(group_fc, interpolation="none", cmap="coolwarm", vmin=-1, vmax=1)
-plt.colorbar()
-plt.show()
-
-'''not sure why this is here...'''
-import scipy as sp
-s = 1
-plt.imshow(sp.spatial.distance.squareform(all_fc_data.iloc[s,:]), interpolation="none", cmap="bwr", vmin=-1, vmax=1)
-plt.colorbar()
-plt.show()
-
-
-
-'''Now let's try something a little different. Why don't we see
-how one particular parcel (of the 360) relates to the total cconnectivity
-in the rest of the brain, split by right and left hemispheres.'''
-
-'''Let's take a look at some of the parcel's names first. Let's pick 
-a random one from the list to use here.'''
-print(region_info)
-seed_roi = "R_V1"  # name of seed parcel
-ind = region_info["name"].index(seed_roi)
-hemi_fc = np.split(group_fc, 2)
-# Plot the FC profile across the right and left hemisphere target regions
-for i, hemi_fc in enumerate(hemi_fc):
-  plt.plot(hemi_fc[:, ind], label=f"{HEMIS[i]} hemisphere")
-plt.title(f"FC for region {seed_roi}")
-plt.xlabel("Target region")
-plt.ylabel("Correlation (FC)")
-plt.legend()
-plt.show()
-
-'''Now let's extract the time series for one subject'''
-ts_sub0 = load_timeseries(0, "rest")
-
-'''let's look at the functional connectivity for just this participant'''
-ts_sub0_fc = np.zeros((N_PARCELS, N_PARCELS))
-for parcel in enumerate(timeseries_rest):
-  ts_sub0_fc = np.corrcoef(ts)
-plt.imshow(ts_sub0_fc, interpolation="none", cmap="coolwarm", vmin=-1, vmax=1)
-plt.colorbar()
-plt.show()
-
-'''Now let's extract the time series for one parcel in one subject'''
-seed_ts_df = pd.DataFrame(ts_sub0 [0,:])
-seed_ts_df.plot()
-plt.title('Time series for a the first subject')
-plt.xlabel('Time')
-plt.ylabel('Normalized signal')
-plt.tight_layout()
-plt.show()
-'''You can see how this is a lot of data for all 
-participants at all timepoints!'''
-
-
-
 ####################################
  ####### Taks Data Analysis #######
 ####################################
@@ -387,7 +281,7 @@ def condition_frames(run_evs, skip=0):
   return frames_list
 
 
-def selective_average(timeseries_data, ev, skip=0):
+def selective_average(timeseries_data, ev, sf'kip=0):
   """Take the temporal mean across frames for a given condition.
 
   Args:
@@ -422,57 +316,6 @@ def selective_average(timeseries_data, ev, skip=0):
   avg_data = np.concatenate(selected_data, axis=-1).mean(axis=-1)
 
   return avg_data
-
-
-'''Now let's load some wm task data'''
-'''I cannot figure out why this is happening, but in order for task analyses to
-run we have to cahnge the directory to be in the task section, or else it will
-get mad at us.'''
-
-
-from nilearn.connectome import sym_matrix_to_vec
- 
-FC_subjects_subset = np.zeros((10, 7, 360, 360))
-flatten = np.zeros((10, 7, 360*360))
-FC_subjects_subset_upper = np.zeros((10, 7, 64980))
-
-for subject in test_subjects:
-  # print(f"subject id is {subject}")
-  ti = 0;
-  for task in tasks_names:
-    # print(f"task is {task}")
-    tmp = load_task_timeseries(subject,task, concat = True)
-    # print(tmp.shape)
-    # print(np.corrcoef(tmp).shape)
-    FC_subjects_subset[subject, ti, :, :] = np.corrcoef(tmp)
-    #flatten[subject, ti, :] = np.matrix.flatten(FC_subjects[subject, ti, :, :])
-    #FC_subjects_upper[subject, ti, :]  = flatten[subject, ti, 0:64800]
-    FC_subjects_subset_upper[subject, ti, :] = sym_matrix_to_vec(FC_subjects_subset[subject, ti, :, :])
-    
-    ti = ti+1
-
-FC_subjects_upper.shape
-
-
-
-'''Let's calculate FC for the WM activity'''
-fc_wm = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-
-'''What this code will iterate over the subject dimension (the first) 
-and the time series dimension (the second) and then calculate the correlation coefficient
-for every subject's time series'''
-for sub, ts in enumerate(timeseries_wm):
-  fc_wm[sub] = np.corrcoef(ts)
-'''as a result, we get an object called fc, which is dimensions 339x360x360. 
-This represents the working memory fc matrix for all 339 subjects'''
-
-'''Now let's average this across all participants'''
-group_fc_wm = fc_wm.mean(axis=0)
-#Now let's plot the average FC across all participants
-plt.imshow(group_fc_wm, interpolation="none", cmap="coolwarm", vmin=-1, vmax=1)
-plt.colorbar()
-plt.show()
-
 
 ##########################################
  ####### Behavioral Data Analysis #######
@@ -591,56 +434,10 @@ print(language_accuracy)
 language_math = language_accuracy.loc[language_accuracy['ConditionName'] == 'MATH']
 language_story = language_accuracy.loc[language_accuracy['ConditionName'] == 'STORY']
 
-
-
-
-
-
-
-
-
-
-# Get unique network labels'''
-
-network_names = np.unique(region_info["network"])
-print(network_names)
-
-
-
-######################################
- ####### Analysis with Amanda #######
-######################################
-
-
-'''Trying some stuff with conditions, but it isn't really working'''
-conditions_motor = ['lf', 'lh', 'rf', 'rh', 't']
-conditions_wm = ['0bk_body', '0bk_faces', '0bk_nir', 
-                 '0bk_placed', '0bk_tools', '2bk_body', 
-                 '2bk_faces', '2bk_nir', '2bk_placed', 
-                 '2bk_tools','0bk_cor', '0bk_err',
-                 '2bk_cor', '2bk_err', 'all_bk_cor', 
-                 'all_bk_err']
-conditions_emotion = ['feat', 'neutral']
-conditions_gambling = ['loss', 'loss_event', 'win', 
-                        'win_event', 'neut_event']
-conditions_language = ['cue', 'math', 'story',
-                        'present_math', 'present_story',
-                        'question_math', 'question_story',
-                        'response_math', 'response_story']
-conditions_relational = ['error', 'match', 'relation']
-conditions_social = ['mental_resp', 'mental', 'other_resp', 'rnd']
-
-conditions_master = [conditions_motor, conditions_wm, conditions_emotion, 
-                     conditions_gambling,conditions_language,
-                     conditions_relational, conditions_social]
-
-
-    
-ev_2bk_body = load_evs(0, 'wm', '0bk_body')
-print(ev_2bk_body)
-
-'''Start here instead.'''
+######################################################
 '''load in subsets of each task timeseries data'''
+######################################################
+
 timeseries_motor_subset = []
 for subject in test_subjects:
     timeseries_motor_subset.append(load_task_timeseries(subject, "motor", concat=True))
@@ -774,8 +571,6 @@ for subject in test_subjects:
 subject_connection_task_array_alternate = subject_connection_task_array_alternate.transpose(0,2,1)
 subject_connection_task_array_alternate.shape
 
-
-
 ##############################################
  ####### Building a predictive model #######
 ##############################################
@@ -783,7 +578,6 @@ subject_connection_task_array_alternate.shape
 
 '''Let's build a practice model to predict the accuracy score of the 0-back WM task using the activity 
 from the resting state scans. We'll test out a basic GLM, ridge, and lasso regression.'''
-subject_connection_task_array = pd.DataFrame(data=subject_connection_task_array, index=subj_list)
 #Make it so the indicies match              
 wm_0bk_body.set_index('Subject', inplace=True)
 
@@ -791,7 +585,7 @@ wm_0bk_body.set_index('Subject', inplace=True)
 '''Building 0-back model'''
 '''Lets take a subset of each dataset. If we get too crazy the computer will 
 probably crash given all this data. Let's just try ten subjects.'''
-wm_0bk_body_subset = wm_0bk_body.iloc[0:10,2]
+wm_0bk_body_subset = wm_0bk_body.iloc[0:10,1]
 
 #Start building our model
 from sklearn.model_selection import cross_val_score
@@ -831,7 +625,7 @@ print(lasso_regressor.best_score_)
 '''Building 2-back model'''
 '''Lets take a subset of each dataset. If we get too crazy the computer will 
 probably crash given all this data. Let's just try ten subjects.'''
-wm_2bk_body_subset = wm_2bk_body.iloc[0:10,2]
+wm_2bk_body_subset = wm_2bk_body.iloc[0:10,1]
 
 #Start building our model
 from sklearn.model_selection import cross_val_score
@@ -867,3 +661,244 @@ lasso_regressor.fit(subject_connection_task_array[:,:,0],
                        wm_2bk_body_subset)
 print(lasso_regressor.best_params_)
 print(lasso_regressor.best_score_)
+
+
+
+
+##################################################################################
+
+##################################################################################
+
+##################################################################################
+
+##################################################################################
+
+##################################################################################
+
+
+
+
+#defining a list with a loop?
+#flattened = [element for j, row in enumerate(matrix) for i, element in enumerate(row) if i < j]
+
+#defines a list with numbers 0-99, called list comprehension
+#simple = [i for i in range(100)]
+
+#img = image.load_image(path)
+#confounds = image.high_variance_counfounds(image)
+#time_series = masker.fit_transform(image_apth, confounds=confounds)
+
+#use the harvar-oxford d atlas, discrete (thresholded atlas?)
+
+
+
+
+
+
+
+
+timeseries_motor = []
+for subject in subjects:
+    timeseries_motor.append(load_task_timeseries(subject, "motor", concat=True))
+print(timeseries_motor)
+timeseries_wm = []
+for subject in subjects:
+  timeseries_wm.append(load_task_timeseries(subject, "wm", concat=True))
+print(timeseries_wm)
+timeseries_gambling = []
+for subject in subjects:
+  timeseries_gambling.append(load_task_timeseries(subject, "gambling", concat=True))
+print(timeseries_gambling)
+timeseries_emotion = []
+for subject in subjects:
+  timeseries_emotion.append(load_task_timeseries(subject, "emotion", concat=True))
+print(timeseries_emotion)
+timeseries_language = []
+for subject in subjects:
+  timeseries_language.append(load_task_timeseries(subject, "language", concat=True))
+print(timeseries_language)
+timeseries_relational = []
+for subject in subjects:
+  timeseries_relational.append(load_task_timeseries(subject, "relational", concat=True))
+print(timeseries_relational)
+timeseries_social = []
+for subject in subjects:
+  timeseries_social.append(load_task_timeseries(subject, "social", concat=True))
+print(timeseries_social)
+
+
+'''now let's make FC matrices for each task'''
+
+'''Initialize the matrices'''
+fc_matrix_task = []
+fc_matrix_motor = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
+fc_matrix_wm = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
+fc_matrix_gambling = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
+fc_matrix_emotion = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
+fc_matrix_language = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
+fc_matrix_relational = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
+fc_matrix_social = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
+
+
+'''calculate the correlations (FC) for each task'''
+for subject, ts in enumerate(timeseries_motor):
+  fc_matrix_motor[subject] = np.corrcoef(ts)
+for subject, ts in enumerate(timeseries_wm):
+  fc_matrix_wm[subject] = np.corrcoef(ts)
+for subject, ts in enumerate(timeseries_gambling):
+  fc_matrix_gambling[subject] = np.corrcoef(ts)
+for subject, ts in enumerate(timeseries_emotion):
+  fc_matrix_emotion[subject] = np.corrcoef(ts)
+for subject, ts in enumerate(timeseries_language):
+  fc_matrix_language[subject] = np.corrcoef(ts)
+for subject, ts in enumerate(timeseries_relational):
+  fc_matrix_relational[subject] = np.corrcoef(ts)
+for subject, ts in enumerate(timeseries_social):
+  fc_matrix_social[subject] = np.corrcoef(ts)
+
+'''Initialize the vector form of each task, 
+where each row is a participant and each column is a connection'''
+vector_motor = np.zeros((N_SUBJECTS, 64620))
+vector_wm = np.zeros((N_SUBJECTS, 64620))
+vector_gambling = np.zeros((N_SUBJECTS, 64620))
+vector_emotion = np.zeros((N_SUBJECTS, 64620))
+vector_language = np.zeros((N_SUBJECTS, 64620))
+vector_relational = np.zeros((N_SUBJECTS, 64620))
+vector_social = np.zeros((N_SUBJECTS, 64620))
+
+'''import a package to extract the diagonal of the correlation matrix, as well as
+initializing a list of the subset of subjects. It is a neccesary step in appending the list 
+of subjects to the connection data'''
+from nilearn.connectome import sym_matrix_to_vec
+subject_list = np.array(np.unique(range(339)))
+
+
+for subject in range(subject_list.shape[0]):
+    vector_motor[subject,:] = sym_matrix_to_vec(fc_matrix_motor[subject,:,:], discard_diagonal=True)
+    vector_motor[subject,:] = fc_matrix_motor[subject][np.triu_indices_from(fc_matrix_motor[subject], k=1)]
+for subject in range(subject_list.shape[0]):
+    vector_wm[subject,:] = sym_matrix_to_vec(fc_matrix_wm[subject,:,:], discard_diagonal=True)
+    vector_wm[subject,:] = fc_matrix_wm[subject][np.triu_indices_from(fc_matrix_wm[subject], k=1)]
+for subject in range(subject_list.shape[0]):
+    vector_gambling[subject,:] = sym_matrix_to_vec(fc_matrix_gambling[subject,:,:], discard_diagonal=True)
+    vector_gambling[subject,:] = fc_matrix_gambling[subject][np.triu_indices_from(fc_matrix_gambling[subject], k=1)]
+for subject in range(subject_list.shape[0]):
+    vector_emotion[subject,:] = sym_matrix_to_vec(fc_matrix_emotion[subject,:,:], discard_diagonal=True)
+    vector_emotion[subject,:] = fc_matrix_emotion[subject][np.triu_indices_from(fc_matrix_emotion[subject], k=1)]
+for subject in range(subject_list.shape[0]):
+    vector_language[subject,:] = sym_matrix_to_vec(fc_matrix_language[subject,:,:], discard_diagonal=True)
+    vector_language[subject,:] = fc_matrix_language[subject][np.triu_indices_from(fc_matrix_language[subject], k=1)]
+for subject in range(subject_list.shape[0]):
+    vector_relational[subject,:] = sym_matrix_to_vec(fc_matrix_relational[subject,:,:], discard_diagonal=True)
+    vector_relational[subject,:] = fc_matrix_relational[subject][np.triu_indices_from(fc_matrix_relational[subject], k=1)]
+for subject in range(subject_list.shape[0]):
+    vector_social[subject,:] = sym_matrix_to_vec(fc_matrix_social[subject,:,:], discard_diagonal=True)
+    vector_social[subject,:] = fc_matrix_social[subject][np.triu_indices_from(fc_matrix_social[subject], k=1)]
+
+
+
+'''remove stuff we don't need to save memory'''
+del timeseries_motor
+del timeseries_wm
+del timeseries_gambling
+del timeseries_emotion
+del timeseries_language
+del timeseries_relational
+del timeseries_social
+
+del fc_matrix_motor 
+del fc_matrix_wm 
+del fc_matrix_gambling 
+del fc_matrix_emotion
+del fc_matrix_language
+del fc_matrix_relational
+del fc_matrix_social
+
+
+'''make everything pandas dataframes'''
+emotion_brain = pd.DataFrame(vector_emotion)
+gambling_brain = pd.DataFrame(vector_gambling)
+language_brain = pd.DataFrame(vector_language)
+motor_brain = pd.DataFrame(vector_motor)
+relational_brain= pd.DataFrame(vector_relational)
+social_brain = pd.DataFrame(vector_social)
+wm_brain = pd.DataFrame(vector_wm)
+
+
+'''Delete the old vectors to save space'''
+del vector_motor 
+del vector_wm 
+del vector_gambling 
+del vector_emotion 
+del vector_language 
+del vector_relational 
+del vector_social 
+
+
+
+
+
+
+'''make our prediction dataset'''
+
+
+emotion_brain['task'] =1
+gambling_brain['task'] =2
+language_brain['task'] =3
+motor_brain['task'] =4
+relational_brain['task'] =5
+social_brain['task'] =6
+wm_brain['task'] =7
+
+
+task_data = pd.DataFrame(np.concatenate((emotion_brain, gambling_brain,  language_brain,
+          motor_brain, relational_brain, social_brain, wm_brain), axis = 0))
+X = task_data
+y = np.array(X.iloc[:,-1])
+#X.drop(X.columns[len(X.columns)-1], axis=1, inplace=True)
+
+
+'''make more space'''
+del emotion_brain
+del gambling_brain
+del language_brain
+del motor_brain
+del relational_brain
+del social_brain
+del wm_brain                 
+        
+
+'''Now let's try the decoding analysis'''
+
+
+'''decoding task in HCP'''
+
+'''Analysis time'''
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.multioutput import MultiOutputClassifier
+from sklearn.model_selection import cross_val_score
+from sklearn.datasets import make_classification
+from sklearn.utils import shuffle
+
+
+'''make test-train split'''
+from sklearn.model_selection import train_test_split
+train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.3)
+
+forest = RandomForestClassifier(random_state=1 ,n_estimators=10)
+forest.fit(train_X, train_y)
+
+print(forest.score(train_X, train_y))
+print(forest.score(test_X, test_y))
+
+
+
+score = cross_val_score(forest,X,y, cv = 10)
+score.mean()
+
+
+
+
+
+
+
