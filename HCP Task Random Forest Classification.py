@@ -84,6 +84,12 @@ SUBJECT_SUBSET = 10
 test_subjects = range(SUBJECT_SUBSET)
 
 
+'''import the demographics and bheavior data'''
+demographics = pd.read_csv('/Volumes/Byrgenwerth/Datasets/HCP/HCP_demographics/demographics_behavior.csv')
+#What is our gender breakdown?
+demographics['Gender'].value_counts()
+demographics['Age'].value_counts()
+
 
 
 '''this is useful for visualizing:'''
@@ -477,12 +483,11 @@ relational_brain['task'] =5
 social_brain['task'] =6
 wm_brain['task'] =7
 
-
+#make the data frames
 task_data = pd.DataFrame(np.concatenate((emotion_brain, gambling_brain,  language_brain,
           motor_brain, relational_brain, social_brain, wm_brain), axis = 0))
-X = task_data
-y = np.array(X.iloc[:,-1])
-#X.drop(X.columns[len(X.columns)-1], axis=1, inplace=True)
+X = task_data.iloc[:, :-1]
+y = task_data.iloc[:,-1]
 
 
 '''make more space'''
@@ -496,10 +501,6 @@ del wm_brain
         
 
 '''Now let's try the decoding analysis'''
-
-
-'''decoding task in HCP'''
-
 '''Analysis time'''
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.multioutput import MultiOutputClassifier
@@ -510,27 +511,44 @@ from sklearn.utils import shuffle
 
 '''make test-train split'''
 from sklearn.model_selection import train_test_split
-train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.3)
+train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.2)
 
+#fit the model
 forest = RandomForestClassifier(random_state=1 ,n_estimators=10)
 forest.fit(train_X, train_y)
-y_pred = forest.predict(test_X)
-
-
+pred_y = forest.predict(test_X)
+#How does it perform?
 print(forest.score(train_X, train_y))
 print(forest.score(test_X, test_y))
 
 
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.metrics import accuracy_score
+'''visualize the confusion matrix'''
+from sklearn.metrics import classification_report
+print(classification_report(test_y, pred_y))
+from sklearn.metrics import confusion_matrix
+cm = confusion_matrix(test_y, pred_y)
+cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+print(cm)
 
-precision_recall_fscore_support(test_y, y_pred)
-accuracy = accuracy_score(y, y_pred)
-print("Accuracy (train) for %s: %0.1f%% " % (name, accuracy * 100))
+'''let's see the cross validated score'''
+score = cross_val_score(forest,X,y, cv = 10, scoring = 'accuracy')
+print(score)
+
+'''Let's visualize the difference between 
+the predicted and actual tasks'''
+predictions = pd.Series(forest.predict(test_X))
+ground_truth_test_y = pd.Series(test_y)
+ground_truth_test_y = ground_truth_test_y.reset_index(drop = True)
+predictions = predictions.rename("Task")
+ground_truth_test_y = ground_truth_test_y.rename("Task")
+predict_vs_true = pd.concat([ground_truth_test_y, predictions],axis =1)
+predict_vs_true.columns = ["Actual", "Prediction"]
+accuracy = predict_vs_true.duplicated()
+accuracy.value_counts()
 
 
-score = cross_val_score(forest,X,y, cv = 10)
-score.mean()
+
+
 
 
 
