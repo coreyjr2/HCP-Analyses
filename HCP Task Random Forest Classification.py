@@ -289,7 +289,7 @@ def condition_frames(run_evs, skip=0):
   return frames_list
 
 
-def selective_average(timeseries_data, ev, sf'kip=0):
+def selective_average(timeseries_data, ev, skip=0):
   """Take the temporal mean across frames for a given condition.
 
   Args:
@@ -514,10 +514,19 @@ train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.3)
 
 forest = RandomForestClassifier(random_state=1 ,n_estimators=10)
 forest.fit(train_X, train_y)
+y_pred = forest.predict(test_X)
+
 
 print(forest.score(train_X, train_y))
 print(forest.score(test_X, test_y))
 
+
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.metrics import accuracy_score
+
+precision_recall_fscore_support(test_y, y_pred)
+accuracy = accuracy_score(y, y_pred)
+print("Accuracy (train) for %s: %0.1f%% " % (name, accuracy * 100))
 
 
 score = cross_val_score(forest,X,y, cv = 10)
