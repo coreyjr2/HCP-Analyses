@@ -1,543 +1,226 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Dec 21 11:14:43 2020
+Created on Thu Jun 24 10:41:42 2021
 
 @author: cjrichier
 """
 
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Oct 21 13:04:52 2020
+'''This is a pass at defining a series of functions that
+are reproducible and deployable for using a 3dCNN on neuroimaging data.
+All names and structures are tentative'''
 
-@author: cjrichier
-"""
+##################################
+#### Load in relevant modules ####
+##################################
 
-###HCP task data analysis###
-
-#Load the needed libraries
+#general
 import os
-import nibabel as nib
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
-import sklearn as sk
-# Necessary for visualization
-from nilearn import plotting, datasets
-
-import csv
-import urllib.request as urllib2
-# matplotlib
-import matplotlib.pyplot as plt # For changing the color maps
-from matplotlib import cm # cm=colormap
-from matplotlib.colors import ListedColormap, LinearSegmentedColormap
-
-
-
-'''Set the path, and create some variables'''
-# The download cells will store the data in nested directories starting here:
-HCP_DIR = "/Volumes/Byrgenwerth/Datasets/HCP/"
-HCP_DIR_REST = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_rest/subjects/"
-HCP_DIR_TASK = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_task/subjects/"
-HCP_DIR_EVS = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_task/"
-HCP_DIR_BEHAVIOR = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_behavior/"
-if not os.path.isdir(HCP_DIR): os.mkdir(HCP_DIR)
-# The data shared for NMA projects is a subset of the full HCP dataset
-N_SUBJECTS = 339
-# The data have already been aggregated into ROIs from the Glasesr parcellation
-N_PARCELS = 360
-# The acquisition parameters for all tasks were identical
-TR = 0.72  # Time resolution, in sec
-# The parcels are matched across hemispheres with the same order
-HEMIS = ["Right", "Left"]
-# Each experiment was repeated multiple times in each subject
-N_RUNS_REST = 4
-N_RUNS_TASK = 2
-# Time series data are organized by experiment, with each experiment
-# having an LR and RL (phase-encode direction) acquistion
-BOLD_NAMES = [ "rfMRI_REST1_LR", 
-              "rfMRI_REST1_RL", 
-              "rfMRI_REST2_LR", 
-              "rfMRI_REST2_RL", 
-              "tfMRI_MOTOR_RL", 
-              "tfMRI_MOTOR_LR",
-              "tfMRI_WM_RL", 
-              "tfMRI_WM_LR",
-              "tfMRI_EMOTION_RL", 
-              "tfMRI_EMOTION_LR",
-              "tfMRI_GAMBLING_RL", 
-              "tfMRI_GAMBLING_LR", 
-              "tfMRI_LANGUAGE_RL", 
-              "tfMRI_LANGUAGE_LR", 
-              "tfMRI_RELATIONAL_RL", 
-              "tfMRI_RELATIONAL_LR", 
-              "tfMRI_SOCIAL_RL", 
-              "tfMRI_SOCIAL_LR"]
-# This will use all subjects:
-subjects = range(N_SUBJECTS)
-
-
-'''You may want to limit the subjects used during code development. This 
-will only load in 10 subjects if you use this list.'''
-SUBJECT_SUBSET = 10
-test_subjects = range(SUBJECT_SUBSET)
-
-
-
-
-'''this is useful for visualizing:'''
-with np.load(f"{HCP_DIR}hcp_atlas.npz") as dobj:
-  atlas = dict(**dobj)
-
-'''let's generate some information about the regions using the rest data'''
-regions = np.load("/Volumes/Byrgenwerth/Datasets/HCP/hcp_rest/regions.npy").T
-region_info = dict(
-    name=regions[0].tolist(),
-    network=regions[1],
-    myelin=regions[2].astype(np.float),
-)
-
-print(region_info)
-
-'''Now let's define a few helper functions'''
-def get_image_ids(name):
-  """Get the 1-based image indices for runs in a given experiment.
-
-    Args:
-      name (str) : Name of experiment ("rest" or name of task) to load
-    Returns:
-      run_ids (list of int) : Numeric ID for experiment image files
-
-  """
-  run_ids = [
-    i for i, code in enumerate(BOLD_NAMES, 1) if name.upper() in code
-  ]
-  if not run_ids:
-    raise ValueError(f"Found no data for '{name}''")
-  return run_ids
-
-def load_rest_timeseries(subject, name, runs=None, concat=True, remove_mean=True):
-  """Load timeseries data for a single subject.
-  
-  Args:
-    subject (int): 0-based subject ID to load
-    name (str) : Name of experiment ("rest" or name of task) to load
-    run (None or int or list of ints): 0-based run(s) of the task to load,
-      or None to load all runs.
-    concat (bool) : If True, concatenate multiple runs in time
-    remove_mean (bool) : If True, subtract the parcel-wise mean
-
-  Returns
-    ts (n_parcel x n_tp array): Array of BOLD data values
-
-  """
-  # Get the list relative 0-based index of runs to use
-  if runs is None:
-    runs = range(N_RUNS_REST) if name == "rest" else range(N_RUNS_TASK)
-  elif isinstance(runs, int):
-    runs = [runs]
-
-  # Get the first (1-based) run id for this experiment 
-  offset = get_image_ids(name)[0]
-
-  # Load each run's data
-  bold_data = [
-      load_single_rest_timeseries(subject, offset + run, remove_mean) for run in runs
-  ]
-
-  # Optionally concatenate in time
-  if concat:
-    bold_data = np.concatenate(bold_data, axis=-1)
-
-  return bold_data
-
-
-def load_task_timeseries(subject, name, runs=None, concat=True, remove_mean=True):
-  """Load timeseries data for a single subject.
-  
-  Args:
-    subject (int): 0-based subject ID to load
-    name (str) : Name of experiment ("rest" or name of task) to load
-    run (None or int or list of ints): 0-based run(s) of the task to load,
-      or None to load all runs.
-    concat (bool) : If True, concatenate multiple runs in time
-    remove_mean (bool) : If True, subtract the parcel-wise mean
-
-  Returns
-    ts (n_parcel x n_tp array): Array of BOLD data values
-
-  """
-  # Get the list relative 0-based index of runs to use
-  if runs is None:
-    runs = range(N_RUNS_REST) if name == "rest" else range(N_RUNS_TASK)
-  elif isinstance(runs, int):
-    runs = [runs]
-
-  # Get the first (1-based) run id for this experiment 
-  offset = get_image_ids(name)[0]
-
-  # Load each run's data
-  bold_data = [
-      load_single_task_timeseries(subject, offset + run, remove_mean) for run in runs
-  ]
-
-  # Optionally concatenate in time
-  if concat:
-    bold_data = np.concatenate(bold_data, axis=-1)
-
-  return bold_data
-
-
-
-def load_single_rest_timeseries(subject, bold_run, remove_mean=True):
-  """Load timeseries data for a single subject and single run.
-  
-  Args:
-    subject (int): 0-based subject ID to load
-    bold_run (int): 1-based run index, across all tasks
-    remove_mean (bool): If True, subtract the parcel-wise mean
-
-  Returns
-    ts (n_parcel x n_timepoint array): Array of BOLD data values
-
-  """
-  bold_path = f"{HCP_DIR}/hcp_rest/subjects/{subject}/timeseries"
-  bold_file = f"bold{bold_run}_Atlas_MSMAll_Glasser360Cortical.npy"
-  ts = np.load(f"{bold_path}/{bold_file}")
-  if remove_mean:
-    ts -= ts.mean(axis=1, keepdims=True)
-  return ts
-
-def load_single_task_timeseries(subject, bold_run, remove_mean=True):
-  """Load timeseries data for a single subject and single run.
-  
-  Args:
-    subject (int): 0-based subject ID to load
-    bold_run (int): 1-based run index, across all tasks
-    remove_mean (bool): If True, subtract the parcel-wise mean
-
-  Returns
-    ts (n_parcel x n_timepoint array): Array of BOLD data values
-
-  """
-  bold_path = f"{HCP_DIR}/hcp_task/subjects/{subject}/timeseries"
-  bold_file = f"bold{bold_run}_Atlas_MSMAll_Glasser360Cortical.npy"
-  ts = np.load(f"{bold_path}/{bold_file}")
-  if remove_mean:
-    ts -= ts.mean(axis=1, keepdims=True)
-  return ts
-
-def load_evs(subject, name, condition):
-  """Load EV (explanatory variable) data for one task condition.
-
-  Args:
-    subject (int): 0-based subject ID to load
-    name (str) : Name of task
-    condition (str) : Name of condition
-
-  Returns
-    evs (list of dicts): A dictionary with the onset, duration, and amplitude
-      of the condition for each run.
-
-  """
-  evs = []
-  for id in get_image_ids(name):
-    task_key = BOLD_NAMES[id - 1]
-    ev_file = f"{HCP_DIR_EVS}subjects/{subject}/EVs/{task_key}/{condition}.txt"
-    ev_array = np.loadtxt(ev_file, ndmin=2, unpack=True)
-    ev = dict(zip(["onset", "duration", "amplitude"], ev_array))
-    evs.append(ev)
-  return evs
-
-
-####################################
- ####### Taks Data Analysis #######
-####################################
-
-'''Make a list of the task names. This will be helpful in the future'''
-tasks_names = ["motor", "wm", "gambling", "emotion", "language", "relational", "social"]
-
-'''Now let's switch to doing some task-based 
-analysis. Here are some helper functions for that.'''
-def condition_frames(run_evs, skip=0):
-  """Identify timepoints corresponding to a given condition in each run.
-
-  Args:
-    run_evs (list of dicts) : Onset and duration of the event, per run
-    skip (int) : Ignore this many frames at the start of each trial, to account
-      for hemodynamic lag
-
-  Returns:
-    frames_list (list of 1D arrays): Flat arrays of frame indices, per run
-
-  """
-  frames_list = []
-  for ev in run_evs:
-
-    # Determine when trial starts, rounded down
-    start = np.floor(ev["onset"] / TR).astype(int)
-
-    # Use trial duration to determine how many frames to include for trial
-    duration = np.ceil(ev["duration"] / TR).astype(int)
-
-    # Take the range of frames that correspond to this specific trial
-    frames = [s + np.arange(skip, d) for s, d in zip(start, duration)]
-
-    frames_list.append(np.concatenate(frames))
-
-  return frames_list
-
-
-def selective_average(timeseries_data, ev, sf'kip=0):
-  """Take the temporal mean across frames for a given condition.
-
-  Args:
-    timeseries_data (array or list of arrays): n_parcel x n_tp arrays
-    ev (dict or list of dicts): Condition timing information
-    skip (int) : Ignore this many frames at the start of each trial, to account
-      for hemodynamic lag
-
-  Returns:
-    avg_data (1D array): Data averagted across selected image frames based
-    on condition timing
-
-  """
-  # Ensure that we have lists of the same length
-  if not isinstance(timeseries_data, list):
-    timeseries_data = [timeseries_data]
-  if not isinstance(ev, list):
-    ev = [ev]
-  if len(timeseries_data) != len(ev):
-    raise ValueError("Length of `timeseries_data` and `ev` must match.")
-
-  # Identify the indices of relevant frames
-  frames = condition_frames(ev, skip)
-
-  # Select the frames from each image
-  selected_data = []
-  for run_data, run_frames in zip(timeseries_data, frames):
-    run_frames = run_frames[run_frames < run_data.shape[1]]
-    selected_data.append(run_data[:, run_frames])
-
-  # Take the average in each parcel
-  avg_data = np.concatenate(selected_data, axis=-1).mean(axis=-1)
-
-  return avg_data
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-timeseries_motor = []
-for subject in subjects:
-    timeseries_motor.append(load_task_timeseries(subject, "motor", concat=True))
-print(timeseries_motor)
-timeseries_wm = []
-for subject in subjects:
-  timeseries_wm.append(load_task_timeseries(subject, "wm", concat=True))
-print(timeseries_wm)
-timeseries_gambling = []
-for subject in subjects:
-  timeseries_gambling.append(load_task_timeseries(subject, "gambling", concat=True))
-print(timeseries_gambling)
-timeseries_emotion = []
-for subject in subjects:
-  timeseries_emotion.append(load_task_timeseries(subject, "emotion", concat=True))
-print(timeseries_emotion)
-timeseries_language = []
-for subject in subjects:
-  timeseries_language.append(load_task_timeseries(subject, "language", concat=True))
-print(timeseries_language)
-timeseries_relational = []
-for subject in subjects:
-  timeseries_relational.append(load_task_timeseries(subject, "relational", concat=True))
-print(timeseries_relational)
-timeseries_social = []
-for subject in subjects:
-  timeseries_social.append(load_task_timeseries(subject, "social", concat=True))
-print(timeseries_social)
-
-
-'''now let's make FC matrices for each task'''
-
-'''Initialize the matrices'''
-fc_matrix_task = []
-fc_matrix_motor = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-fc_matrix_wm = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-fc_matrix_gambling = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-fc_matrix_emotion = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-fc_matrix_language = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-fc_matrix_relational = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-fc_matrix_social = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-
-
-'''calculate the correlations (FC) for each task'''
-for subject, ts in enumerate(timeseries_motor):
-  fc_matrix_motor[subject] = np.corrcoef(ts)
-for subject, ts in enumerate(timeseries_wm):
-  fc_matrix_wm[subject] = np.corrcoef(ts)
-for subject, ts in enumerate(timeseries_gambling):
-  fc_matrix_gambling[subject] = np.corrcoef(ts)
-for subject, ts in enumerate(timeseries_emotion):
-  fc_matrix_emotion[subject] = np.corrcoef(ts)
-for subject, ts in enumerate(timeseries_language):
-  fc_matrix_language[subject] = np.corrcoef(ts)
-for subject, ts in enumerate(timeseries_relational):
-  fc_matrix_relational[subject] = np.corrcoef(ts)
-for subject, ts in enumerate(timeseries_social):
-  fc_matrix_social[subject] = np.corrcoef(ts)
-
-'''Initialize the vector form of each task, 
-where each row is a participant and each column is a connection'''
-vector_motor = np.zeros((N_SUBJECTS, 64620))
-vector_wm = np.zeros((N_SUBJECTS, 64620))
-vector_gambling = np.zeros((N_SUBJECTS, 64620))
-vector_emotion = np.zeros((N_SUBJECTS, 64620))
-vector_language = np.zeros((N_SUBJECTS, 64620))
-vector_relational = np.zeros((N_SUBJECTS, 64620))
-vector_social = np.zeros((N_SUBJECTS, 64620))
-
-'''import a package to extract the diagonal of the correlation matrix, as well as
-initializing a list of the subset of subjects. It is a neccesary step in appending the list 
-of subjects to the connection data'''
-from nilearn.connectome import sym_matrix_to_vec
-subject_list = np.array(np.unique(range(339)))
-
-
-for subject in range(subject_list.shape[0]):
-    vector_motor[subject,:] = sym_matrix_to_vec(fc_matrix_motor[subject,:,:], discard_diagonal=True)
-    vector_motor[subject,:] = fc_matrix_motor[subject][np.triu_indices_from(fc_matrix_motor[subject], k=1)]
-for subject in range(subject_list.shape[0]):
-    vector_wm[subject,:] = sym_matrix_to_vec(fc_matrix_wm[subject,:,:], discard_diagonal=True)
-    vector_wm[subject,:] = fc_matrix_wm[subject][np.triu_indices_from(fc_matrix_wm[subject], k=1)]
-for subject in range(subject_list.shape[0]):
-    vector_gambling[subject,:] = sym_matrix_to_vec(fc_matrix_gambling[subject,:,:], discard_diagonal=True)
-    vector_gambling[subject,:] = fc_matrix_gambling[subject][np.triu_indices_from(fc_matrix_gambling[subject], k=1)]
-for subject in range(subject_list.shape[0]):
-    vector_emotion[subject,:] = sym_matrix_to_vec(fc_matrix_emotion[subject,:,:], discard_diagonal=True)
-    vector_emotion[subject,:] = fc_matrix_emotion[subject][np.triu_indices_from(fc_matrix_emotion[subject], k=1)]
-for subject in range(subject_list.shape[0]):
-    vector_language[subject,:] = sym_matrix_to_vec(fc_matrix_language[subject,:,:], discard_diagonal=True)
-    vector_language[subject,:] = fc_matrix_language[subject][np.triu_indices_from(fc_matrix_language[subject], k=1)]
-for subject in range(subject_list.shape[0]):
-    vector_relational[subject,:] = sym_matrix_to_vec(fc_matrix_relational[subject,:,:], discard_diagonal=True)
-    vector_relational[subject,:] = fc_matrix_relational[subject][np.triu_indices_from(fc_matrix_relational[subject], k=1)]
-for subject in range(subject_list.shape[0]):
-    vector_social[subject,:] = sym_matrix_to_vec(fc_matrix_social[subject,:,:], discard_diagonal=True)
-    vector_social[subject,:] = fc_matrix_social[subject][np.triu_indices_from(fc_matrix_social[subject], k=1)]
-
-
-
-'''remove stuff we don't need to save memory'''
-del timeseries_motor
-del timeseries_wm
-del timeseries_gambling
-del timeseries_emotion
-del timeseries_language
-del timeseries_relational
-del timeseries_social
-
-del fc_matrix_motor 
-del fc_matrix_wm 
-del fc_matrix_gambling 
-del fc_matrix_emotion
-del fc_matrix_language
-del fc_matrix_relational
-del fc_matrix_social
-
-
-'''make everything pandas dataframes'''
-emotion_brain = pd.DataFrame(vector_emotion)
-gambling_brain = pd.DataFrame(vector_gambling)
-language_brain = pd.DataFrame(vector_language)
-motor_brain = pd.DataFrame(vector_motor)
-relational_brain= pd.DataFrame(vector_relational)
-social_brain = pd.DataFrame(vector_social)
-wm_brain = pd.DataFrame(vector_wm)
-
-
-'''Delete the old vectors to save space'''
-del vector_motor 
-del vector_wm 
-del vector_gambling 
-del vector_emotion 
-del vector_language 
-del vector_relational 
-del vector_social 
-
-
-
-
-
-
-'''make our prediction dataset'''
-
-
-emotion_brain['task'] =1
-gambling_brain['task'] =2
-language_brain['task'] =3
-motor_brain['task'] =4
-relational_brain['task'] =5
-social_brain['task'] =6
-wm_brain['task'] =7
-
-
-task_data = pd.DataFrame(np.concatenate((emotion_brain, gambling_brain,  language_brain,
-          motor_brain, relational_brain, social_brain, wm_brain), axis = 0))
-X = task_data
-y = np.array(X.iloc[:,-1])
-#X.drop(X.columns[len(X.columns)-1], axis=1, inplace=True)
-
-
-'''make more space'''
-del emotion_brain
-del gambling_brain
-del language_brain
-del motor_brain
-del relational_brain
-del social_brain
-del wm_brain                 
-        
-
-'''Now let's try the decoding analysis'''
-
-
-'''decoding task in HCP'''
-
-'''Analysis time'''
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.multioutput import MultiOutputClassifier
-from sklearn.model_selection import cross_val_score
-from sklearn.datasets import make_classification
-from sklearn.utils import shuffle
-
-
-'''make test-train split'''
+import matplotlib as plt
+#neuroimaging
+import nibabel as nb
+#sklearn
 from sklearn.model_selection import train_test_split
-train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.3)
+#TensorFlow/keras
+import keras
+import tensorflow as tf
+from tensorflow.keras.layers import Dense, Dropout, Flatten, Conv3D, MaxPool3D, BatchNormalization, Input
+from tensorflow.keras import activations, regularlizers
 
-forest = RandomForestClassifier(random_state=1 ,n_estimators=10)
-forest.fit(train_X, train_y)
+######################################
+#### Define some useful functions ####
+######################################
 
-print(forest.score(train_X, train_y))
-print(forest.score(test_X, test_y))
+def loadNifti(filename, NonSteadyState=0): 
+    '''Takes a list of various types of 4 dimensional brain data
+    (subject by X by Y by Z dimensions) and stacks them together in
+    a fifth dimension, making it usable for TensorFlow 3DCNN's.
+    Arguments:
+        filename: name of the file
+        NonSteadyState: ?
+    Returns:
+        tuple of 2d image, the dimensions, and the affine matrix
+        '''
+    n = nb.load(filename)
+    naff   = n.affine
+    img4d  = n.get_fdata();
+    imgsiz = img4d.shape
+    if len(imgsiz) == 4:
+        img4d  = img4d[:,:,:,NonSteadyState:]
+        imgsiz = img4d.shape
+        img2d  = np.reshape(img4d, (np.prod(imgsiz[0:3]), imgsiz[-1]), order='F').T
+    else:
+        img2d  = np.reshape(img4d, (np.prod(imgsiz[0:3]), 1), order='F').T
+    return img2d, imgsiz, naff
+
+def saveNifti(filename, X, size, affine, mask):
+    size = (*size[0:3], X.shape[0])
+    if len(mask) == 0:
+        mask = np.ones(X.shape[-1], dtype=bool)
+    img = np.zeros((X.shape[0], len(mask)))
+    img[:, mask] = X
+    n = nb.Nifti1Image(np.reshape(np.transpose(img), size, order='F'), affine)
+    nb.save(n, filename)
+ 
+def loadGifti(fname, NonSteadyState=0, icres=7):
+    gii = nb.load(fname)
+    gii_data = [d.data[:,None] for d in gii.darrays]
+    gii_data = np.concatenate(gii_data, axis=1).T
+    nV = 4**icres*10 + 2
+    gii_data = gii_data[:,0:nV]
+    return gii_data[NonSteadyState:,:]
+
+def stack_input_data(input_data):
+    '''Takes a list of various types of 4 dimensional brain data
+    (subject by X by Y by Z dimensions) and stacks them together in
+    a fifth dimension, making it usable for TensorFlow 3DCNN's.
+    Arguments:
+        input_data: a list of 4D brain arrays as described above
+    Returns:
+        input_data: a 5D array of stacked image types
+        (subject by X by Y by Z by image type)
+    '''
+    input_data = np.stack(data_list, axis=4)    
+    return input_data
 
 
+def brain_3DCNN(input_data, outputs, optimizer, loss_function, validation_set=False, output_type='continuous'):
+    '''Creates a 3D CNN used by .........
+    
+    ¯\_(ツ)_/¯ 
+    
+    Arguments:
+        input_data: 5d array of brain imaging data
+        outputs: vector of predctions
+        optimizer: method of optimization
+        loss_function: choice of loss function
+        output_type: specifies what type of activation function to use for final class. 
+        defaults to continuous but also takes binary
+    Returns:
+        model: an model keras object to fit on data
+    '''
+    
+    #######################################
+    # First step: Make the test train split 
+    #######################################
+    
+    X_train_full, X_test, y_train_full, y_test = train_test_split(gm_and_wm_3d, covariates['Age'][:].astype(float)) #age needs to be a float for the model to run for some reason
+    
+    #if employing a validation set, we split up train to be some validation:
+    if validation_set == True:
+        X_train, X_valid, y_train, y_valid = train_test_split(X_train_full, y_train_full)
+    #But if not, we make the full X train the training set
+    if validation_set == False:
+        X_train = X_train_full
+    
+    ##########################  
+    # Define the Keras Model #
+    ##########################
+    
+    #First, we make the input layer. Takes the inputs but drops the batch size dimension to be compatible with Keras
+    inputs = Input(shape=X_train[0, :, :, :, :], name='input')
+ 
+    ######################################################################
+    # Now we start the model. We move through phases of groups of layers #
+    # These groups are a convolution layer, batch normalization,         #
+    # convolution, batch norm, and a max pool                            #
+    # We start with 8 filters, a 3x3x3 size kernel, same padding, and    #
+    # regularize each layer with L2                                      #
+    # We include detailed explanations below.
+    ######################################################################   
+    # first, we have a 3D convolution layer. This layer slides the 8 unique kernels along
+    # the 3D image and convolutes the result. The weights are parameterized with the L2 regularizer.
+    x = Conv3D(8, kernel_size=(3,3,3), activation='relu', padding='same', 
+        kernel_regularizer=regularizers.l2(0.001), name='cnv_1')(inputs)  
+    # Next, we have batch normalization (BN). BN zero-centers and normalizes each input 
+    # to the next layer, then scales and shifts the resultant output. It is learning the scale 
+    # and mean of each layers inputs. It takes the mean and SD over each batch. 
+    x = BatchNormalization(name='bn_1')(x)
+    # This pattern of Convolution and BN is repeated
+    x = Conv3D(8, kernel_size=(3,3,3), activation='relu', padding='same',
+        kernel_regularizer=regularizers.l2(0.001), name='cnv_2')(x)
+    x = BatchNormalization(name='bn_2')(x)  
+    # Lastly, our first set of layers includes a max pooling (MP) layer. 
+    # The MP layer downsamples the image by taking the max value within the size of the kernel.
+    # Whatever value is hihest in the 3x3x3 kernel gets passed on to the next convolutional layer.
+    x = MaxPool3D(pool_size=(3, 3, 3),strides=(2,2,2), name='mxp_1')(x)
+    ######################################################################
+   
+    
+    #########################################################################
+    # Now we move on to the next block. The size of the image has decreased #
+    # We half the size of the image but double the number of filters        #
+    # This pattern is consistent through the network                        #
+    #########################################################################
+    x = Conv3D(16, kernel_size=(3,3,3), activation='relu', padding='same',
+          kernel_regularizer=regularizers.l2(0.001), name='cnv_3')(x)
+    x = BatchNormalization(name='bn_3')(x)
+    x = Conv3D(16, kernel_size=(3,3,3), activation='relu', padding='same',
+          kernel_regularizer=regularizers.l2(0.001), name='cnv_4')(x)
+    x = BatchNormalization(name='bn_4')(x)
+    x = MaxPool3D(pool_size=(3, 3, 3),strides=(2,2,2), name='mxp_2')(x)
+    #########################################################################
+   
+    ##############
+    # next block #
+    #####################################################################
+    x = Conv3D(32, kernel_size=(3,3,3), activation='relu', padding='same',
+          kernel_regularizer=regularizers.l2(0.001), name='cnv_5')(x)
+    x = BatchNormalization(name='bn_5')(x)
+    x = Conv3D(32, kernel_size=(3,3,3), activation='relu', padding='same',
+          kernel_regularizer=regularizers.l2(0.001), name='cnv_6')(x)
+    x = BatchNormalization(name='bn_6')(x)
+    x = MaxPool3D(pool_size=(3, 3, 3),strides=(2,2,2), name='mxp_3')(x)
+    #####################################################################
+ 
+    ##############
+    # next block #
+    #####################################################################
+    x = Conv3D(64, kernel_size=(3,3,3), activation='relu', padding='same',
+          kernel_regularizer=regularizers.l2(0.001), name='cnv_7')(x)
+    x = BatchNormalization(name='bn_7')(x)
+    x = Conv3D(64, kernel_size=(3,3,3), activation='relu', padding='same',
+          kernel_regularizer=regularizers.l2(0.001), name='cnv_8')(x)
+    x = BatchNormalization(name='bn_8')(x)
+    x = MaxPool3D(pool_size=(3, 3, 3),strides=(2,2,2), name='mxp_4')(x)
+    #####################################################################
 
-score = cross_val_score(forest,X,y, cv = 10)
-score.mean()
-
-
-
+    ##############
+    # next block #
+    #####################################################################
+    x = Conv3D(128, kernel_size=(3,3,3), activation='relu', padding='same',
+          kernel_regularizer=regularizers.l2(0.001), name='cnv_7b')(x)
+    x = BatchNormalization(name='bn_7b')(x)
+    x = Conv3D(128, kernel_size=(3,3,3), activation='relu', padding='same',
+          kernel_regularizer=regularizers.l2(0.001), name='cnv_8b')(x)
+    x = BatchNormalization(name='bn_8b')(x)
+    x = MaxPool3D(pool_size=(3, 3, 3),strides=(2,2,2), name='mxp_4b')(x) 
+    #####################################################################
+ 
+    ############################################################################################
+    #now we flatten the network, so that we can predict the continuous singular outcome variable
+    ############################################################################################
+    x = Flatten(name='flt_1')(x)
+    x = BatchNormalization(name='bn_9')(x)
+    x = Dropout(0.5, name='dpt_1')(x)
+    x = Dense(512, activation='relu', kernel_regularizer=regularizers.l2(0.001), name='d_1')(x)
+    x = tf.keras.layers.Dense(64, activation = 'relu')(x)
+    x = Dropout(.5)(x)
+    x = Dense(32, activation = 'relu')(x)
+    x = Dropout(.5)(x)
+    ############################################################################################
+   
+   
+    ##############################
+    # Now for the output layers: #
+    ##############################
+   
+    if output_type == 'continuous':
+        outputs = Dense(1, activation = 'relu', name='output', dtype='float32')(x)
+    if output_type == 'binary':
+        outputs = Dense(1, activation = 'sigmoid', name='output', dtype='float32')(x)
+        
+        
+        

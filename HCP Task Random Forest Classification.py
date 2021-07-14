@@ -18,22 +18,17 @@ Created on Wed Oct 21 13:04:52 2020
 
 #Load the needed libraries
 import os
+import time
 import nibabel as nib
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import sklearn as sk
 # Necessary for visualization
-from nilearn import plotting, datasets
-
-import csv
-import urllib.request as urllib2
 # matplotlib
-import matplotlib.pyplot as plt # For changing the color maps
 from matplotlib import cm # cm=colormap
-from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 
-
+start_time = time.time()
 
 '''Set the path, and create some variables'''
 # The download cells will store the data in nested directories starting here:
@@ -547,8 +542,96 @@ accuracy = predict_vs_true.duplicated()
 accuracy.value_counts()
 
 
+#calculate the feature importances
+feature_names = [f'feature {i}' for i in range(X.shape[1])]
+start_time = time.time()
+importances = forest.feature_importances_
+std = np.std([
+    tree.feature_importances_ for tree in forest.estimators_], axis=0)
+elapsed_time = time.time() - start_time
+print(f"Elapsed time to compute the importances: "
+      f"{elapsed_time:.3f} seconds")
+forest_importances = pd.Series(importances, index=feature_names)
+
+
+list_of_importances = []
+for i in range(10):
+    for j in range(10):
+        forest = RandomForestClassifier(random_state=j ,n_estimators=10)
+        forest.fit(train_X, train_y)
+        list_of_importances.append(forest.feature_importances_)
+importance_matrix = np.array(list_of_importances)
+importance_matrix = np.sort(importance_matrix)
+importance_matrix.max()
+importance_matrix
+
+#Don't run this unless you want to wait a long time... 
+fig, ax = plt.subplots()
+forest_importances.plot.bar(yerr=std, ax=ax)
+ax.set_title("Feature importances using MDI")
+ax.set_ylabel("Mean decrease in impurity")
+fig.tight_layout()
+
+
+#Don't run this unless you want to wait a long time... 
+from sklearn.inspection import permutation_importance
+start_time = time.time()
+result = permutation_importance(
+    forest, test_X, test_y, n_repeats=10, random_state=42, n_jobs=2)
+elapsed_time = time.time() - start_time
+print(f"Elapsed time to compute the importances: "
+      f"{elapsed_time:.3f} seconds")
+
+forest_importances = pd.Series(result.importances_mean, index=feature_names)
+
+
+
+#Try running the model again with the most important features
+
+X_important_features = X[[,16236, 41347, 379, 50265,43890,
+                          59647, 63959, 50932, 514, 6406,
+                          41197, 49641, 5224, 5746, 9510,
+                          6043, 6549, 25401, 15004, 23933,
+                          31991, 51493, 40531, 44143]]
 
 
 
 
 
+
+'''make test-train split'''
+from sklearn.model_selection import train_test_split
+train_X, test_X, train_y, test_y = train_test_split(X_important_features, y, test_size = 0.2)
+
+#fit the model
+forest = RandomForestClassifier(random_state=1 ,n_estimators=10)
+forest.fit(train_X, train_y)
+pred_y = forest.predict(test_X)
+#How does it perform?
+print(forest.score(train_X, train_y))
+print(forest.score(test_X, test_y))
+
+
+'''visualize the confusion matrix'''
+from sklearn.metrics import classification_report
+print(classification_report(test_y, pred_y))
+from sklearn.metrics import confusion_matrix
+cm = confusion_matrix(test_y, pred_y)
+cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+print(cm)
+
+'''let's see the cross validated score'''
+score = cross_val_score(forest,X,y, cv = 10, scoring = 'accuracy')
+print(score)
+
+'''Let's visualize the difference between 
+the predicted and actual tasks'''
+predictions = pd.Series(forest.predict(test_X))
+ground_truth_test_y = pd.Series(test_y)
+ground_truth_test_y = ground_truth_test_y.reset_index(drop = True)
+predictions = predictions.rename("Task")
+ground_truth_test_y = ground_truth_test_y.rename("Task")
+predict_vs_true = pd.concat([ground_truth_test_y, predictions],axis =1)
+predict_vs_true.columns = ["Actual", "Prediction"]
+accuracy = predict_vs_true.duplicated()
+accuracy.value_counts()
