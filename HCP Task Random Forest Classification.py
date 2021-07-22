@@ -356,6 +356,7 @@ for subject in subjects:
 
 
 
+
 '''now let's make FC matrices for each task'''
 
 '''Initialize the matrices'''
@@ -384,6 +385,7 @@ for subject, ts in enumerate(timeseries_relational):
   fc_matrix_relational[subject] = np.corrcoef(ts)
 for subject, ts in enumerate(timeseries_social):
   fc_matrix_social[subject] = np.corrcoef(ts)
+
 
 '''Initialize the vector form of each task, 
 where each row is a participant and each column is a connection'''
@@ -554,12 +556,137 @@ forest_importances = pd.Series(importances, index=feature_names)
 from sklearn.inspection import permutation_importance
 start_time = time.time()
 result = permutation_importance(
-    forest, test_X, test_y, n_repeats=5, random_state=1, n_jobs=4)
+    forest, test_X, test_y, n_repeats=5, random_state=1, n_jobs=6)
 elapsed_time = time.time() - start_time
 print(f"Elapsed time to compute the importances: "
       f"{elapsed_time:.3f} seconds")
 
-forest_importances = pd.DataFrame(result.importances_mean, feature_names)
+
+Permutation_forest_importances = pd.DataFrame(result.importances_mean, feature_names)
 from numpy import savetxt
 forest_importances.to_csv(f'/Users/cjrichier/Documents/Github/Deep-Learning-Brain-Age/forest_importances.csv')
+
+names1 = ['0','1','2','3','4','5','6']
+
+def vector_names(names, output_list):
+    cur = names[0]
+    for n in names[1:]:
+        output_list.append((str(cur) + ' | ' + str(n)))
+    if len(names)>2:
+        output_list = vector_names(names[1:], output_list)
+    return output_list
+    
+out1 = vector_names(names1, [])
+print(out1)
+
+forest_importances_series = np.squeeze(np.array(forest_importances))
+
+list_of_connections = np.array(vector_names(region_info['name'], []))
+list_of_networks = np.array(vector_names(region_info['network'], []))
+
+#Now that we have the feature importances, let's organize them all into a separate dataframe
+Permutation_features_full = pd.DataFrame(np.array((forest_importances_series,list_of_connections, list_of_networks)).T)
+from numpy import savetxt
+forest_importances.to_csv(f'/Users/cjrichier/Documents/Github/HCP-Analyses/forest_importances.csv')
+
+Permutation_features_full.to_csv(f'/Users/cjrichier/Documents/Github/HCP-Analyses/Permutation_features_full.csv')
+Permutation_features_full.columns = ['Importance Value', 'Regions', 'Network Connection']
+Permutation_features_full_sorted = Permutation_features_full.sort_values(by='Importance Value', ascending=False)
+
+Rank_order_features = Permutation_features_full_sorted.index
+Rank_order_features = list(Rank_order_features)
+Non_zero_features = Rank_order_features[:561]
+Non_zero_features = str(Non_zero_features)
+
+Permutation_features_full_sorted = Permutation_features_full_sorted.reset_index()
+Permutation_features_full_sorted.drop('index', axis=1, inplace=True)
+
+
+
+list_of_connection_counts = features_full.iloc[:,2].value_counts()
+
+#The proportion of each network's total connections in the full data
+for network in pd.Series(region_info['network']).unique():
+    subframe = Permutation_features_full[Permutation_features_full['Network Connection'].str.contains(network)]
+    print(network, len(subframe['Network Connection'])/len(Permutation_features_full['Network Connection']))
+
+for network in pd.Series(region_info['network']).unique():
+    subframe = Permutation_features_full[Permutation_features_full['Network Connection'].str.contains(network)]
+    for network2 in pd.Series(region_info['network']).unique():
+        if network2 not in network:
+            subframe2 = subframe[subframe['Network Connection'].str.contains(network2)]
+        else:
+            subframe2 = subframe[subframe['Network Connection'].str.contains(str(network + ' | '+ network2))]
+        print(network, ' | ', network2, len(subframe2['Network Connection'])/len(Permutation_features_full['Network Connection']))
+        
+Permutation_features_full['Network Connection2'] = ''
+print(Permutation_features_full['Network Connection2'])
+for network in pd.Series(region_info['network']).unique():
+    #Permutation_features_full[Permutation_features_full['Network Connection'].str.contains(network)]
+    for network2 in pd.Series(region_info['network']).unique():
+        print(str(network + ' | ' + network2))
+        str1 = network + ' | ' + network2
+        if network2 not in network:
+            #print(len(Permutation_features_full.loc[(Permutation_features_full['Network Connection'].str.contains(network)) & (Permutation_features_full['Network Connection'].str.contains(network2)), 'Network Connection2']))
+            Permutation_features_full.loc[((Permutation_features_full['Network Connection'].str.contains(network) & Permutation_features_full['Network Connection'].str.contains(network2))), 'Network Connection2'] = str1
+        else:
+            print(network + ' | ' + network2)
+            Permutation_features_full.loc[Permutation_features_full['Network Connection'].str.contains(str(network + ' | '+network2)), 'Network Connection2'] = str1
+        print(Permutation_features_full.loc[((Permutation_features_full['Network Connection'].str.contains(network) & Permutation_features_full['Network Connection'].str.contains(network2))), 'Network Connection2'])
+        
+print(Permutation_features_full['Network Connection2'].unique())
+    
+def network_parsing(df, names, output_list):
+    cur = names[0]
+    for n in names[1:]:
+        
+
+#Now let's try a model where we only use the importance features that are greater than 0
+data_only_important_features = task_data[Non_zero_features]
+
+
+
+
+
+'''make test-train split'''
+from sklearn.model_selection import train_test_split
+train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.2)
+
+#fit the model
+forest = RandomForestClassifier(random_state=1 ,n_estimators=10)
+forest.fit(train_X, train_y)
+pred_y = forest.predict(test_X)
+#How does it perform?
+print(forest.score(train_X, train_y))
+print(forest.score(test_X, test_y))
+
+
+'''visualize the confusion matrix'''
+from sklearn.metrics import classification_report
+print(classification_report(test_y, pred_y))
+from sklearn.metrics import confusion_matrix
+cm = confusion_matrix(test_y, pred_y)
+cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+print(cm)
+
+'''let's see the cross validated score'''
+score = cross_val_score(forest,X,y, cv = 10, scoring = 'accuracy')
+print(score)
+
+'''Let's visualize the difference between 
+the predicted and actual tasks'''
+predictions = pd.Series(forest.predict(test_X))
+ground_truth_test_y = pd.Series(test_y)
+ground_truth_test_y = ground_truth_test_y.reset_index(drop = True)
+predictions = predictions.rename("Task")
+ground_truth_test_y = ground_truth_test_y.rename("Task")
+predict_vs_true = pd.concat([ground_truth_test_y, predictions],axis =1)
+predict_vs_true.columns = ["Actual", "Prediction"]
+accuracy = predict_vs_true.duplicated()
+accuracy.value_counts()
+
+
+
+
+
 
