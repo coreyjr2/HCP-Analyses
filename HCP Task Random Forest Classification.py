@@ -554,7 +554,7 @@ forest_importances = pd.Series(importances, index=feature_names)
 from sklearn.inspection import permutation_importance
 start_time = time.time()
 result = permutation_importance(
-    forest, test_X, test_y, n_repeats=5, random_state=1, n_jobs=4)
+    forest, test_X, test_y, n_repeats=5, random_state=1, n_jobs=)
 elapsed_time = time.time() - start_time
 print(f"Elapsed time to compute the importances: "
       f"{elapsed_time:.3f} seconds")
