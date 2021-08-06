@@ -328,7 +328,9 @@ def selective_average(timeseries_data, ev, skip=0):
   return avg_data
 
 
-
+################################
+#### Making the input data #####
+################################
 
 
 '''load in the timeseries for each task'''
@@ -354,8 +356,29 @@ timeseries_social = []
 for subject in subjects:
   timeseries_social.append(load_task_timeseries(subject, "social", concat=True))
 
+'''calculate average for each parcel in each task'''
+parcel_average_motor = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
+parcel_average_wm = np.zeros((N_SUBJECTS, N_PARCELS))
+parcel_average_gambling = np.zeros((N_SUBJECTS, N_PARCELS))
+parcel_average_emotion = np.zeros((N_SUBJECTS, N_PARCELS))
+parcel_average_language = np.zeros((N_SUBJECTS, N_PARCELS))
+parcel_average_relational = np.zeros((N_SUBJECTS, N_PARCELS))
+parcel_average_social = np.zeros((N_SUBJECTS, N_PARCELS))
 
-
+for subject, ts in enumerate(timeseries_motor):
+    parcel_average_motor[subject] = np.mean(ts, axis=1)
+for subject, ts in enumerate(timeseries_wm):
+    parcel_average_wm[subject] = np.mean(ts, axis=1)
+for subject, ts in enumerate(timeseries_gambling):
+    parcel_average_gambling[subject] = np.mean(ts, axis=1)
+for subject, ts in enumerate(timeseries_emotion):
+    parcel_average_emotion[subject] = np.mean(ts, axis=1)
+for subject, ts in enumerate(timeseries_language):
+    parcel_average_language[subject] = np.mean(ts, axis=1)
+for subject, ts in enumerate(timeseries_relational):
+    parcel_average_relational[subject] = np.mean(ts, axis=1)
+for subject, ts in enumerate(timeseries_social):
+    parcel_average_social[subject] = np.mean(ts, axis=1)    
 
 '''now let's make FC matrices for each task'''
 
@@ -455,6 +478,13 @@ relational_brain= pd.DataFrame(vector_relational)
 social_brain = pd.DataFrame(vector_social)
 wm_brain = pd.DataFrame(vector_wm)
 
+motor_parcels = pd.DataFrame(parcel_average_motor)
+wm_parcels = pd.DataFrame(parcel_average_wm)
+gambling_parcels = pd.DataFrame(parcel_average_gambling)
+emotion_parcels = pd.DataFrame(parcel_average_emotion)
+language_parcels = pd.DataFrame(parcel_average_language)
+relational_parcels = pd.DataFrame(parcel_average_relational)
+social_parcels = pd.DataFrame(parcel_average_social)
 
 '''Delete the old vectors to save space'''
 del vector_motor 
@@ -467,15 +497,25 @@ del vector_social
 
 
 '''make our prediction dataset'''
-emotion_brain['task'] =1
-gambling_brain['task'] =2
-language_brain['task'] =3
-motor_brain['task'] =4
-relational_brain['task'] =5
-social_brain['task'] =6
-wm_brain['task'] =7
+emotion_brain['task'] = 1
+gambling_brain['task'] = 2
+language_brain['task'] = 3
+motor_brain['task'] = 4
+relational_brain['task'] = 5
+social_brain['task'] = 6
+wm_brain['task'] = 7
+
+emotion_parcels['task'] = 1
+gambling_parcels['task'] = 2
+language_parcels['task'] = 3
+motor_parcels['task'] = 4
+relational_parcels['task'] = 5
+social_parcels['task'] = 6
+wm_parcels['task'] = 7
 
 #make the data frames
+
+    
 task_data = pd.DataFrame(np.concatenate((emotion_brain, gambling_brain,  language_brain,
           motor_brain, relational_brain, social_brain, wm_brain), axis = 0))
 X = task_data.iloc[:, :-1]
@@ -492,6 +532,36 @@ del social_brain
 del wm_brain                 
         
 
+
+
+
+
+
+########################################
+###### Support Vector Classifier #######
+########################################
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn import svm
+
+'''make test-train split'''
+from sklearn.model_selection import train_test_split
+train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.2)
+
+
+lin_clf = svm.LinearSVC()
+lin_clf.fit(train_X, train_y)
+print(lin_clf.score(train_X, train_y))
+print(lin_clf.score(test_X, test_y))
+svm_coef = pd.DataFrame(lin_clf.coef_.T)
+
+
+####################################
+##### Random Forest Classifier #####
+####################################
+
 '''Now let's try the decoding analysis'''
 '''Analysis time'''
 from sklearn.ensemble import RandomForestClassifier
@@ -501,12 +571,9 @@ from sklearn.datasets import make_classification
 from sklearn.utils import shuffle
 
 
-'''make test-train split'''
-from sklearn.model_selection import train_test_split
-train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.2)
 
 #fit the model
-forest = RandomForestClassifier(random_state=1 ,n_estimators=10)
+forest = RandomForestClassifier(random_state=1 ,n_estimators=1000, n_jobs=4)
 forest.fit(train_X, train_y)
 pred_y = forest.predict(test_X)
 #How does it perform?
@@ -538,8 +605,64 @@ predict_vs_true.columns = ["Actual", "Prediction"]
 accuracy = predict_vs_true.duplicated()
 accuracy.value_counts()
 
+##################################
+###### Feature Importances #######
+##################################
 
-#calculate the feature importances
+#Define function to retrive names of connections
+def vector_names(names, output_list):
+    cur = names[0]
+    for n in names[1:]:
+        output_list.append((str(cur) + ' | ' + str(n)))
+    if len(names)>2:
+        output_list = vector_names(names[1:], output_list)
+    return output_list
+    
+
+#Retrive the list of connections and netowrks for the connection data
+list_of_connections = np.array(vector_names(region_info['name'], []))
+list_of_networks = np.array(vector_names(region_info['network'], []))
+
+
+######## SVC Importances #############
+#Make a dataframe with task coefficients and labels for SVC
+
+list_of_connections_series = pd.Series(list_of_connections)
+list_of_networks_series = pd.Series(list_of_networks)
+svm_important_features = pd.concat([svm_coef, list_of_connections_series, list_of_networks_series], axis=1)
+svm_important_features = np.array(svm_important_features)
+svm_important_features = pd.DataFrame(svm_important_features)
+
+#Create objects for each task and their coeffecients
+emotion_important_coef_svm = pd.DataFrame([svm_coef.iloc[:,0], list_of_connections_series, list_of_networks_series]).T
+emotion_important_coef_svm.columns = ['Coeffecient', 'Regions', 'Network Connections']
+gambling_important_coef_svm = pd.DataFrame([svm_coef.iloc[:,1], list_of_connections_series, list_of_networks_series]).T
+gambling_important_coef_svm.columns = ['Coeffecient', 'Regions', 'Network Connections']
+language_important_coef_svm = pd.DataFrame([svm_coef.iloc[:,2], list_of_connections_series, list_of_networks_series]).T
+language_important_coef_svm.columns = ['Coeffecient', 'Regions', 'Network Connections']
+motor_important_coef_svm = pd.DataFrame([svm_coef.iloc[:,3], list_of_connections_series, list_of_networks_series]).T
+motor_important_coef_svm.columns = ['Coeffecient', 'Regions', 'Network Connections']
+relational_important_coef_svm = pd.DataFrame([svm_coef.iloc[:,4], list_of_connections_series, list_of_networks_series]).T
+relational_important_coef_svm.columns = ['Coeffecient', 'Regions', 'Network Connections']
+social_important_coef_svm = pd.DataFrame([svm_coef.iloc[:,5], list_of_connections_series, list_of_networks_series]).T
+social_important_coef_svm.columns = ['Coeffecient', 'Regions', 'Network Connections']
+wm_important_coef_svm = pd.DataFrame([svm_coef.iloc[:,6], list_of_connections_series, list_of_networks_series]).T
+wm_important_coef_svm.columns = ['Coeffecient', 'Regions', 'Network Connections']
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#calculate the feature importances for RFC
 feature_names = [f'feature {i}' for i in range(X.shape[1])]
 start_time = time.time()
 importances = forest.feature_importances_
@@ -549,8 +672,6 @@ elapsed_time = time.time() - start_time
 print(f"Elapsed time to compute the importances: "
       f"{elapsed_time:.3f} seconds")
 forest_importances = pd.Series(importances, index=feature_names)
-
-
 
 #Don't run this unless you want to wait a long time... 
 from sklearn.inspection import permutation_importance
@@ -568,21 +689,13 @@ forest_importances.to_csv(f'/Users/cjrichier/Documents/Github/Deep-Learning-Brai
 
 names1 = ['0','1','2','3','4','5','6']
 
-def vector_names(names, output_list):
-    cur = names[0]
-    for n in names[1:]:
-        output_list.append((str(cur) + ' | ' + str(n)))
-    if len(names)>2:
-        output_list = vector_names(names[1:], output_list)
-    return output_list
-    
+
 out1 = vector_names(names1, [])
 print(out1)
 
 forest_importances_series = np.squeeze(np.array(forest_importances))
 
-list_of_connections = np.array(vector_names(region_info['name'], []))
-list_of_networks = np.array(vector_names(region_info['network'], []))
+
 
 #Now that we have the feature importances, let's organize them all into a separate dataframe
 Permutation_features_full = pd.DataFrame(np.array((forest_importances_series,list_of_connections, list_of_networks)).T)
@@ -641,13 +754,50 @@ def network_parsing(df, names, output_list):
     for n in names[1:]:
         
 
+
+
+
+
+
+
+name_map = pd.read_csv("/Users/cjrichier/Documents/Github/HCP-Analyses/network_name_map.csv")
+Permutation_features_full = pd.read_csv(f'/Users/cjrichier/Documents/Github/HCP-Analyses/Permutation_features_full.csv')
+
+
+def name_merge(target_df, target_col, name_map):
+    '''
+    target_df as the dataframe to change
+    target_col is the column to change on
+    name_map is a 2 column dataframe with colnames: 
+     ['Orignial Name','Universal Name']
+    '''
+    target_df.rename(columns={target_col:'Original Name'}, inplace=True)
+    name_map.rename(columns={'Universal Name':target_col}, inplace=True)
+    target_df = pd.merge(target_df, name_map, how='left', on= "Original Name")
+    return(target_df)
+
+
+Permutation_features_full = name_merge(Permutation_features_full, 'Network Connection', name_map)
+Permutation_features_full_sorted = Permutation_features_full.sort_values(by='Importance Value', ascending=False)
+
+
+number_of_connections = Permutation_features_full['Network connection'].value_counts()
+
+plt.hist()
+
+top_features_only = Permutation_features_full_sorted.iloc[:562, :]
+top_features_indices = list(top_features_only.index)
+number_of_connections_top_features = top_features_only['Network connection'].value_counts()
+
+
+proportion_of_top_connections = number_of_connections_top_features / number_of_connections
+
+top_features_indices[-4]
+
 #Now let's try a model where we only use the importance features that are greater than 0
-data_only_important_features = task_data[Non_zero_features]
-
-
-
-
-
+data_only_important_features = task_data.iloc[:, top_features_indices]
+X = data_only_important_features.iloc[:, :-1]
+y = task_data.iloc[:,-1]
 '''make test-train split'''
 from sklearn.model_selection import train_test_split
 train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.2)
@@ -684,6 +834,177 @@ predict_vs_true = pd.concat([ground_truth_test_y, predictions],axis =1)
 predict_vs_true.columns = ["Actual", "Prediction"]
 accuracy = predict_vs_true.duplicated()
 accuracy.value_counts()
+
+#Now let's try to plot what happens when you pull out connections progressively from the model, and see how that affects accuracy 
+list_of_model_train_accuracies = []
+list_of_model_test_accuracies = []
+
+temp = top_features_indices.copy()
+while len(temp)>1:
+    print(len(temp))
+    important_features_progressively_removed = data_only_important_features.iloc[:, temp]
+    X = important_features_progressively_removed.iloc[:,:-1]
+    y = task_data.iloc[:,-1]
+    '''make test-train split'''
+    train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.2)
+    #fit the model
+    forest = RandomForestClassifier(random_state=1 ,n_estimators=10)
+    forest.fit(train_X, train_y)
+    pred_y = forest.predict(test_X)
+    #How does it perform?
+    list_of_model_train_accuracies.append(forest.score(train_X, train_y))
+    list_of_model_test_accuracies.append(forest.score(test_X, test_y))
+    temp = temp[:len(temp)-1]
+    
+plt.plot(list_of_model_test_accuracies)
+# One network connection at a time
+map_of_model_train_accuracies = {}
+map_of_model_test_accuracies = {}
+for network in Permutation_features_full_sorted['Network connection'].unique():
+    print(network)
+    subset = Permutation_features_full_sorted[Permutation_features_full_sorted['Network connection'].str.contains(network)]
+    data_only_important_features = task_data.iloc[:, subset.index.intersection(top_features_indices)]
+    print(len(data_only_important_features.columns))
+    X = data_only_important_features.iloc[:,:-1]
+    y = task_data.iloc[:,-1]
+    '''make test-train split'''
+    train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.2)
+    #fit the model
+    forest = RandomForestClassifier(random_state=1 ,n_estimators=10)
+    forest.fit(train_X, train_y)
+    pred_y = forest.predict(test_X)
+    #How does it perform?
+    map_of_model_train_accuracies[network] = [network, len(data_only_important_features.columns), forest.score(train_X, train_y)]
+    map_of_model_test_accuracies[network] = [network, len(data_only_important_features.columns), forest.score(test_X, test_y)]
+    print(forest.score(test_X, test_y))
+    
+map_of_model_test_accuracies = pd.DataFrame.from_dict(map_of_model_test_accuracies, orient='index', columns = ['Network','Number of Features','Accuracy'])
+    
+# Without one network connection at a time
+map_of_model_train_accuracies_rm = {}
+map_of_model_test_accuracies_rm = {}
+for network in Permutation_features_full_sorted['Network connection'].unique():
+    print(network)
+    subset = Permutation_features_full_sorted[~(Permutation_features_full_sorted['Network connection'].str.contains(network))]
+    data_only_important_features = task_data.iloc[:, subset.index]
+    X = data_only_important_features.iloc[:,:-1]
+    y = task_data.iloc[:,-1]
+    '''make test-train split'''
+    train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.2)
+    #fit the model
+    forest = RandomForestClassifier(random_state=1 ,n_estimators=10)
+    forest.fit(train_X, train_y)
+    pred_y = forest.predict(test_X)
+    #How does it perform?
+    map_of_model_train_accuracies_rm[network] = forest.score(train_X, train_y)
+    map_of_model_test_accuracies_rm[network] = forest.score(test_X, test_y)
+    print(forest.score(test_X, test_y))
+
+# One Network at a time
+map_of_model_train_accuracies1 = {}
+map_of_model_test_accuracies1 = {}
+for network in set(region_info['network']):
+    print(network)
+    subset = Permutation_features_full_sorted[Permutation_features_full_sorted['Network connection'].str.contains(network)]
+    data_only_important_features = task_data.iloc[:, subset.index]
+    X = data_only_important_features.iloc[:,:-1]
+    y = task_data.iloc[:,-1]
+    '''make test-train split'''
+    train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.2)
+    #fit the model
+    forest = RandomForestClassifier(random_state=1 ,n_estimators=10)
+    forest.fit(train_X, train_y)
+    pred_y = forest.predict(test_X)
+    #How does it perform?
+    map_of_model_train_accuracies1[network] = forest.score(train_X, train_y)
+    map_of_model_test_accuracies1[network] = forest.score(test_X, test_y)
+    print(forest.score(test_X, test_y))
+
+
+# WITHOUT one network at a time
+map_of_model_train_accuracies2 = {}
+map_of_model_test_accuracies2 = {}
+for network in set(region_info['network']):
+    print(network)
+    subset = Permutation_features_full_sorted[~(Permutation_features_full_sorted['Network connection'].str.contains(network))]
+    data_only_important_features = task_data.iloc[:, subset.index]
+    X = data_only_important_features.iloc[:,:-1]
+    y = task_data.iloc[:,-1]
+    '''make test-train split'''
+    train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.2)
+    #fit the model
+    forest = RandomForestClassifier(random_state=1 ,n_estimators=10)
+    forest.fit(train_X, train_y)
+    pred_y = forest.predict(test_X)
+    #How does it perform?
+    map_of_model_train_accuracies2[network] = forest.score(train_X, train_y)
+    map_of_model_test_accuracies2[network] = forest.score(test_X, test_y)
+    print(forest.score(test_X, test_y))
+    
+    
+    
+    
+    
+plt.scatter(map_of_model_test_accuracies['Number of Features'], map_of_model_test_accuracies['Accuracy'])
+    
+    
+    
+    
+####################################
+###### Parcel-based analysis #######
+####################################   
+    
+parcels_full =  pd.DataFrame(np.concatenate((emotion_parcels, gambling_parcels, language_parcels,
+                                             motor_parcels, relational_parcels, social_parcels, wm_parcels), axis = 0))
+
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+
+
+
+X = parcels_full.iloc[:, :-1]
+X = scaler.fit_transform(X) 
+y = parcels_full.iloc[:,-1]
+
+
+train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.2)
+
+#fit the model
+forest = RandomForestClassifier(random_state=1 ,n_estimators=1000)
+forest.fit(train_X, train_y)
+pred_y = forest.predict(test_X)
+#How does it perform?
+print(forest.score(train_X, train_y))
+print(forest.score(test_X, test_y))
+
+
+'''visualize the confusion matrix'''
+from sklearn.metrics import classification_report
+print(classification_report(test_y, pred_y))
+from sklearn.metrics import confusion_matrix
+cm = confusion_matrix(test_y, pred_y)
+cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+print(cm)
+
+'''let's see the cross validated score'''
+score = cross_val_score(forest,X,y, cv = 10, scoring = 'accuracy')
+print(score)
+
+'''Let's visualize the difference between 
+the predicted and actual tasks'''
+predictions = pd.Series(forest.predict(test_X))
+ground_truth_test_y = pd.Series(test_y)
+ground_truth_test_y = ground_truth_test_y.reset_index(drop = True)
+predictions = predictions.rename("Task")
+ground_truth_test_y = ground_truth_test_y.rename("Task")
+predict_vs_true = pd.concat([ground_truth_test_y, predictions],axis =1)
+predict_vs_true.columns = ["Actual", "Prediction"]
+accuracy = predict_vs_true.duplicated()
+accuracy.value_counts()
+
+
+
+
 
 
 
