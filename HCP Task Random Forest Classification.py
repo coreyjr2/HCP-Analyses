@@ -453,6 +453,13 @@ relational_brain= pd.DataFrame(vector_relational)
 social_brain = pd.DataFrame(vector_social)
 wm_brain = pd.DataFrame(vector_wm)
 
+motor_parcels = pd.DataFrame(parcel_average_motor)
+wm_parcels = pd.DataFrame(parcel_average_wm)
+gambling_parcels = pd.DataFrame(parcel_average_gambling)
+emotion_parcels = pd.DataFrame(parcel_average_emotion)
+language_parcels = pd.DataFrame(parcel_average_language)
+relational_parcels = pd.DataFrame(parcel_average_relational)
+social_parcels = pd.DataFrame(parcel_average_social)
 
 '''Delete the old vectors to save space'''
 del vector_motor 
@@ -465,13 +472,6 @@ del vector_social
 
 
 '''make our prediction dataset'''
-emotion_brain['task'] =1
-gambling_brain['task'] =2
-language_brain['task'] =3
-motor_brain['task'] =4
-relational_brain['task'] =5
-social_brain['task'] =6
-wm_brain['task'] =7
 
 #make the data frames
 task_data = pd.DataFrame(np.concatenate((emotion_brain, gambling_brain,  language_brain,
@@ -490,6 +490,36 @@ del social_brain
 del wm_brain                 
         
 
+
+
+
+
+
+########################################
+###### Support Vector Classifier #######
+########################################
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn import svm
+
+'''make test-train split'''
+from sklearn.model_selection import train_test_split
+train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.2)
+
+
+lin_clf = svm.LinearSVC()
+lin_clf.fit(train_X, train_y)
+print(lin_clf.score(train_X, train_y))
+print(lin_clf.score(test_X, test_y))
+svm_coef = pd.DataFrame(lin_clf.coef_.T)
+
+
+####################################
+##### Random Forest Classifier #####
+####################################
+
 '''Now let's try the decoding analysis'''
 '''Analysis time'''
 from sklearn.ensemble import RandomForestClassifier
@@ -499,12 +529,8 @@ from sklearn.datasets import make_classification
 from sklearn.utils import shuffle
 
 
-'''make test-train split'''
-from sklearn.model_selection import train_test_split
-train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.2)
 
 #fit the model
-forest = RandomForestClassifier(random_state=1 ,n_estimators=10)
 forest.fit(train_X, train_y)
 pred_y = forest.predict(test_X)
 #How does it perform?
@@ -537,7 +563,6 @@ accuracy = predict_vs_true.duplicated()
 accuracy.value_counts()
 
 
-#calculate the feature importances
 feature_names = [f'feature {i}' for i in range(X.shape[1])]
 start_time = time.time()
 importances = forest.feature_importances_
@@ -548,8 +573,6 @@ print(f"Elapsed time to compute the importances: "
       f"{elapsed_time:.3f} seconds")
 forest_importances = pd.Series(importances, index=feature_names)
 
-
-
 #Don't run this unless you want to wait a long time... 
 from sklearn.inspection import permutation_importance
 start_time = time.time()
@@ -559,7 +582,6 @@ elapsed_time = time.time() - start_time
 print(f"Elapsed time to compute the importances: "
       f"{elapsed_time:.3f} seconds")
 
-forest_importances = pd.DataFrame(result.importances_mean, feature_names)
 from numpy import savetxt
 forest_importances.to_csv(f'/Users/cjrichier/Documents/Github/Deep-Learning-Brain-Age/forest_importances.csv')
 
