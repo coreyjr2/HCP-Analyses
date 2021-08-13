@@ -6,17 +6,13 @@ Created on Mon Dec 21 11:14:43 2020
 @author: cjrichier
 """
 
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Oct 21 13:04:52 2020
+#################################################
+########## HCP decoding project code ############
+#################################################
 
-@author: cjrichier
-"""
-
-###HCP task data analysis###
-
-#Load the needed libraries
+###############################
+## Load the needed libraries ##
+###############################
 import os
 import time
 import nibabel as nib
@@ -24,32 +20,44 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import sklearn as sk
+from sklearn.ensemble import RandomForestClassifier
 import nilearn 
-# Necessary for visualization
-# matplotlib
 from matplotlib import cm # cm=colormap
+from nilearn.connectome import sym_matrix_to_vec
+from sklearn.preprocessing import StandardScaler
+from sklearn import svm
+from sklearn.model_selection import train_test_split
 
+#record the start time 
 start_time = time.time()
 
-'''Set the path, and create some variables'''
-# The download cells will store the data in nested directories starting here:
+# Set relevant directories
 HCP_DIR = "/Volumes/Byrgenwerth/Datasets/HCP/"
 HCP_DIR_REST = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_rest/subjects/"
 HCP_DIR_TASK = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_task/subjects/"
 HCP_DIR_EVS = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_task/"
 HCP_DIR_BEHAVIOR = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_behavior/"
 if not os.path.isdir(HCP_DIR): os.mkdir(HCP_DIR)
+
 # The data shared for NMA projects is a subset of the full HCP dataset
 N_SUBJECTS = 339
+
 # The data have already been aggregated into ROIs from the Glasesr parcellation
 N_PARCELS = 360
+
+# How many networks?
+N_NETWORKS = 12
+
 # The acquisition parameters for all tasks were identical
 TR = 0.72  # Time resolution, in sec
+
 # The parcels are matched across hemispheres with the same order
 HEMIS = ["Right", "Left"]
+
 # Each experiment was repeated multiple times in each subject
 N_RUNS_REST = 4
 N_RUNS_TASK = 2
+
 # Time series data are organized by experiment, with each experiment
 # having an LR and RL (phase-encode direction) acquistion
 BOLD_NAMES = [ "rfMRI_REST1_LR", 
@@ -70,29 +78,26 @@ BOLD_NAMES = [ "rfMRI_REST1_LR",
               "tfMRI_RELATIONAL_LR", 
               "tfMRI_SOCIAL_RL", 
               "tfMRI_SOCIAL_LR"]
+
 # This will use all subjects:
 subjects = range(N_SUBJECTS)
 
-
-'''You may want to limit the subjects used during code development. This 
-will only load in 10 subjects if you use this list.'''
+#You may want to limit the subjects used during code development. This will only load in 10 subjects if you use this list.
 SUBJECT_SUBSET = 10
 test_subjects = range(SUBJECT_SUBSET)
 
-
-'''import the demographics and bheavior data'''
+#import the demographics and bheavior data
 demographics = pd.read_csv('/Volumes/Byrgenwerth/Datasets/HCP/HCP_demographics/demographics_behavior.csv')
+
 #What is our gender breakdown?
 demographics['Gender'].value_counts()
 demographics['Age'].value_counts()
 
-
-
-'''this is useful for visualizing:'''
+#For visualization
 with np.load(f"{HCP_DIR}hcp_atlas.npz") as dobj:
   atlas = dict(**dobj)
 
-'''let's generate some information about the regions using the rest data'''
+#let's generate some information about the regions using the rest data
 regions = np.load("/Volumes/Byrgenwerth/Datasets/HCP/hcp_rest/regions.npy").T
 region_info = dict(
     name=regions[0].tolist(),
@@ -100,10 +105,12 @@ region_info = dict(
     myelin=regions[2].astype(np.float),
 )
 region_transpose = pd.DataFrame(regions.T, columns=['Region', 'Network', 'Myelination'])
-
 print(region_info)
 
-'''Now let's define a few helper functions'''
+######################################
+###### Define useful functions #######
+######################################
+
 def get_image_ids(name):
   """Get the 1-based image indices for runs in a given experiment.
 
@@ -253,16 +260,6 @@ def load_evs(subject, name, condition):
     evs.append(ev)
   return evs
 
-
-####################################
- ####### Taks Data Analysis #######
-####################################
-
-'''Make a list of the task names. This will be helpful in the future'''
-tasks_names = ["motor", "wm", "gambling", "emotion", "language", "relational", "social"]
-
-'''Now let's switch to doing some task-based 
-analysis. Here are some helper functions for that.'''
 def condition_frames(run_evs, skip=0):
   """Identify timepoints corresponding to a given condition in each run.
 
@@ -333,6 +330,9 @@ def selective_average(timeseries_data, ev, skip=0):
 #### Making the input data #####
 ################################
 
+# Make a list of the task names
+tasks_names = ["motor", "wm", "gambling", "emotion", "language", "relational", "social"]
+
 #Load in all of the timeseries for each subject for each task
 timeseries_motor = []
 for subject in subjects:
@@ -356,9 +356,9 @@ timeseries_social = []
 for subject in subjects:
   timeseries_social.append(load_task_timeseries(subject, "social", concat=True))
 
-###################################
-#### Parcel-based input data  #####
-###################################
+##################################
+#### Parcel-based input data #####
+##################################
 
 #Initialize dataframes
 parcel_average_motor = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
@@ -394,7 +394,7 @@ language_parcels = pd.DataFrame(parcel_average_language, columns= region_transpo
 relational_parcels = pd.DataFrame(parcel_average_relational, columns= region_transpose['Network'])
 social_parcels = pd.DataFrame(parcel_average_social, columns= region_transpose['Network'])
 
-#Add the categorical label to each dataframe
+# Add the categorical label to each dataframe
 emotion_parcels['task'] = 1
 gambling_parcels['task'] = 2
 language_parcels['task'] = 3
@@ -403,13 +403,38 @@ relational_parcels['task'] = 5
 social_parcels['task'] = 6
 wm_parcels['task'] = 7
 
-#######################################
-#### Connection-based input data  #####
-#######################################
+# Stack all of the parcel dataframes together
+parcels_full = pd.DataFrame(np.concatenate((emotion_parcels, gambling_parcels, language_parcels,
+                                             motor_parcels, relational_parcels, social_parcels, wm_parcels), axis = 0))
 
-'''now let's make FC matrices for each task'''
-'''Initialize the matrices'''
-fc_matrix_task = []
+
+# Make model input data
+scaler = StandardScaler()
+X_parcels = parcels_full.iloc[:, :-1]
+y_parcels = parcels_full.iloc[:,-1]
+
+# Delete unused preprocessing variables
+del parcel_average_motor
+del parcel_average_wm
+del parcel_average_gambling
+del parcel_average_emotion
+del parcel_average_language
+del parcel_average_relational
+del parcel_average_social
+
+del motor_parcels
+del wm_parcels
+del gambling_parcels 
+del emotion_parcels
+del language_parcels
+del relational_parcels
+del social_parcels
+
+#############################################
+#### Parcel Connection-based input data #####
+#############################################
+
+#Make FC matrices for each subject for each task
 fc_matrix_motor = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
 fc_matrix_wm = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
 fc_matrix_gambling = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
@@ -418,8 +443,7 @@ fc_matrix_language = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
 fc_matrix_relational = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
 fc_matrix_social = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
 
-
-'''calculate the correlations (FC) for each task'''
+# Calculate the correlations (FC) for each task
 for subject, ts in enumerate(timeseries_motor):
   fc_matrix_motor[subject] = np.corrcoef(ts)
 for subject, ts in enumerate(timeseries_wm):
@@ -436,8 +460,7 @@ for subject, ts in enumerate(timeseries_social):
   fc_matrix_social[subject] = np.corrcoef(ts)
 
 
-'''Initialize the vector form of each task, 
-where each row is a participant and each column is a connection'''
+# Initialize the vector form of each task, where each row is a participant and each column is a connection
 vector_motor = np.zeros((N_SUBJECTS, 64620))
 vector_wm = np.zeros((N_SUBJECTS, 64620))
 vector_gambling = np.zeros((N_SUBJECTS, 64620))
@@ -446,13 +469,8 @@ vector_language = np.zeros((N_SUBJECTS, 64620))
 vector_relational = np.zeros((N_SUBJECTS, 64620))
 vector_social = np.zeros((N_SUBJECTS, 64620))
 
-'''import a package to extract the diagonal of the correlation matrix, as well as
-initializing a list of the subset of subjects. It is a neccesary step in appending the list 
-of subjects to the connection data'''
-from nilearn.connectome import sym_matrix_to_vec
+# Extract the diagonal of the FC matrix for each subject for each task
 subject_list = np.array(np.unique(range(339)))
-
-
 for subject in range(subject_list.shape[0]):
     vector_motor[subject,:] = sym_matrix_to_vec(fc_matrix_motor[subject,:,:], discard_diagonal=True)
     vector_motor[subject,:] = fc_matrix_motor[subject][np.triu_indices_from(fc_matrix_motor[subject], k=1)]
@@ -475,17 +493,38 @@ for subject in range(subject_list.shape[0]):
     vector_social[subject,:] = sym_matrix_to_vec(fc_matrix_social[subject,:,:], discard_diagonal=True)
     vector_social[subject,:] = fc_matrix_social[subject][np.triu_indices_from(fc_matrix_social[subject], k=1)]
 
+# Make everything pandas dataframes
+input_data_parcel_connections_emotion = pd.DataFrame(vector_emotion)
+input_data_parcel_connections_gambling = pd.DataFrame(vector_gambling)
+input_data_parcel_connections_language = pd.DataFrame(vector_language)
+input_data_parcel_connections_motor = pd.DataFrame(vector_motor)
+input_data_parcel_connections_relational = pd.DataFrame(vector_relational)
+input_data_parcel_connections_social = pd.DataFrame(vector_social)
+input_data_parcel_connections_wm = pd.DataFrame(vector_wm)
 
+# Add column with task identifier for classifier
+input_data_parcel_connections_emotion['task'] = 1
+input_data_parcel_connections_gambling['task'] = 2
+input_data_parcel_connections_language['task'] = 3
+input_data_parcel_connections_motor['task'] = 4
+input_data_parcel_connections_relational['task'] = 5
+input_data_parcel_connections_social['task'] = 6
+input_data_parcel_connections_wm['task'] = 7
 
-'''remove stuff we don't need to save memory'''
-del timeseries_motor
-del timeseries_wm
-del timeseries_gambling
-del timeseries_emotion
-del timeseries_language
-del timeseries_relational
-del timeseries_social
+# make large dataframe
+parcel_connections_task_data = pd.DataFrame(np.concatenate((input_data_parcel_connections_emotion, 
+                                                             input_data_parcel_connections_gambling,  
+                                                             input_data_parcel_connections_language, 
+                                                             input_data_parcel_connections_motor, 
+                                                             input_data_parcel_connections_relational, 
+                                                             input_data_parcel_connections_social, 
+                                                             input_data_parcel_connections_wm), axis = 0))
 
+# Make input data
+X_parcel_connections = parcel_connections_task_data.iloc[:, :-1]
+y_parcel_connections = parcel_connections_task_data.iloc[:,-1]
+
+# Delete unused preprocessing variables
 del fc_matrix_motor 
 del fc_matrix_wm 
 del fc_matrix_gambling 
@@ -494,20 +533,6 @@ del fc_matrix_language
 del fc_matrix_relational
 del fc_matrix_social
 
-
-'''make everything pandas dataframes'''
-emotion_brain = pd.DataFrame(vector_emotion)
-gambling_brain = pd.DataFrame(vector_gambling)
-language_brain = pd.DataFrame(vector_language)
-motor_brain = pd.DataFrame(vector_motor)
-relational_brain= pd.DataFrame(vector_relational)
-social_brain = pd.DataFrame(vector_social)
-wm_brain = pd.DataFrame(vector_wm)
-
-
-#From the task_parcels_network objects, find functional connecitivity of the networks 
-
-'''Delete the old vectors to save space'''
 del vector_motor 
 del vector_wm 
 del vector_gambling 
@@ -516,14 +541,21 @@ del vector_language
 del vector_relational 
 del vector_social 
 
-'''make our prediction dataset'''
-emotion_brain['task'] = 1
-gambling_brain['task'] = 2
-language_brain['task'] = 3
-motor_brain['task'] = 4
-relational_brain['task'] = 5
-social_brain['task'] = 6
-wm_brain['task'] = 7
+####################################
+#### Network-based input data  #####
+####################################
+
+#Attach the labels to the parcels 
+region_transpose = pd.DataFrame(regions.T, columns=['Region', 'Network', 'Myelination'])
+X_network = pd.DataFrame(X_parcels, columns= region_transpose['Network'])
+
+#Add the columns of the same network together and then scale them normally
+scaler = StandardScaler() 
+X_network = X_network.groupby(lambda x:x, axis=1).sum()
+X_network = scaler.fit_transform(X_network) 
+
+#Make y vector
+y_network = parcels_full.iloc[:,-1]
 
 
 ###############################################
@@ -555,71 +587,215 @@ for subject, ts in enumerate(timeseries_motor):
 for subject, ts in enumerate(timeseries_wm):
   parcel_transpose_wm[subject] = ts.T
 for subject, ts in enumerate(timeseries_gambling):
-  fc_matrix_gambling[subject] = np.corrcoef(ts)
+  parcel_transpose_gambling[subject] = ts.T 
 for subject, ts in enumerate(timeseries_emotion):
-  fc_matrix_emotion[subject] = np.corrcoef(ts)
+  parcel_transpose_emotion[subject] = ts.T
 for subject, ts in enumerate(timeseries_language):
-  fc_matrix_language[subject] = np.corrcoef(ts)
+  parcel_transpose_language[subject] = ts.T
 for subject, ts in enumerate(timeseries_relational):
-  fc_matrix_relational[subject] = np.corrcoef(ts)
+  parcel_transpose_relational[subject] = ts.T
 for subject, ts in enumerate(timeseries_social):
-  fc_matrix_social[subject] = np.corrcoef(ts)
+  parcel_transpose_social[subject] = ts.T
 
 #Make the dataframes
+parcel_transpose_motor_dfs = []
 parcel_transpose_motor = list(parcel_transpose_motor)
+parcel_transpose_wm_dfs = []
+parcel_transpose_wm = list(parcel_transpose_wm)
+parcel_transpose_gambling_dfs = []
+parcel_transpose_gambling = list(parcel_transpose_gambling)
+parcel_transpose_emotion_dfs = []
+parcel_transpose_emotion = list(parcel_transpose_emotion)
+parcel_transpose_language_dfs = []
+parcel_transpose_language = list(parcel_transpose_language)
+parcel_transpose_relational_dfs = []
+parcel_transpose_relational = list(parcel_transpose_relational)
+parcel_transpose_social_dfs = []
+parcel_transpose_social = list(parcel_transpose_social)
+
+#Rotate each dataframe so that the network names are the column names
+for array in parcel_transpose_motor:
+    parcel_transpose_motor_dfs.append(pd.DataFrame(array, columns = region_info['network']))
+for array in parcel_transpose_wm:
+    parcel_transpose_wm_dfs.append(pd.DataFrame(array, columns = region_info['network']))
+for array in parcel_transpose_gambling:
+    parcel_transpose_gambling_dfs.append(pd.DataFrame(array, columns = region_info['network']))
+for array in parcel_transpose_emotion:
+    parcel_transpose_emotion_dfs.append(pd.DataFrame(array, columns = region_info['network']))
+for array in parcel_transpose_language:
+    parcel_transpose_language_dfs.append(pd.DataFrame(array, columns = region_info['network']))
+for array in parcel_transpose_relational:
+    parcel_transpose_relational_dfs.append(pd.DataFrame(array, columns = region_info['network']))
+for array in parcel_transpose_social:
+    parcel_transpose_social_dfs.append(pd.DataFrame(array, columns = region_info['network']))
 
 
+# Create a new dataframe where we standardize each network in a new object  
+scaler = StandardScaler() 
+network_columns_motor = [] 
+for dataframe in parcel_transpose_motor_dfs:
+    network_columns_motor.append(scaler.fit_transform(dataframe.groupby(lambda x:x, axis=1).sum()).T)
+network_columns_wm = [] 
+for dataframe in parcel_transpose_wm_dfs:
+    network_columns_wm.append(scaler.fit_transform(dataframe.groupby(lambda x:x, axis=1).sum()).T)
+network_columns_gambling = [] 
+for dataframe in parcel_transpose_gambling_dfs:
+    network_columns_gambling.append(scaler.fit_transform(dataframe.groupby(lambda x:x, axis=1).sum()).T)
+network_columns_emotion = [] 
+for dataframe in parcel_transpose_emotion_dfs:
+    network_columns_emotion.append(scaler.fit_transform(dataframe.groupby(lambda x:x, axis=1).sum()).T)
+network_columns_language = [] 
+for dataframe in parcel_transpose_language_dfs:
+    network_columns_language.append(scaler.fit_transform(dataframe.groupby(lambda x:x, axis=1).sum()).T)
+network_columns_relational = [] 
+for dataframe in parcel_transpose_relational_dfs:
+    network_columns_relational.append(scaler.fit_transform(dataframe.groupby(lambda x:x, axis=1).sum()).T)
+network_columns_social = [] 
+for dataframe in parcel_transpose_social_dfs:
+    network_columns_social.append(scaler.fit_transform(dataframe.groupby(lambda x:x, axis=1).sum()).T)
+
+#initialize the network dictionary
+fc_matrix_motor_networks = {}
+fc_matrix_wm_networks = {}
+fc_matrix_gambling_networks = {}
+fc_matrix_emotion_networks = {}
+fc_matrix_language_networks = {}
+fc_matrix_relational_networks = {}
+fc_matrix_social_networks = {}
+
+#Calcualte functional connectivity of each additive network
+for subject, ts in enumerate(network_columns_motor):
+  fc_matrix_motor_networks[subject] = np.corrcoef(ts)
+for subject, ts in enumerate(network_columns_wm):
+  fc_matrix_wm_networks[subject] = np.corrcoef(ts)
+for subject, ts in enumerate(network_columns_gambling):
+  fc_matrix_gambling_networks[subject] = np.corrcoef(ts)
+for subject, ts in enumerate(network_columns_emotion):
+  fc_matrix_emotion_networks[subject] = np.corrcoef(ts)
+for subject, ts in enumerate(network_columns_language):
+  fc_matrix_language_networks[subject] = np.corrcoef(ts)
+for subject, ts in enumerate(network_columns_relational):
+  fc_matrix_relational_networks[subject] = np.corrcoef(ts)
+for subject, ts in enumerate(network_columns_social):
+  fc_matrix_social_networks[subject] = np.corrcoef(ts)
+
+#Make a vectorized form of the connections (unique FC matrix values)
+input_data_motor_network_connections = np.zeros((N_SUBJECTS, 66))
+input_data_wm_network_connections = np.zeros((N_SUBJECTS, 66))
+input_data_gambling_network_connections = np.zeros((N_SUBJECTS, 66))
+input_data_emotion_network_connections = np.zeros((N_SUBJECTS, 66))
+input_data_language_network_connections = np.zeros((N_SUBJECTS, 66))
+input_data_relational_network_connections = np.zeros((N_SUBJECTS, 66))
+input_data_social_network_connections = np.zeros((N_SUBJECTS, 66))
+
+#Fill in the empty vectors with unique matrix values 
+for subject in fc_matrix_motor_networks.keys():
+    input_data_motor_network_connections[subject, :] = sym_matrix_to_vec(fc_matrix_motor_networks[subject], 
+                                                                  discard_diagonal=True)
+for subject in fc_matrix_wm_networks.keys():
+    input_data_wm_network_connections[subject, :] = sym_matrix_to_vec(fc_matrix_wm_networks[subject], 
+                                                                  discard_diagonal=True)
+for subject in fc_matrix_gambling_networks.keys():
+    input_data_gambling_network_connections[subject, :] = sym_matrix_to_vec(fc_matrix_gambling_networks[subject], 
+                                                                  discard_diagonal=True)
+for subject in fc_matrix_emotion_networks.keys():
+    input_data_emotion_network_connections[subject, :] = sym_matrix_to_vec(fc_matrix_emotion_networks[subject], 
+                                                                  discard_diagonal=True)
+for subject in fc_matrix_language_networks.keys():
+    input_data_language_network_connections[subject, :] = sym_matrix_to_vec(fc_matrix_language_networks[subject], 
+                                                                  discard_diagonal=True)
+for subject in fc_matrix_relational_networks.keys():
+    input_data_relational_network_connections[subject, :] = sym_matrix_to_vec(fc_matrix_relational_networks[subject], 
+                                                                  discard_diagonal=True)
+for subject in fc_matrix_social_networks.keys():
+    input_data_social_network_connections[subject, :] = sym_matrix_to_vec(fc_matrix_social_networks[subject], 
+                                                                  discard_diagonal=True)
+#Make objects dataframes
+input_data_emotion_network_connections = pd.DataFrame(input_data_emotion_network_connections)
+input_data_gambling_network_connections = pd.DataFrame(input_data_gambling_network_connections)
+input_data_language_network_connections = pd.DataFrame(input_data_language_network_connections)
+input_data_motor_network_connections = pd.DataFrame(input_data_motor_network_connections)
+input_data_relational_network_connections = pd.DataFrame(input_data_relational_network_connections)
+input_data_social_network_connections = pd.DataFrame(input_data_social_network_connections)
+input_data_wm_network_connections = pd.DataFrame(input_data_wm_network_connections)
+
+# Add the labels for each task
+input_data_emotion_network_connections['task'] = 1
+input_data_gambling_network_connections['task'] = 2
+input_data_language_network_connections['task'] = 3
+input_data_motor_network_connections['task'] = 4
+input_data_relational_network_connections['task'] = 5
+input_data_social_network_connections['task'] = 6
+input_data_wm_network_connections['task'] = 7
+
+# Make the dataframes
+network_connections_task_data = pd.DataFrame(np.concatenate((input_data_emotion_network_connections, 
+                                                             input_data_gambling_network_connections,  
+                                                             input_data_language_network_connections, 
+                                                             input_data_motor_network_connections, 
+                                                             input_data_relational_network_connections, 
+                                                             input_data_social_network_connections, 
+                                                             input_data_wm_network_connections), axis = 0))
+X_network_connections = network_connections_task_data.iloc[:, :-1]
+y_network_connections = network_connections_task_data.iloc[:,-1]
+
+# Delete variables to save memory
+del timeseries_motor
+del timeseries_wm
+del timeseries_gambling
+del timeseries_emotion
+del timeseries_language
+del timeseries_relational
+del timeseries_social
+
+del parcel_transpose_motor
+del parcel_transpose_wm
+del parcel_transpose_gambling
+del parcel_transpose_emotion
+del parcel_transpose_language
+del parcel_transpose_relational
+del parcel_transpose_social
+
+del parcel_transpose_motor_dfs
+del parcel_transpose_wm_dfs
+del parcel_transpose_gambling_dfs 
+del parcel_transpose_emotion_dfs 
+del parcel_transpose_language_dfs 
+del parcel_transpose_relational_dfs 
+del parcel_transpose_social_dfs 
+
+del fc_matrix_motor_networks
+del fc_matrix_wm_networks
+del fc_matrix_gambling_networks
+del fc_matrix_emotion_networks
+del fc_matrix_language_networks
+del fc_matrix_relational_networks
+del fc_matrix_social_networks
+
+del network_columns_motor
+del network_columns_wm
+del network_columns_gambling
+del network_columns_emotion
+del network_columns_language
+del network_columns_relational
+del network_columns_social
+
+del input_data_emotion_network_connections
+del input_data_gambling_network_connections
+del input_data_language_network_connections
+del input_data_motor_network_connections
+del input_data_relational_network_connections
+del input_data_social_network_connections
+del input_data_wm_network_connections
 
 
-#convert list of 2D arrays of timeseries to 3d array
-#timeseries_motor = np.dstack(timeseries_motor)
-#timeseries_wm = np.dstack(timeseries_wm)
-#timeseries_gambling = np.dstack(timeseries_gambling)
-#timeseries_emotion = np.dstack(timeseries_emotion)
-#timeseries_language = np.dstack(timeseries_language)
-#timeseries_relational = np.dstack(timeseries_relational)
-#timeseries_social = np.dstack(timeseries_social)
+elapsed_time = time.time() - start_time
+print(f"Elapsed time to preprocess input data: "
+      f"{elapsed_time:.3f} seconds")
 
-
-
-####################################
-#### Network-based input data  #####
-####################################
-
-#In the parcel dataframes, make new objects that are just the network values.
-#Add the columns of the same network together and then scale them normally
-motor_parcels_network = motor_parcels.groupby(lambda x:x, axis=1).sum()
-motor_parcels_network = scaler.fit_transform(motor_parcels_network) 
-
-
-
-
-
-
-
-
-############################################
-#### Finalize input data for the models ####
-############################################
-
-#make the data frames
-
-    
-task_data = pd.DataFrame(np.concatenate((emotion_brain, gambling_brain,  language_brain,
-          motor_brain, relational_brain, social_brain, wm_brain), axis = 0))
-X = task_data.iloc[:, :-1]
-y = task_data.iloc[:,-1]
-
-
-'''make more space'''
-del emotion_brain
-del gambling_brain
-del language_brain
-del motor_brain
-del relational_brain
-del social_brain
-del wm_brain                 
-        
+#######################################
+#### Checking for multicolinearity ####
+#######################################
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -627,34 +803,184 @@ import matplotlib.pyplot as plt
 import statsmodels.api as sm
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
-sns.heatmap(X.corr())
-
+#Check for multicolinearity in the network connections
 vif_info = pd.DataFrame()
-vif_info['VIF'] = [variance_inflation_factor(X.values, i) for i in range(X.shape[1])]
-vif_info['Column'] = X.columns
+vif_info['VIF'] = [variance_inflation_factor(X_network_connections.values, i) for i in range(X_network_connections.shape[1])]
+vif_info['Column'] = X_network_connections.columns
 vif_info.sort_values('VIF', ascending=False)
+
+##################################
+#### making test-train splits ####
+##################################
+
+#Parcel data partitioning and transforming
+train_X_parcels, test_X_parcels, train_y_parcels, test_y_parcels = train_test_split(X_parcels, y_parcels, test_size = 0.2)
+train_X_parcels = scaler.fit_transform(train_X_parcels)
+test_X_parcels = scaler.transform(test_X_parcels)
+
+# Parcel connection data
+train_X_parcon, test_X_parcon, train_y_parcon, test_y_parcon = train_test_split(X_parcel_connections, y_parcel_connections, test_size = 0.2)
+
+# Network summation data
+train_X_network, test_X_network, train_y_network, test_y_network = train_test_split(X_network, y_network, test_size = 0.2)
+train_X_network = scaler.fit_transform(train_X_network)
+test_X_network = scaler.transform(test_X_network)
+
+train_X_netcon, test_X_netcon, train_y_netcon, test_y_netcon = train_test_split(X_network_connections, y_network_connections, test_size = 0.2)
 
 
 ########################################
 ###### Support Vector Classifier #######
 ########################################
 
+# Parcels
+lin_clf = svm.LinearSVC(C=1e-5)
+lin_clf.fit(train_X_parcels, train_y_parcels)
+print(lin_clf.score(train_X_parcels, train_y_parcels))
+print(lin_clf.score(test_X_parcels, test_y_parcels))
+#svm_coef = pd.DataFrame(lin_clf.coef_.T)
 
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn import svm
-
-'''make test-train split'''
-from sklearn.model_selection import train_test_split
-train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.2)
-
-
+# Parcel connections
 lin_clf = svm.LinearSVC()
-lin_clf.fit(train_X, train_y)
-print(lin_clf.score(train_X, train_y))
-print(lin_clf.score(test_X, test_y))
-svm_coef = pd.DataFrame(lin_clf.coef_.T)
+lin_clf.fit(train_X_parcon, train_y_parcon)
+print(lin_clf.score(train_X_parcon, train_y_parcon))
+print(lin_clf.score(test_X_parcon, test_y_parcon))
+#svm_coef = pd.DataFrame(lin_clf.coef_.T)
 
+# Network summations
+lin_clf = svm.LinearSVC(C=1e-1)
+lin_clf.fit(train_X_network, train_y_network)
+print(lin_clf.score(train_X_network, train_y_network))
+print(lin_clf.score(test_X_network, test_y_network))
+#svm_coef = pd.DataFrame(lin_clf.coef_.T)
+
+# Network connections
+lin_clf = svm.LinearSVC()
+lin_clf.fit(train_X_netcon, train_y_netcon)
+print(lin_clf.score(train_X_netcon, train_y_netcon))
+print(lin_clf.score(test_X_netcon, test_y_netcon))
+#svm_coef = pd.DataFrame(lin_clf.coef_.T)
+
+
+#######################################
+###### Random Forest Classifier #######
+#######################################
+
+##### Parcels #####
+forest = RandomForestClassifier(random_state=1, n_estimators=1000)
+forest.fit(train_X_parcels, train_y_parcels)
+pred_y_parcels = forest.predict(test_X_parcels)
+# How does it perform?
+print(forest.score(train_X_parcels, train_y_parcels))
+print(forest.score(test_X_parcels, test_y_parcels))
+
+# Visualize the confusion matrix
+from sklearn.metrics import classification_report
+#print(classification_report(test_X_parcels, test_y_parcels))
+from sklearn.metrics import confusion_matrix
+cm = confusion_matrix(test_y_parcels, pred_y_parcels)
+cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+print(cm)
+# let's see the cross validated score 
+# score = cross_val_score(forest,X,y, cv = 10, scoring = 'accuracy')
+# print(score)
+#predictions = pd.Series(forest.predict(test_X_parcels))
+predictions = pd.Series(pred_y_parcels)
+ground_truth_test_y_parcels = pd.Series(test_y_parcels)
+ground_truth_test_y_parcels = ground_truth_test_y_parcels.reset_index(drop = True)
+predictions = predictions.rename("Task")
+ground_truth_test_y_parcels = ground_truth_test_y_parcels.rename("Task")
+predict_vs_true = pd.concat([ground_truth_test_y_parcels, predictions],axis =1)
+predict_vs_true.columns = ["Actual", "Prediction"]
+accuracy = predict_vs_true.duplicated()
+accuracy.value_counts()
+
+##### Parcel connections #####
+forest = RandomForestClassifier(random_state=1, n_estimators=1000)
+forest.fit(train_X_parcon, train_y_parcon)
+pred_y_parcon = np.array(forest.predict(test_X_parcon).astype(int))
+# How does it perform?
+print(forest.score(train_X_parcon, train_y_parcon))
+print(forest.score(test_X_parcon, test_y_parcon))
+
+# Visualize the confusion matrix
+from sklearn.metrics import classification_report
+#print(classification_report(np.array(test_X_parcon), np.array(test_y_parcon).astype(int)))
+from sklearn.metrics import confusion_matrix
+cm = confusion_matrix(test_y_parcon, pred_y_parcon)
+cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+print(cm)
+# let's see the cross validated score 
+# score = cross_val_score(forest,X,y, cv = 10, scoring = 'accuracy')
+# print(score)
+#predictions = pd.Series(forest.predict(test_X_parcels))
+predictions = pd.Series(pred_y_parcon)
+ground_truth_test_y_parcon = pd.Series(test_y_parcon)
+ground_truth_test_y_parcon = ground_truth_test_y_parcon.reset_index(drop = True)
+predictions = predictions.rename("Task")
+ground_truth_test_y_parcon = ground_truth_test_y_parcon.rename("Task")
+predict_vs_true = pd.concat([ground_truth_test_y_parcon, predictions],axis =1)
+predict_vs_true.columns = ["Actual", "Prediction"]
+accuracy = predict_vs_true.duplicated()
+accuracy.value_counts()
+
+##### Network summations #####
+forest = RandomForestClassifier(random_state=1, n_estimators=1000)
+forest.fit(train_X_network, train_y_network)
+pred_y_network = forest.predict(test_X_network)
+# How does it perform?
+print(forest.score(train_X_network, train_y_network))
+print(forest.score(test_X_network, test_y_network))
+
+# Visualize the confusion matrix
+from sklearn.metrics import classification_report
+#print(classification_report(test_X_network, test_y_network))
+from sklearn.metrics import confusion_matrix
+cm = confusion_matrix(test_y_network, pred_y_network)
+cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+print(cm)
+# let's see the cross validated score 
+# score = cross_val_score(forest,X,y, cv = 10, scoring = 'accuracy')
+# print(score)
+#predictions = pd.Series(forest.predict(test_X_parcels))
+predictions = pd.Series(pred_y_network)
+ground_truth_test_y_network = pd.Series(test_y_network)
+ground_truth_test_y_network = ground_truth_test_y_network.reset_index(drop = True)
+predictions = predictions.rename("Task")
+ground_truth_test_y_network = ground_truth_test_y_network.rename("Task")
+predict_vs_true = pd.concat([ground_truth_test_y_network, predictions],axis =1)
+predict_vs_true.columns = ["Actual", "Prediction"]
+accuracy = predict_vs_true.duplicated()
+accuracy.value_counts()
+
+##### Network summations #####
+forest = RandomForestClassifier(random_state=1, n_estimators=1000)
+forest.fit(train_X_netcon, train_y_netcon)
+pred_y_network = forest.predict(test_X_netcon)
+# How does it perform?
+print(forest.score(train_X_netcon, train_y_netcon))
+print(forest.score(test_X_netcon, test_y_netcon))
+
+# Visualize the confusion matrix
+from sklearn.metrics import classification_report
+#print(classification_report(test_X_netcon, test_y_netcon))
+from sklearn.metrics import confusion_matrix
+cm = confusion_matrix(test_y_netcon, pred_y_netcon)
+cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+print(cm)
+# let's see the cross validated score 
+# score = cross_val_score(forest,X,y, cv = 10, scoring = 'accuracy')
+# print(score)
+#predictions = pd.Series(forest.predict(test_X_parcels))
+predictions = pd.Series(pred_y_netcon)
+ground_truth_test_y_netcon = pd.Series(test_y_netcon)
+ground_truth_test_y_netcon = ground_truth_test_y_netcon.reset_index(drop = True)
+predictions = predictions.rename("Task")
+ground_truth_test_y_netcon = ground_truth_test_y_netcon.rename("Task")
+predict_vs_true = pd.concat([ground_truth_test_y_netcon, predictions],axis =1)
+predict_vs_true.columns = ["Actual", "Prediction"]
+accuracy = predict_vs_true.duplicated()
+accuracy.value_counts()
 
 ##################################
 ###### Feature Importances #######
@@ -701,19 +1027,6 @@ social_important_coef_svm = pd.DataFrame([svm_coef.iloc[:,5], list_of_connection
 social_important_coef_svm.columns = ['Coeffecient', 'Regions', 'Network Connections']
 wm_important_coef_svm = pd.DataFrame([svm_coef.iloc[:,6], list_of_connections_series, list_of_networks_series]).T
 wm_important_coef_svm.columns = ['Coeffecient', 'Regions', 'Network Connections']
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #calculate the feature importances for RFC
 feature_names = [f'feature {i}' for i in range(X.shape[1])]
@@ -805,13 +1118,6 @@ def network_parsing(df, names, output_list):
     cur = names[0]
     for n in names[1:]:
         
-
-
-
-
-
-
-
 name_map = pd.read_csv("/Users/cjrichier/Documents/Github/HCP-Analyses/network_name_map.csv")
 Permutation_features_full = pd.read_csv(f'/Users/cjrichier/Documents/Github/HCP-Analyses/Permutation_features_full.csv')
 
@@ -855,7 +1161,7 @@ from sklearn.model_selection import train_test_split
 train_X, test_X, train_y, test_y = train_test_split(X, y, test_size = 0.2)
 
 #fit the model
-forest = RandomForestClassifier(random_state=1 ,n_estimators=10)
+forest = RandomForestClassifier(random_state=1 ,n_estimators=1000)
 forest.fit(train_X, train_y)
 pred_y = forest.predict(test_X)
 #How does it perform?
@@ -1006,27 +1312,6 @@ plt.scatter(map_of_model_test_accuracies['Number of Features'], map_of_model_tes
 ###### Parcel-based analysis #######
 ####################################   
     
-parcels_full =  pd.DataFrame(np.concatenate((emotion_parcels, gambling_parcels, language_parcels,
-                                             motor_parcels, relational_parcels, social_parcels, wm_parcels), axis = 0))
-
-from sklearn.preprocessing import StandardScaler
-scaler = StandardScaler()
-
-
-region_transpose = pd.DataFrame(regions.T, columns=['Region', 'Network', 'Myelination'])
-
-
-
-X_parcels = parcels_full.iloc[:, :-1]
-X_parcels = scaler.fit_transform(X_parcels) 
-X_parcels_network = pd.DataFrame(X_parcels, columns= region_transpose['Network'])
-y_parcels = parcels_full.iloc[:,-1]
-
-#Add the columns of the same network together and then scale them normally
-X_parcels_network = X_parcels_network.groupby(lambda x:x, axis=1).sum()
-X_parcels_network = scaler.fit_transform(X_parcels_network) 
-
-train_X, test_X, train_y, test_y = train_test_split(X_parcels_network, y_parcels, test_size = 0.2)
 
 from sklearn.ensemble import RandomForestClassifier
 
