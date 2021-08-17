@@ -5,7 +5,7 @@ Created on Mon Dec 21 11:14:43 2020
 
 @author: cjrichier
 """
-
+glasser = True
 #################################################
 ########## HCP decoding project code ############
 #################################################
@@ -47,6 +47,8 @@ if getpass.getuser() == 'kyle':
   HCP_DIR_TASK = f"{HCP_DIR}hcp_task\\subjects\\"
   HCP_1200 = f"{HCP_DIR}HCP_1200\\"
   basepath = str("S:\\HCP\\HCP_1200\\{}\\MNINonLinear\\Results\\")
+  subjects = pd.read_csv('C:\\Users\\kyle\\repos\\HCP-Task-Classification-01\\subject_list.csv')['ID']
+  path_pattern = "S:\\HCP\\HCP_1200\\{}\\MNINonLinear\\Results\\{}\\{}.npy"
 else:
   HCP_DIR = "/Volumes/Byrgenwerth/Datasets/HCP/"
   HCP_DIR_REST = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_rest/subjects/"
@@ -80,18 +82,26 @@ class FileDirr(object):
         self.hcp_full = str(self.hcp + 'HCP_1200' + sep)
 
 
-subjects = pd.read_csv('C:\\Users\\kyle\\repos\\HCP-Task-Classification-01\\subject_list.csv')['ID']
+
 
 # The data shared for NMA projects is a subset of the full HCP dataset
-N_SUBJECTS = 339#len(subjects)
+if glasser:
+  N_SUBJECTS = 339
+else:
+  N_SUBJECTS = len(subjects)
 
-# The data have already been aggregated into ROIs from the Glasesr parcellation
-N_PARCELS = 360
-# The full dataset is stored using the MSDL Parcellation, doi: 10.1007/978-3-642-22092-0_46
-#N_PARCELS = 284
+# The data have already been aggregated into ROIs from the Glasser parcellation
+if glasser:
+  N_PARCELS = 360
+else:
+  # The full dataset is stored using the MSDL Parcellation, doi: 10.1007/978-3-642-22092-0_46
+  N_PARCELS = 39
 
 # How many networks?
-N_NETWORKS = 12 #17
+if glasser:
+  N_NETWORKS = 12 
+else:
+  N_NETWORKS = 17
 
 # The acquisition parameters for all tasks were identical
 TR = 0.72  # Time resolution, in sec
@@ -125,7 +135,8 @@ BOLD_NAMES = [ "rfMRI_REST1_LR",
               "tfMRI_SOCIAL_LR"]
 
 # This will use all subjects:
-subjects = range(N_SUBJECTS) #This no longer works since the subjects are no longer incremental ints
+if glasser:
+  subjects = range(N_SUBJECTS) #This no longer works since the subjects are no longer incremental ints
 
 #You may want to limit the subjects used during code development. This will only load in 10 subjects if you use this list.
 SUBJECT_SUBSET = 100
@@ -149,38 +160,34 @@ with np.load(f"{HCP_DIR}hcp_atlas.npz") as dobj:
 
 
 #let's generate some information about the regions using the rest data
+if glasser:
+  regions = np.load(f"{HCP_DIR}hcp_rest\\regions.npy").T
+  region_info = dict(
+      name=regions[0].tolist(),
+      network=regions[1],
+      myelin=regions[2].astype(np.float),
+  )
+  region_transpose = pd.DataFrame(regions.T, columns=['Region', 'Network', 'Myelination'])
+  #print(region_info)
+  regions = region_info['name']
+  networks = region_info['network']
+else:
+  atlas_MSDL = datasets.fetch_atlas_msdl()
+  regions = atlas_MSDL['labels']
+  networks = atlas_MSDL['networks']
+  ''' region_coords = []
+  # Not sure if it is this:
+  region_coords_1 = [coord for tup in regions['region_coords'] for coord in tup]
+  #or this:
+  for x in range(3):
+        for tup in regions['region_coords']:
+            region_coords.append(tup[x]) 
+  region_info = dict(
+      name=regions['labels'],
+      network=regions['networks'],
+      myelin=regions['region_coords'],
+  ) '''
 
-regions = np.load(f"{HCP_DIR}hcp_rest\\regions.npy").T
-region_info = dict(
-    name=regions[0].tolist(),
-    network=regions[1],
-    myelin=regions[2].astype(np.float),
-)
-region_transpose = pd.DataFrame(regions.T, columns=['Region', 'Network', 'Myelination'])
-#print(region_info)
-
-''' 
-regions = datasets.fetch_atlas_msdl()
-region_coords = []
-# Not sure if it is this:
-region_coords_1 = [coord for tup in regions['region_coords'] for coord in tup]
-#or this:
-for x in range(3):
-      for tup in regions['region_coords']:
-           region_coords.append(tup[x]) 
-region_info = dict(
-    name=regions['labels'],
-    network=regions['networks'],
-    myelin=regions['region_coords'],
-)
-
-dtype1 = np.dtype(str,str,(int,(3)))
-region_array = np.array([regions['labels'],regions['networks'],regions['region_coords']], dtype = dtype1)
-region_array = np.asarray(regions[['labels','networks','region_coords']])
-region_transpose = pd.DataFrame(regions.T, columns=['Region', 'Network', 'Myelination'])
-print(region_info)
-
- '''
 
 ######################################
 ###### Define useful functions #######
@@ -415,98 +422,119 @@ if True:
 #### Making the input data #####
 ################################
 if True:
-  # Make a list of the task names
-  tasks_names = ["motor", "wm", "gambling", "emotion", "language", "relational", "social"]
+  if glasser: # Glasser Version with subset
+    # Make a list of the task names
+    tasks_names = ["motor", "wm", "gambling", "emotion", "language", "relational", "social"]
 
-  #Load in all of the timeseries for each subject for each task
+    #Load in all of the timeseries for each subject for each task
 
-  timeseries_motor = []
-  for subject in subjects:
-      timeseries_motor.append(load_task_timeseries(subject, "motor", concat=True))
-  timeseries_wm = []
-  for subject in subjects:
-    timeseries_wm.append(load_task_timeseries(subject, "wm", concat=True))
-  timeseries_gambling = []
-  for subject in subjects:
-    timeseries_gambling.append(load_task_timeseries(subject, "gambling", concat=True))
-  timeseries_emotion = []
-  for subject in subjects:
-    timeseries_emotion.append(load_task_timeseries(subject, "emotion", concat=True))
-  timeseries_language = []
-  for subject in subjects:
-    timeseries_language.append(load_task_timeseries(subject, "language", concat=True))
-  timeseries_relational = []
-  for subject in subjects:
-    timeseries_relational.append(load_task_timeseries(subject, "relational", concat=True))
-  timeseries_social = []
-  for subject in subjects:
-    timeseries_social.append(load_task_timeseries(subject, "social", concat=True))
-  '''
-  # Make a list of the task names
-  full_task_names = [
-      "tfMRI_MOTOR_RL", 
-      "tfMRI_MOTOR_LR",
-      "rfMRI_REST1_LR", 
-      "rfMRI_REST1_RL", 
-      "rfMRI_REST2_LR", 
-      "rfMRI_REST2_RL", 
-      "tfMRI_WM_RL", 
-      "tfMRI_WM_LR",
-      "tfMRI_EMOTION_RL", 
-      "tfMRI_EMOTION_LR",
-      "tfMRI_GAMBLING_RL", 
-      "tfMRI_GAMBLING_LR", 
-      "tfMRI_LANGUAGE_RL", 
-      "tfMRI_LANGUAGE_LR", 
-      "tfMRI_RELATIONAL_RL", 
-      "tfMRI_RELATIONAL_LR", 
-      "tfMRI_SOCIAL_RL", 
-      "tfMRI_SOCIAL_LR"
-      ]
-      
-  #Load in all of the timeseries for each subject for each task
-  timeseries_motor = []
-  for subject in subjects:
-      timeseries_motor.append(
-        load_task_timeseries(subject, name='', 
-        full_name_runs=["tfMRI_MOTOR_RL", "tfMRI_MOTOR_LR"], concat=True))
-  timeseries_wm = []
-  for subject in subjects:
-    timeseries_wm.append(
-      load_task_timeseries(subject, name='', 
-      full_name_runs=["tfMRI_WM_RL", "tfMRI_WM_LR"], concat=True))
-  timeseries_gambling = []
-  for subject in subjects:
-    timeseries_gambling.append(
-      load_task_timeseries(subject, name='', 
-      full_name_runs=["tfMRI_GAMBLING_RL", "tfMRI_GAMBLING_LR"],  concat=True))
-  timeseries_emotion = []
-  for subject in subjects:
-    timeseries_emotion.append(
-      load_task_timeseries(subject, name='', 
-      full_name_runs=["tfMRI_EMOTION_RL", "tfMRI_EMOTION_LR"], concat=True))
-  timeseries_language = []
-  for subject in subjects:
-    timeseries_language.append(
-      load_task_timeseries(subject, name='',
-      full_name_runs=["tfMRI_LANGUAGE_RL", "tfMRI_LANGUAGE_LR"],  concat=True))
-  timeseries_relational = []
-  for subject in subjects:
-    timeseries_relational.append(
-      load_task_timeseries(subject, name='', 
-      full_name_runs=["tfMRI_RELATIONAL_RL", "tfMRI_RELATIONAL_LR"], concat=True))
-  timeseries_social = []
-  for subject in subjects:
-    timeseries_social.append(
-      load_task_timeseries(subject, name='', 
-      full_name_runs=["tfMRI_SOCIAL_RL", "tfMRI_SOCIAL_LR"], concat=True))
-  timeseries_rest = []
-  for subject in subjects:
-    timeseries_rest.append(
-      load_task_timeseries(subject, name='', 
-      full_name_runs=["rfMRI_REST1_LR", "rfMRI_REST1_RL", "rfMRI_REST2_LR", "rfMRI_REST2_RL"],  concat=True))
-  '''
-
+    timeseries_motor = []
+    for subject in subjects:
+        timeseries_motor.append(load_task_timeseries(subject, "motor", concat=True))
+    timeseries_wm = []
+    for subject in subjects:
+      timeseries_wm.append(load_task_timeseries(subject, "wm", concat=True))
+    timeseries_gambling = []
+    for subject in subjects:
+      timeseries_gambling.append(load_task_timeseries(subject, "gambling", concat=True))
+    timeseries_emotion = []
+    for subject in subjects:
+      timeseries_emotion.append(load_task_timeseries(subject, "emotion", concat=True))
+    timeseries_language = []
+    for subject in subjects:
+      timeseries_language.append(load_task_timeseries(subject, "language", concat=True))
+    timeseries_relational = []
+    for subject in subjects:
+      timeseries_relational.append(load_task_timeseries(subject, "relational", concat=True))
+    timeseries_social = []
+    for subject in subjects:
+      timeseries_social.append(load_task_timeseries(subject, "social", concat=True))
+  else: # Full Dataset with MSDL
+    # Make a list of the task names
+    full_task_names = [
+        "tfMRI_MOTOR_RL", 
+        "tfMRI_MOTOR_LR",
+        "rfMRI_REST1_LR", 
+        "rfMRI_REST1_RL", 
+        "rfMRI_REST2_LR", 
+        "rfMRI_REST2_RL", 
+        "tfMRI_WM_RL", 
+        "tfMRI_WM_LR",
+        "tfMRI_EMOTION_RL", 
+        "tfMRI_EMOTION_LR",
+        "tfMRI_GAMBLING_RL", 
+        "tfMRI_GAMBLING_LR", 
+        "tfMRI_LANGUAGE_RL", 
+        "tfMRI_LANGUAGE_LR", 
+        "tfMRI_RELATIONAL_RL", 
+        "tfMRI_RELATIONAL_LR", 
+        "tfMRI_SOCIAL_RL", 
+        "tfMRI_SOCIAL_LR"
+        ]
+    motor_data_list_LR = {}
+    wm_data_list_LR = {}
+    emotion_data_list_LR = {}
+    gambling_data_list_LR = {}
+    language_data_list_LR = {}
+    relational_data_list_LR = {}
+    social_data_list_LR = {}
+    motor_data_list_RL = {}
+    wm_data_list_RL = {}
+    emotion_data_list_RL = {}
+    gambling_data_list_RL = {}
+    language_data_list_RL = {}
+    relational_data_list_RL = {}
+    social_data_list_RL = {}
+    rest_data_list_LR = {}
+    rest_data_list_RL = {}
+    tasks_missing = {}
+    
+    for subject in subjects:
+      for task in full_task_names:
+        try:
+          if 'MOTOR' in task:
+            if 'LR' in task:
+              motor_data_list_LR[subject] = np.load(path_pattern.format(subject, task, task))
+            else:
+              motor_data_list_RL[subject] = np.load(path_pattern.format(subject, task, task))
+          elif 'WM' in task:
+            if 'LR' in task:
+              wm_data_list_LR[subject] = np.load(path_pattern.format(subject, task, task))
+            else:
+              wm_data_list_RL[subject] = np.load(path_pattern.format(subject, task, task))
+          elif 'EMOTION' in task:
+            if 'LR' in task:
+              emotion_data_list_LR[subject] = np.load(path_pattern.format(subject, task, task))
+            else:
+              emotion_data_list_RL[subject] = np.load(path_pattern.format(subject, task, task))
+          elif 'GAMBLING' in task:
+            if 'LR' in task:
+              gambling_data_list_LR[subject] = np.load(path_pattern.format(subject, task, task))
+            else:
+              gambling_data_list_RL[subject] = np.load(path_pattern.format(subject, task, task))
+          elif 'LANGUAGE' in task:
+            if 'LR' in task:
+              language_data_list_LR[subject] = np.load(path_pattern.format(subject, task, task))
+            else:
+              language_data_list_RL[subject] = np.load(path_pattern.format(subject, task, task))
+          elif 'RELATIONAL' in task:
+            if 'LR' in task:
+              relational_data_list_LR[subject] = np.load(path_pattern.format(subject, task, task))
+            else:
+              relational_data_list_RL[subject] = np.load(path_pattern.format(subject, task, task))
+          elif 'SOCIAL' in task:
+            if 'LR' in task:
+              social_data_list_LR[subject] = np.load(path_pattern.format(subject, task, task))
+            else:
+              social_data_list_RL[subject] = np.load(path_pattern.format(subject, task, task))
+          elif 'REST' in task:
+            if 'LR' in task:
+              rest_data_list_LR[subject] = np.load(path_pattern.format(subject, task, task))
+            else:
+              rest_data_list_RL[subject] = np.load(path_pattern.format(subject, task, task))
+        except:
+          tasks_missing[subject] = str(task)  
+         
 ##################################
 #### Parcel-based input data #####
 ##################################
@@ -520,37 +548,56 @@ if True:
   parcel_average_relational = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
   parcel_average_social = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
 
-  #calculate average for each parcel in each task
-  for subject, ts in enumerate(timeseries_motor):#(284, 78)
-    parcel_average_motor[subject] = np.mean(ts, axis=1)
-    print(ts.shape)
-  for subject, ts in enumerate(timeseries_wm):#(405,78)
-    parcel_average_wm[subject] = np.mean(ts, axis=1)
-    print(ts.shape)
-  for subject, ts in enumerate(timeseries_gambling):#(253,78)
-    print(ts.shape)
-    parcel_average_gambling[subject] = np.mean(ts, axis=1)
-  for subject, ts in enumerate(timeseries_emotion):#(176,78)
-    print(ts.shape)
-    parcel_average_emotion[subject] = np.mean(ts, axis=1)
-  for subject, ts in enumerate(timeseries_language):#(316,78)
-    print(ts.shape)
-    parcel_average_language[subject] = np.mean(ts, axis=1)
-  for subject, ts in enumerate(timeseries_relational):#(232,78)
-    print(ts.shape)
-    parcel_average_relational[subject] = np.mean(ts, axis=1)
-  for subject, ts in enumerate(timeseries_social):#(274,78)
-    print(ts.shape)
-    parcel_average_social[subject] = np.mean(ts, axis=1)    
+  if glasser:
+    #calculate average for each parcel in each task
+    for subject, ts in enumerate(timeseries_motor):#(284, 78)
+      parcel_average_motor[subject] = np.mean(ts, axis=1)
+    for subject, ts in enumerate(timeseries_wm):#(405,78)
+      parcel_average_wm[subject] = np.mean(ts, axis=1)
+    for subject, ts in enumerate(timeseries_gambling):#(253,78)
+      parcel_average_gambling[subject] = np.mean(ts, axis=1)
+    for subject, ts in enumerate(timeseries_emotion):#(176,78)
+      parcel_average_emotion[subject] = np.mean(ts, axis=1)
+    for subject, ts in enumerate(timeseries_language):#(316,78)
+      parcel_average_language[subject] = np.mean(ts, axis=1)
+    for subject, ts in enumerate(timeseries_relational):#(232,78)
+      parcel_average_relational[subject] = np.mean(ts, axis=1)
+    for subject, ts in enumerate(timeseries_social):#(274,78)
+      parcel_average_social[subject] = np.mean(ts, axis=1)  
+  else:
+    #calculate average for each parcel in each task
+    for subject, ts in enumerate(motor_data_list_RL.values()):#(284, 78)
+      parcel_average_motor[subject] = np.mean(ts.T, axis=1)
+    for subject, ts in enumerate(wm_data_list_RL.values()):#(405,78)
+      parcel_average_wm[subject] = np.mean(ts.T, axis=1)
+    for subject, ts in enumerate(gambling_data_list_RL.values()):#(253,78)
+      parcel_average_gambling[subject] = np.mean(ts.T, axis=1)
+    for subject, ts in enumerate(emotion_data_list_RL.values()):#(176,78)
+      parcel_average_emotion[subject] = np.mean(ts.T, axis=1)
+    for subject, ts in enumerate(language_data_list_RL.values()):#(316,78)
+      parcel_average_language[subject] = np.mean(ts.T, axis=1)
+    for subject, ts in enumerate(relational_data_list_RL.values()):#(232,78)
+      parcel_average_relational[subject] = np.mean(ts.T, axis=1)
+    for subject, ts in enumerate(social_data_list_RL.values()):#(274,78)
+      parcel_average_social[subject] = np.mean(ts.T, axis=1)    
 
   #Make parcel dataframes
-  motor_parcels = pd.DataFrame(parcel_average_motor, columns= region_transpose['Network'])
-  wm_parcels = pd.DataFrame(parcel_average_wm, columns= region_transpose['Network'])
-  gambling_parcels = pd.DataFrame(parcel_average_gambling, columns= region_transpose['Network'])
-  emotion_parcels = pd.DataFrame(parcel_average_emotion, columns= region_transpose['Network'])
-  language_parcels = pd.DataFrame(parcel_average_language, columns= region_transpose['Network'])
-  relational_parcels = pd.DataFrame(parcel_average_relational, columns= region_transpose['Network'])
-  social_parcels = pd.DataFrame(parcel_average_social, columns= region_transpose['Network'])
+  if glasser:
+    motor_parcels = pd.DataFrame(parcel_average_motor, columns= region_transpose['Network'])
+    wm_parcels = pd.DataFrame(parcel_average_wm, columns= region_transpose['Network'])
+    gambling_parcels = pd.DataFrame(parcel_average_gambling, columns= region_transpose['Network'])
+    emotion_parcels = pd.DataFrame(parcel_average_emotion, columns= region_transpose['Network'])
+    language_parcels = pd.DataFrame(parcel_average_language, columns= region_transpose['Network'])
+    relational_parcels = pd.DataFrame(parcel_average_relational, columns= region_transpose['Network'])
+    social_parcels = pd.DataFrame(parcel_average_social, columns= region_transpose['Network'])
+  else:
+    motor_parcels = pd.DataFrame(parcel_average_motor, columns= networks)
+    wm_parcels = pd.DataFrame(parcel_average_wm, columns= networks)
+    gambling_parcels = pd.DataFrame(parcel_average_gambling, columns= networks)
+    emotion_parcels = pd.DataFrame(parcel_average_emotion, columns= networks)
+    language_parcels = pd.DataFrame(parcel_average_language, columns= networks)
+    relational_parcels = pd.DataFrame(parcel_average_relational, columns= networks)
+    social_parcels = pd.DataFrame(parcel_average_social, columns= networks)
 
   # Add the categorical label to each dataframe
   emotion_parcels['task'] = 1
@@ -602,54 +649,86 @@ if True:
   fc_matrix_social = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
 
   # Calculate the correlations (FC) for each task
-  for subject, ts in enumerate(timeseries_motor):
-    fc_matrix_motor[subject] = np.corrcoef(ts)
-  for subject, ts in enumerate(timeseries_wm):
-    fc_matrix_wm[subject] = np.corrcoef(ts)
-  for subject, ts in enumerate(timeseries_gambling):
-    fc_matrix_gambling[subject] = np.corrcoef(ts)
-  for subject, ts in enumerate(timeseries_emotion):
-    fc_matrix_emotion[subject] = np.corrcoef(ts)
-  for subject, ts in enumerate(timeseries_language):
-    fc_matrix_language[subject] = np.corrcoef(ts)
-  for subject, ts in enumerate(timeseries_relational):
-    fc_matrix_relational[subject] = np.corrcoef(ts)
-  for subject, ts in enumerate(timeseries_social):
-    fc_matrix_social[subject] = np.corrcoef(ts)
+  if glasser:
+    for subject, ts in enumerate(timeseries_motor):
+      fc_matrix_motor[subject] = np.corrcoef(ts)
+    for subject, ts in enumerate(timeseries_wm):
+      fc_matrix_wm[subject] = np.corrcoef(ts)
+    for subject, ts in enumerate(timeseries_gambling):
+      fc_matrix_gambling[subject] = np.corrcoef(ts)
+    for subject, ts in enumerate(timeseries_emotion):
+      fc_matrix_emotion[subject] = np.corrcoef(ts)
+    for subject, ts in enumerate(timeseries_language):
+      fc_matrix_language[subject] = np.corrcoef(ts)
+    for subject, ts in enumerate(timeseries_relational):
+      fc_matrix_relational[subject] = np.corrcoef(ts)
+    for subject, ts in enumerate(timeseries_social):
+      fc_matrix_social[subject] = np.corrcoef(ts)
+  else:
+    for subject, ts in enumerate(motor_data_list_RL.values()):
+      fc_matrix_motor[subject] = np.corrcoef(ts.T)
+    for subject, ts in enumerate(wm_data_list_RL.values()):
+      fc_matrix_wm[subject] = np.corrcoef(ts.T)
+    for subject, ts in enumerate(gambling_data_list_RL.values()):
+      fc_matrix_gambling[subject] = np.corrcoef(ts.T)
+    for subject, ts in enumerate(emotion_data_list_RL.values()):
+      fc_matrix_emotion[subject] = np.corrcoef(ts.T)
+    for subject, ts in enumerate(language_data_list_RL.values()):
+      fc_matrix_language[subject] = np.corrcoef(ts.T)
+    for subject, ts in enumerate(relational_data_list_RL.values()):
+      fc_matrix_relational[subject] = np.corrcoef(ts.T)
+    for subject, ts in enumerate(social_data_list_RL.values()):
+      fc_matrix_social[subject] = np.corrcoef(ts.T)
 
 
   # Initialize the vector form of each task, where each row is a participant and each column is a connection
-  vector_motor = np.zeros((N_SUBJECTS, 64620))
-  vector_wm = np.zeros((N_SUBJECTS, 64620))
-  vector_gambling = np.zeros((N_SUBJECTS, 64620))
-  vector_emotion = np.zeros((N_SUBJECTS, 64620))
-  vector_language = np.zeros((N_SUBJECTS, 64620))
-  vector_relational = np.zeros((N_SUBJECTS, 64620))
-  vector_social = np.zeros((N_SUBJECTS, 64620))
+  if glasser:
+    vector_motor = np.zeros((N_SUBJECTS, 64620))
+    vector_wm = np.zeros((N_SUBJECTS, 64620))
+    vector_gambling = np.zeros((N_SUBJECTS, 64620))
+    vector_emotion = np.zeros((N_SUBJECTS, 64620))
+    vector_language = np.zeros((N_SUBJECTS, 64620))
+    vector_relational = np.zeros((N_SUBJECTS, 64620))
+    vector_social = np.zeros((N_SUBJECTS, 64620))
+  else:
+    vector_motor = np.zeros((N_SUBJECTS, 741))
+    vector_wm = np.zeros((N_SUBJECTS, 741))
+    vector_gambling = np.zeros((N_SUBJECTS, 741))
+    vector_emotion = np.zeros((N_SUBJECTS, 741))
+    vector_language = np.zeros((N_SUBJECTS, 741))
+    vector_relational = np.zeros((N_SUBJECTS, 741))
+    vector_social = np.zeros((N_SUBJECTS, 741))
 
   # Extract the diagonal of the FC matrix for each subject for each task
-  subject_list = np.array(np.unique(range(N_SUBJECTS)))
-  for subject in range(subject_list.shape[0]):
+  subject_list = subjects#np.array(np.unique(range(N_SUBJECTS)))
+  for subject in subject_list:
       vector_motor[subject,:] = sym_matrix_to_vec(fc_matrix_motor[subject,:,:], discard_diagonal=True)
-      vector_motor[subject,:] = fc_matrix_motor[subject][np.triu_indices_from(fc_matrix_motor[subject], k=1)]
-  for subject in range(subject_list.shape[0]):
+      if glasser:
+        vector_motor[subject,:] = fc_matrix_motor[subject][np.triu_indices_from(fc_matrix_motor[subject], k=1)]
+  for subject in subject_list:
       vector_wm[subject,:] = sym_matrix_to_vec(fc_matrix_wm[subject,:,:], discard_diagonal=True)
-      vector_wm[subject,:] = fc_matrix_wm[subject][np.triu_indices_from(fc_matrix_wm[subject], k=1)]
-  for subject in range(subject_list.shape[0]):
+      if glasser:
+        vector_wm[subject,:] = fc_matrix_wm[subject][np.triu_indices_from(fc_matrix_wm[subject], k=1)]
+  for subject in subject_list:
       vector_gambling[subject,:] = sym_matrix_to_vec(fc_matrix_gambling[subject,:,:], discard_diagonal=True)
-      vector_gambling[subject,:] = fc_matrix_gambling[subject][np.triu_indices_from(fc_matrix_gambling[subject], k=1)]
-  for subject in range(subject_list.shape[0]):
+      if glasser:
+        vector_gambling[subject,:] = fc_matrix_gambling[subject][np.triu_indices_from(fc_matrix_gambling[subject], k=1)]
+  for subject in subject_list:
       vector_emotion[subject,:] = sym_matrix_to_vec(fc_matrix_emotion[subject,:,:], discard_diagonal=True)
-      vector_emotion[subject,:] = fc_matrix_emotion[subject][np.triu_indices_from(fc_matrix_emotion[subject], k=1)]
-  for subject in range(subject_list.shape[0]):
+      if glasser:
+        vector_emotion[subject,:] = fc_matrix_emotion[subject][np.triu_indices_from(fc_matrix_emotion[subject], k=1)]
+  for subject in subject_list:
       vector_language[subject,:] = sym_matrix_to_vec(fc_matrix_language[subject,:,:], discard_diagonal=True)
-      vector_language[subject,:] = fc_matrix_language[subject][np.triu_indices_from(fc_matrix_language[subject], k=1)]
-  for subject in range(subject_list.shape[0]):
+      if glasser:
+        vector_language[subject,:] = fc_matrix_language[subject][np.triu_indices_from(fc_matrix_language[subject], k=1)]
+  for subject in subject_list:
       vector_relational[subject,:] = sym_matrix_to_vec(fc_matrix_relational[subject,:,:], discard_diagonal=True)
-      vector_relational[subject,:] = fc_matrix_relational[subject][np.triu_indices_from(fc_matrix_relational[subject], k=1)]
-  for subject in range(subject_list.shape[0]):
+      if glasser:
+        vector_relational[subject,:] = fc_matrix_relational[subject][np.triu_indices_from(fc_matrix_relational[subject], k=1)]
+  for subject in subject_list:
       vector_social[subject,:] = sym_matrix_to_vec(fc_matrix_social[subject,:,:], discard_diagonal=True)
-      vector_social[subject,:] = fc_matrix_social[subject][np.triu_indices_from(fc_matrix_social[subject], k=1)]
+      if glasser:
+        vector_social[subject,:] = fc_matrix_social[subject][np.triu_indices_from(fc_matrix_social[subject], k=1)]
 
   # Make everything pandas dataframes
   input_data_parcel_connections_emotion = pd.DataFrame(vector_emotion)
@@ -703,9 +782,10 @@ if True:
 ##################################
 #### Network Graph Creation #####
 ##################################
-threshold = .2
-if True:
+# This bit takes a very long time to run
+if False:
   import networkx as nx
+  threshold = .2
   motor_graphs = {}
   for subject, ts in enumerate(timeseries_motor):
     motor_graphs[subject] = nx.Graph()
@@ -805,7 +885,6 @@ if True:
             weight=cooef
           )
   g1 = motor_graphs[0]
-  g1.
   # Example of how to pull nodes that belong to a certain network:
   print([
       node
@@ -813,19 +892,18 @@ if True:
       if ((attr.get('network') == 'Visual2'))
   ])
 
-
 ####################################
 #### Network-based input data  #####
 ####################################
 if True:
   #Attach the labels to the parcels 
-  region_transpose = pd.DataFrame(regions.T, columns=['Region', 'Network', 'Myelination'])
-  X_network = pd.DataFrame(X_parcels, columns= region_transpose['Network'])
+  #region_transpose = pd.DataFrame(regions.T, columns=['Region', 'Network', 'Myelination'])
+  X_network = pd.DataFrame(X_parcels, columns= networks)
 
   #Add the columns of the same network together and then scale them normally
   scaler = StandardScaler() 
   X_network = X_network.groupby(lambda x:x, axis=1).sum()
-  X_network = scaler.fit_transform(X_network) 
+  #X_network = scaler.fit_transform(X_network) 
 
   #Make y vector
   y_network = parcels_full.iloc[:,-1]
@@ -835,13 +913,22 @@ if True:
 ###############################################
 if True:
   #Get the number of time points for each task
-  TIMEPOINTS_MOTOR = timeseries_motor[0][0].shape[0]
-  TIMEPOINTS_WM = timeseries_wm[0][0].shape[0]
-  TIMEPOINTS_GAMBLING = timeseries_gambling[0][0].shape[0]
-  TIMEPOINTS_EMOTION = timeseries_emotion[0][0].shape[0]
-  TIMEPOINTS_LANGUAGE = timeseries_language[0][0].shape[0]
-  TIMEPOINTS_RELATIONAL = timeseries_relational[0][0].shape[0]
-  TIMEPOINTS_SOCIAL = timeseries_social[0][0].shape[0]
+  if glasser:
+    TIMEPOINTS_MOTOR = timeseries_motor[0][0].shape[0]
+    TIMEPOINTS_WM = timeseries_wm[0][0].shape[0]
+    TIMEPOINTS_GAMBLING = timeseries_gambling[0][0].shape[0]
+    TIMEPOINTS_EMOTION = timeseries_emotion[0][0].shape[0]
+    TIMEPOINTS_LANGUAGE = timeseries_language[0][0].shape[0]
+    TIMEPOINTS_RELATIONAL = timeseries_relational[0][0].shape[0]
+    TIMEPOINTS_SOCIAL = timeseries_social[0][0].shape[0]
+  else:
+    TIMEPOINTS_MOTOR = next(iter(motor_data_list_LR.values())).shape[0]
+    TIMEPOINTS_WM = next(iter(wm_data_list_LR.values())).shape[0]
+    TIMEPOINTS_GAMBLING = next(iter(gambling_data_list_LR.values())).shape[0]
+    TIMEPOINTS_EMOTION = next(iter(emotion_data_list_LR.values())).shape[0]
+    TIMEPOINTS_LANGUAGE = next(iter(language_data_list_LR.values())).shape[0]
+    TIMEPOINTS_RELATIONAL = next(iter(relational_data_list_LR.values())).shape[0]
+    TIMEPOINTS_SOCIAL = next(iter(social_data_list_LR.values())).shape[0]
 
   #Initialize data matrices
   network_task = []
@@ -854,20 +941,36 @@ if True:
   parcel_transpose_social = np.zeros((N_SUBJECTS, TIMEPOINTS_SOCIAL , N_PARCELS))
 
   #transponse dimensions so that we can add the labels for each network
-  for subject, ts in enumerate(timeseries_motor):
-    parcel_transpose_motor[subject] = ts.T
-  for subject, ts in enumerate(timeseries_wm):
-    parcel_transpose_wm[subject] = ts.T
-  for subject, ts in enumerate(timeseries_gambling):
-    parcel_transpose_gambling[subject] = ts.T 
-  for subject, ts in enumerate(timeseries_emotion):
-    parcel_transpose_emotion[subject] = ts.T
-  for subject, ts in enumerate(timeseries_language):
-    parcel_transpose_language[subject] = ts.T
-  for subject, ts in enumerate(timeseries_relational):
-    parcel_transpose_relational[subject] = ts.T
-  for subject, ts in enumerate(timeseries_social):
-    parcel_transpose_social[subject] = ts.T
+  if glasser:
+    for subject, ts in enumerate(timeseries_motor):
+      parcel_transpose_motor[subject] = ts.T
+    for subject, ts in enumerate(timeseries_wm):
+      parcel_transpose_wm[subject] = ts.T
+    for subject, ts in enumerate(timeseries_gambling):
+      parcel_transpose_gambling[subject] = ts.T 
+    for subject, ts in enumerate(timeseries_emotion):
+      parcel_transpose_emotion[subject] = ts.T
+    for subject, ts in enumerate(timeseries_language):
+      parcel_transpose_language[subject] = ts.T
+    for subject, ts in enumerate(timeseries_relational):
+      parcel_transpose_relational[subject] = ts.T
+    for subject, ts in enumerate(timeseries_social):
+      parcel_transpose_social[subject] = ts.T
+  else:
+    for subject, ts in enumerate(motor_data_list_RL.values()):
+      parcel_transpose_motor[subject] = ts
+    for subject, ts in enumerate(wm_data_list_RL.values()):
+      parcel_transpose_wm[subject] = ts
+    for subject, ts in enumerate(gambling_data_list_RL.values()):
+      parcel_transpose_gambling[subject] = ts
+    for subject, ts in enumerate(emotion_data_list_RL.values()):
+      parcel_transpose_emotion[subject] = ts
+    for subject, ts in enumerate(language_data_list_RL.values()):
+      parcel_transpose_language[subject] = ts
+    for subject, ts in enumerate(relational_data_list_RL.values()):
+      parcel_transpose_relational[subject] = ts
+    for subject, ts in enumerate(social_data_list_RL.values()):
+      parcel_transpose_social[subject] = ts
 
   #Make the dataframes
   parcel_transpose_motor_dfs = []
@@ -886,22 +989,37 @@ if True:
   parcel_transpose_social = list(parcel_transpose_social)
 
   #Rotate each dataframe so that the network names are the column names
-  for array in parcel_transpose_motor:
-      parcel_transpose_motor_dfs.append(pd.DataFrame(array, columns = region_info['network']))
-  for array in parcel_transpose_wm:
-      parcel_transpose_wm_dfs.append(pd.DataFrame(array, columns = region_info['network']))
-  for array in parcel_transpose_gambling:
-      parcel_transpose_gambling_dfs.append(pd.DataFrame(array, columns = region_info['network']))
-  for array in parcel_transpose_emotion:
-      parcel_transpose_emotion_dfs.append(pd.DataFrame(array, columns = region_info['network']))
-  for array in parcel_transpose_language:
-      parcel_transpose_language_dfs.append(pd.DataFrame(array, columns = region_info['network']))
-  for array in parcel_transpose_relational:
-      parcel_transpose_relational_dfs.append(pd.DataFrame(array, columns = region_info['network']))
-  for array in parcel_transpose_social:
-      parcel_transpose_social_dfs.append(pd.DataFrame(array, columns = region_info['network']))
-
-
+  if glasser:
+    for array in parcel_transpose_motor:
+        parcel_transpose_motor_dfs.append(pd.DataFrame(array, columns = region_info['network']))
+    for array in parcel_transpose_wm:
+        parcel_transpose_wm_dfs.append(pd.DataFrame(array, columns = region_info['network']))
+    for array in parcel_transpose_gambling:
+        parcel_transpose_gambling_dfs.append(pd.DataFrame(array, columns = region_info['network']))
+    for array in parcel_transpose_emotion:
+        parcel_transpose_emotion_dfs.append(pd.DataFrame(array, columns = region_info['network']))
+    for array in parcel_transpose_language:
+        parcel_transpose_language_dfs.append(pd.DataFrame(array, columns = region_info['network']))
+    for array in parcel_transpose_relational:
+        parcel_transpose_relational_dfs.append(pd.DataFrame(array, columns = region_info['network']))
+    for array in parcel_transpose_social:
+        parcel_transpose_social_dfs.append(pd.DataFrame(array, columns = region_info['network']))
+  else:
+    for array in parcel_transpose_motor:
+        parcel_transpose_motor_dfs.append(pd.DataFrame(array, columns = networks))
+    for array in parcel_transpose_wm:
+        parcel_transpose_wm_dfs.append(pd.DataFrame(array, columns = networks))
+    for array in parcel_transpose_gambling:
+        parcel_transpose_gambling_dfs.append(pd.DataFrame(array, columns = networks))
+    for array in parcel_transpose_emotion:
+        parcel_transpose_emotion_dfs.append(pd.DataFrame(array, columns = networks))
+    for array in parcel_transpose_language:
+        parcel_transpose_language_dfs.append(pd.DataFrame(array, columns = networks))
+    for array in parcel_transpose_relational:
+        parcel_transpose_relational_dfs.append(pd.DataFrame(array, columns = networks))
+    for array in parcel_transpose_social:
+        parcel_transpose_social_dfs.append(pd.DataFrame(array, columns = networks))
+  
   # Create a new dataframe where we standardize each network in a new object  
   scaler = StandardScaler() 
   network_columns_motor = [] 
@@ -952,13 +1070,17 @@ if True:
     fc_matrix_social_networks[subject] = np.corrcoef(ts)
 
   #Make a vectorized form of the connections (unique FC matrix values)
-  input_data_motor_network_connections = np.zeros((N_SUBJECTS, 66))
-  input_data_wm_network_connections = np.zeros((N_SUBJECTS, 66))
-  input_data_gambling_network_connections = np.zeros((N_SUBJECTS, 66))
-  input_data_emotion_network_connections = np.zeros((N_SUBJECTS, 66))
-  input_data_language_network_connections = np.zeros((N_SUBJECTS, 66))
-  input_data_relational_network_connections = np.zeros((N_SUBJECTS, 66))
-  input_data_social_network_connections = np.zeros((N_SUBJECTS, 66))
+  if glasser:
+    n_net = 66
+  else:
+    n_net = 136
+  input_data_motor_network_connections = np.zeros((N_SUBJECTS, n_net))
+  input_data_wm_network_connections = np.zeros((N_SUBJECTS, n_net))
+  input_data_gambling_network_connections = np.zeros((N_SUBJECTS, n_net))
+  input_data_emotion_network_connections = np.zeros((N_SUBJECTS, n_net))
+  input_data_language_network_connections = np.zeros((N_SUBJECTS, n_net))
+  input_data_relational_network_connections = np.zeros((N_SUBJECTS, n_net))
+  input_data_social_network_connections = np.zeros((N_SUBJECTS, n_net))
 
   #Fill in the empty vectors with unique matrix values 
   for subject in fc_matrix_motor_networks.keys():
@@ -1013,7 +1135,7 @@ if True:
   # Centering network connections to prevent multicolinearity
   X_network_connections_centered = X_network_connections.copy().apply(lambda x: x-x.mean())
   # Delete variables to save memory
-  if True:
+  if False:
     del timeseries_motor
     del timeseries_wm
     del timeseries_gambling
