@@ -5,7 +5,7 @@ Created on Mon Dec 21 11:14:43 2020
 
 @author: cjrichier
 """
-glasser = True
+glasser = False #Set to true to use the smaller dataset with the glasser parcelation applied
 #################################################
 ########## HCP decoding project code ############
 #################################################
@@ -13,25 +13,28 @@ glasser = True
 ###############################
 ## Load the needed libraries ##
 ###############################
-import os
-import time
-import nibabel as nib
-import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
-import sklearn as sk
-from sklearn.ensemble import RandomForestClassifier
-import nilearn 
-from matplotlib import cm # cm=colormap
-from nilearn.connectome import sym_matrix_to_vec
-from sklearn.preprocessing import StandardScaler
-from sklearn import svm
-from sklearn.model_selection import train_test_split
-import getpass
-import platform
-import hcp_utils as hcp
-import datetime as dt
-from nilearn import datasets
+if True:
+  import os
+  import time
+  import nibabel as nib
+  import numpy as np
+  import matplotlib.pyplot as plt
+  import pandas as pd
+  import sklearn as sk
+  from sklearn.ensemble import RandomForestClassifier
+  import nilearn 
+  from matplotlib import cm # cm=colormap
+  from nilearn.connectome import sym_matrix_to_vec
+  from sklearn.preprocessing import StandardScaler
+  from sklearn import svm
+  from sklearn.model_selection import train_test_split
+  import getpass
+  import platform
+  import hcp_utils as hcp
+  import datetime as dt
+  from nilearn import datasets
+
+
 
 #record the start time 
 #start_time = time.time()
@@ -80,9 +83,6 @@ class FileDirr(object):
         self.hcp_behavior = str(self.hcp + 'hcp_behavior' + sep) #I don't have this one - doesn't matter
         self.hcp_output = self.hcp_rest = str(self.hcp + 'output' + sep) 
         self.hcp_full = str(self.hcp + 'HCP_1200' + sep)
-
-
-
 
 # The data shared for NMA projects is a subset of the full HCP dataset
 if glasser:
@@ -139,9 +139,9 @@ if glasser:
   subjects = range(N_SUBJECTS) #This no longer works since the subjects are no longer incremental ints
 
 #You may want to limit the subjects used during code development. This will only load in 10 subjects if you use this list.
-SUBJECT_SUBSET = 100
-subjects = subjects[:SUBJECT_SUBSET]
-N_SUBJECTS = SUBJECT_SUBSET
+#SUBJECT_SUBSET = 100
+subjects = subjects[:]
+N_SUBJECTS = len(subjects)
 
 
 #import the demographics and bheavior data --MISSING IN FULL DATASET
@@ -487,7 +487,7 @@ if True:
     social_data_list_RL = {}
     rest_data_list_LR = {}
     rest_data_list_RL = {}
-    tasks_missing = {}
+    tasks_missing = []
     
     for subject in subjects:
       for task in full_task_names:
@@ -527,14 +527,149 @@ if True:
               social_data_list_LR[subject] = np.load(path_pattern.format(subject, task, task))
             else:
               social_data_list_RL[subject] = np.load(path_pattern.format(subject, task, task))
-          elif 'REST' in task:
+          ''' elif 'REST' in task:
             if 'LR' in task:
               rest_data_list_LR[subject] = np.load(path_pattern.format(subject, task, task))
             else:
-              rest_data_list_RL[subject] = np.load(path_pattern.format(subject, task, task))
+              rest_data_list_RL[subject] = np.load(path_pattern.format(subject, task, task)) '''
         except:
-          tasks_missing[subject] = str(task)  
+          tasks_missing.append(f"{subject}: {task}")
          
+##################################
+#### Concatenating timeseries ####
+##################################
+if True:
+  motor_data_dict = {}
+  wm_data_dict = {}
+  emotion_data_dict = {}
+  gambling_data_dict = {}
+  language_data_dict = {}
+  relational_data_dict = {}
+  social_data_dict = {}
+  tasks_missing_2 = []
+
+  for subject in subjects:
+    try:
+      motor_data_dict[subject] = np.vstack((motor_data_list_LR[subject], motor_data_list_RL[subject]))
+    except:
+      try:
+        motor_data_dict[subject] = motor_data_list_RL[subject]
+        #print(f"Subject {subject} only has RL motor data.")
+        tasks_missing_2.append(f"{subject}: tfMRI_MOTOR_LR")
+      except:
+        try:
+          motor_data_dict[subject] = motor_data_list_LR[subject]
+          #print(f"Subject {subject} only has LR motor data.")
+          tasks_missing_2.append(f"{subject}: tfMRI_MOTOR_RL")
+        except:
+          #print(f"Subject {subject} is missing motor data.")
+          tasks_missing_2.append(f"{subject}: tfMRI_MOTOR_RL")
+          tasks_missing_2.append(f"{subject}: tfMRI_MOTOR_LR")
+  for subject in subjects:
+    try:
+      wm_data_dict[subject] = np.vstack((wm_data_list_LR[subject], wm_data_list_RL[subject]))
+    except:
+      try:
+        wm_data_dict[subject] = wm_data_list_RL[subject]
+        #print(f"Subject {subject} only has RL wm data.")
+        tasks_missing_2.append(f"{subject}: tfMRI_WM_LR")
+      except:
+        try:
+          wm_data_dict[subject] = wm_data_list_LR[subject]
+          #print(f"Subject {subject} only has LR wm data.")
+          tasks_missing_2.append(f"{subject}: tfMRI_WM_RL")
+        except:
+          #print(f"Subject {subject} is missing wm data.")
+          tasks_missing_2.append(f"{subject}: tfMRI_WM_RL")
+          tasks_missing_2.append(f"{subject}: tfMRI_WM_LR")
+  for subject in subjects:
+    try:
+      emotion_data_dict[subject] = np.vstack((emotion_data_list_LR[subject], emotion_data_list_RL[subject]))
+    except:
+      try:
+        emotion_data_dict[subject] = emotion_data_list_RL[subject]
+        #print(f"Subject {subject} only has RL emotion data.")
+        tasks_missing_2.append(f"{subject}: tfMRI_EMOTION_LR")
+      except:
+        try:
+          emotion_data_dict[subject] = emotion_data_list_LR[subject]
+          #print(f"Subject {subject} only has LR emotion data.")
+          tasks_missing_2.append(f"{subject}: tfMRI_EMOTION_RL")
+        except:
+          #print(f"Subject {subject} is missing emotion data.")
+          tasks_missing_2.append(f"{subject}: tfMRI_EMOTION_RL")
+          tasks_missing_2.append(f"{subject}: tfMRI_EMOTION_LR")
+  for subject in subjects:
+    try:
+      gambling_data_dict[subject] = np.vstack((gambling_data_list_LR[subject], gambling_data_list_RL[subject]))
+    except:
+      try:
+        gambling_data_dict[subject] = gambling_data_list_RL[subject]
+        #print(f"Subject {subject} only has RL gambling data.")
+        tasks_missing_2.append(f"{subject}: tfMRI_GAMBLING_LR")
+      except:
+        try:
+          gambling_data_dict[subject] = gambling_data_list_LR[subject]
+          #print(f"Subject {subject} only has LR gambling data.")
+          tasks_missing_2.append(f"{subject}: tfMRI_GAMBLING_RL")
+        except:
+          #print(f"Subject {subject} is missing gambling data.")
+          tasks_missing_2.append(f"{subject}: tfMRI_GAMBLING_RL")
+          tasks_missing_2.append(f"{subject}: tfMRI_GAMBLING_LR")
+  for subject in subjects:
+    try:
+      language_data_dict[subject] = np.vstack((language_data_list_LR[subject], language_data_list_RL[subject]))
+    except:
+      try:
+        language_data_dict[subject] = language_data_list_RL[subject]
+        #print(f"Subject {subject} only has RL language data.")
+        tasks_missing_2.append(f"{subject}: tfMRI_LANGUAGE_LR")
+      except:
+        try:
+          language_data_dict[subject] = language_data_list_LR[subject]
+          #print(f"Subject {subject} only has LR language data.")
+          tasks_missing_2.append(f"{subject}: tfMRI_LANGUAGE_RL")
+        except:
+          #print(f"Subject {subject} is missing language data.")
+          tasks_missing_2.append(f"{subject}: tfMRI_LANGUAGE_RL")
+          tasks_missing_2.append(f"{subject}: tfMRI_LANGUAGE_LR")
+  for subject in subjects:
+    try:
+      relational_data_dict[subject] = np.vstack((relational_data_list_LR[subject], relational_data_list_RL[subject]))
+    except:
+      try:
+        relational_data_dict[subject] = relational_data_list_RL[subject]
+        #print(f"Subject {subject} only has RL relational data.")
+        tasks_missing_2.append(f"{subject}: tfMRI_RELATIONAL_LR")
+      except:
+        try:
+          relational_data_dict[subject] = relational_data_list_LR[subject]
+          #print(f"Subject {subject} only has LR relational data.")
+          tasks_missing_2.append(f"{subject}: tfMRI_RELATIONAL_RL")
+        except:
+          #print(f"Subject {subject} is missing relational data.")
+          tasks_missing_2.append(f"{subject}: tfMRI_RELATIONAL_RL")
+          tasks_missing_2.append(f"{subject}: tfMRI_RELATIONAL_LR")
+  for subject in subjects:
+    try:
+      social_data_dict[subject] = np.vstack((social_data_list_LR[subject], social_data_list_RL[subject]))
+    except:
+      try:
+        social_data_dict[subject] = social_data_list_RL[subject]
+        #print(f"Subject {subject} only has RL social data.")
+        tasks_missing_2.append(f"{subject}: tfMRI_SOCIAL_LR")
+      except:
+        try:
+          social_data_dict[subject] = social_data_list_LR[subject]
+          #print(f"Subject {subject} only has LR social data.")
+          tasks_missing_2.append(f"{subject}: tfMRI_SOCIAL_RL")
+        except:
+          #print(f"Subject {subject} is missing social data.")
+          tasks_missing_2.append(f"{subject}: tfMRI_SOCIAL_RL")
+          tasks_missing_2.append(f"{subject}: tfMRI_SOCIAL_LR")
+  RL_ONLY = False
+else:
+  RL_ONLY = True
 ##################################
 #### Parcel-based input data #####
 ##################################
@@ -565,22 +700,38 @@ if True:
     for subject, ts in enumerate(timeseries_social):#(274,78)
       parcel_average_social[subject] = np.mean(ts, axis=1)  
   else:
-    #calculate average for each parcel in each task
-    for subject, ts in enumerate(motor_data_list_RL.values()):#(284, 78)
-      parcel_average_motor[subject] = np.mean(ts.T, axis=1)
-    for subject, ts in enumerate(wm_data_list_RL.values()):#(405,78)
-      parcel_average_wm[subject] = np.mean(ts.T, axis=1)
-    for subject, ts in enumerate(gambling_data_list_RL.values()):#(253,78)
-      parcel_average_gambling[subject] = np.mean(ts.T, axis=1)
-    for subject, ts in enumerate(emotion_data_list_RL.values()):#(176,78)
-      parcel_average_emotion[subject] = np.mean(ts.T, axis=1)
-    for subject, ts in enumerate(language_data_list_RL.values()):#(316,78)
-      parcel_average_language[subject] = np.mean(ts.T, axis=1)
-    for subject, ts in enumerate(relational_data_list_RL.values()):#(232,78)
-      parcel_average_relational[subject] = np.mean(ts.T, axis=1)
-    for subject, ts in enumerate(social_data_list_RL.values()):#(274,78)
-      parcel_average_social[subject] = np.mean(ts.T, axis=1)    
-
+    if RL_ONLY:
+      #calculate average for each parcel in each task
+      for subject, ts in enumerate(motor_data_list_RL.values()):#(284, 78)
+        parcel_average_motor[subject] = np.mean(ts.T, axis=1)
+      for subject, ts in enumerate(wm_data_list_RL.values()):#(405,78)
+        parcel_average_wm[subject] = np.mean(ts.T, axis=1)
+      for subject, ts in enumerate(gambling_data_list_RL.values()):#(253,78)
+        parcel_average_gambling[subject] = np.mean(ts.T, axis=1)
+      for subject, ts in enumerate(emotion_data_list_RL.values()):#(176,78)
+        parcel_average_emotion[subject] = np.mean(ts.T, axis=1)
+      for subject, ts in enumerate(language_data_list_RL.values()):#(316,78)
+        parcel_average_language[subject] = np.mean(ts.T, axis=1)
+      for subject, ts in enumerate(relational_data_list_RL.values()):#(232,78)
+        parcel_average_relational[subject] = np.mean(ts.T, axis=1)
+      for subject, ts in enumerate(social_data_list_RL.values()):#(274,78)
+        parcel_average_social[subject] = np.mean(ts.T, axis=1)    
+    else: #Concatenated version
+      #calculate average for each parcel in each task
+      for subject, ts in enumerate(motor_data_dict.values()):#(284, 78)
+        parcel_average_motor[subject] = np.mean(ts.T, axis=1)
+      for subject, ts in enumerate(wm_data_dict.values()):#(405,78)
+        parcel_average_wm[subject] = np.mean(ts.T, axis=1)
+      for subject, ts in enumerate(gambling_data_dict.values()):#(253,78)
+        parcel_average_gambling[subject] = np.mean(ts.T, axis=1)
+      for subject, ts in enumerate(emotion_data_dict.values()):#(176,78)
+        parcel_average_emotion[subject] = np.mean(ts.T, axis=1)
+      for subject, ts in enumerate(language_data_dict.values()):#(316,78)
+        parcel_average_language[subject] = np.mean(ts.T, axis=1)
+      for subject, ts in enumerate(relational_data_dict.values()):#(232,78)
+        parcel_average_relational[subject] = np.mean(ts.T, axis=1)
+      for subject, ts in enumerate(social_data_dict.values()):#(274,78)
+        parcel_average_social[subject] = np.mean(ts.T, axis=1)    
   #Make parcel dataframes
   if glasser:
     motor_parcels = pd.DataFrame(parcel_average_motor, columns= region_transpose['Network'])
@@ -665,20 +816,36 @@ if True:
     for subject, ts in enumerate(timeseries_social):
       fc_matrix_social[subject] = np.corrcoef(ts)
   else:
-    for subject, ts in enumerate(motor_data_list_RL.values()):
-      fc_matrix_motor[subject] = np.corrcoef(ts.T)
-    for subject, ts in enumerate(wm_data_list_RL.values()):
-      fc_matrix_wm[subject] = np.corrcoef(ts.T)
-    for subject, ts in enumerate(gambling_data_list_RL.values()):
-      fc_matrix_gambling[subject] = np.corrcoef(ts.T)
-    for subject, ts in enumerate(emotion_data_list_RL.values()):
-      fc_matrix_emotion[subject] = np.corrcoef(ts.T)
-    for subject, ts in enumerate(language_data_list_RL.values()):
-      fc_matrix_language[subject] = np.corrcoef(ts.T)
-    for subject, ts in enumerate(relational_data_list_RL.values()):
-      fc_matrix_relational[subject] = np.corrcoef(ts.T)
-    for subject, ts in enumerate(social_data_list_RL.values()):
-      fc_matrix_social[subject] = np.corrcoef(ts.T)
+    if RL_ONLY:
+      for subject, ts in enumerate(motor_data_list_RL.values()):
+        fc_matrix_motor[subject] = np.corrcoef(ts.T)
+      for subject, ts in enumerate(wm_data_list_RL.values()):
+        fc_matrix_wm[subject] = np.corrcoef(ts.T)
+      for subject, ts in enumerate(gambling_data_list_RL.values()):
+        fc_matrix_gambling[subject] = np.corrcoef(ts.T)
+      for subject, ts in enumerate(emotion_data_list_RL.values()):
+        fc_matrix_emotion[subject] = np.corrcoef(ts.T)
+      for subject, ts in enumerate(language_data_list_RL.values()):
+        fc_matrix_language[subject] = np.corrcoef(ts.T)
+      for subject, ts in enumerate(relational_data_list_RL.values()):
+        fc_matrix_relational[subject] = np.corrcoef(ts.T)
+      for subject, ts in enumerate(social_data_list_RL.values()):
+        fc_matrix_social[subject] = np.corrcoef(ts.T)
+    else:
+      for subject, ts in enumerate(motor_data_dict.values()):
+        fc_matrix_motor[subject] = np.corrcoef(ts.T)
+      for subject, ts in enumerate(wm_data_dict.values()):
+        fc_matrix_wm[subject] = np.corrcoef(ts.T)
+      for subject, ts in enumerate(gambling_data_dict.values()):
+        fc_matrix_gambling[subject] = np.corrcoef(ts.T)
+      for subject, ts in enumerate(emotion_data_dict.values()):
+        fc_matrix_emotion[subject] = np.corrcoef(ts.T)
+      for subject, ts in enumerate(language_data_dict.values()):
+        fc_matrix_language[subject] = np.corrcoef(ts.T)
+      for subject, ts in enumerate(relational_data_dict.values()):
+        fc_matrix_relational[subject] = np.corrcoef(ts.T)
+      for subject, ts in enumerate(social_data_dict.values()):
+        fc_matrix_social[subject] = np.corrcoef(ts.T)
 
 
   # Initialize the vector form of each task, where each row is a participant and each column is a connection
@@ -700,7 +867,7 @@ if True:
     vector_social = np.zeros((N_SUBJECTS, 741))
 
   # Extract the diagonal of the FC matrix for each subject for each task
-  subject_list = subjects#np.array(np.unique(range(N_SUBJECTS)))
+  subject_list = np.array(np.unique(range(len(subjects))))
   for subject in subject_list:
       vector_motor[subject,:] = sym_matrix_to_vec(fc_matrix_motor[subject,:,:], discard_diagonal=True)
       if glasser:
@@ -922,13 +1089,13 @@ if True:
     TIMEPOINTS_RELATIONAL = timeseries_relational[0][0].shape[0]
     TIMEPOINTS_SOCIAL = timeseries_social[0][0].shape[0]
   else:
-    TIMEPOINTS_MOTOR = next(iter(motor_data_list_LR.values())).shape[0]
-    TIMEPOINTS_WM = next(iter(wm_data_list_LR.values())).shape[0]
-    TIMEPOINTS_GAMBLING = next(iter(gambling_data_list_LR.values())).shape[0]
-    TIMEPOINTS_EMOTION = next(iter(emotion_data_list_LR.values())).shape[0]
-    TIMEPOINTS_LANGUAGE = next(iter(language_data_list_LR.values())).shape[0]
-    TIMEPOINTS_RELATIONAL = next(iter(relational_data_list_LR.values())).shape[0]
-    TIMEPOINTS_SOCIAL = next(iter(social_data_list_LR.values())).shape[0]
+    TIMEPOINTS_MOTOR = next(iter(motor_data_dict.values())).shape[0]
+    TIMEPOINTS_WM = next(iter(wm_data_dict.values())).shape[0]
+    TIMEPOINTS_GAMBLING = next(iter(gambling_data_dict.values())).shape[0]
+    TIMEPOINTS_EMOTION = next(iter(emotion_data_dict.values())).shape[0]
+    TIMEPOINTS_LANGUAGE = next(iter(language_data_dict.values())).shape[0]
+    TIMEPOINTS_RELATIONAL = next(iter(relational_data_dict.values())).shape[0]
+    TIMEPOINTS_SOCIAL = next(iter(social_data_dict.values())).shape[0]
 
   #Initialize data matrices
   network_task = []
@@ -939,6 +1106,16 @@ if True:
   parcel_transpose_language = np.zeros((N_SUBJECTS, TIMEPOINTS_LANGUAGE, N_PARCELS))
   parcel_transpose_relational = np.zeros((N_SUBJECTS, TIMEPOINTS_RELATIONAL, N_PARCELS))
   parcel_transpose_social = np.zeros((N_SUBJECTS, TIMEPOINTS_SOCIAL , N_PARCELS))
+
+  excluded = {
+    'motor':0,
+    'wm':0,
+    'gambling':0,
+    'emotion':0,
+    'language':0,
+    'relational':0,
+    'social':0,
+  }
 
   #transponse dimensions so that we can add the labels for each network
   if glasser:
@@ -957,21 +1134,83 @@ if True:
     for subject, ts in enumerate(timeseries_social):
       parcel_transpose_social[subject] = ts.T
   else:
-    for subject, ts in enumerate(motor_data_list_RL.values()):
-      parcel_transpose_motor[subject] = ts
-    for subject, ts in enumerate(wm_data_list_RL.values()):
-      parcel_transpose_wm[subject] = ts
-    for subject, ts in enumerate(gambling_data_list_RL.values()):
-      parcel_transpose_gambling[subject] = ts
-    for subject, ts in enumerate(emotion_data_list_RL.values()):
-      parcel_transpose_emotion[subject] = ts
-    for subject, ts in enumerate(language_data_list_RL.values()):
-      parcel_transpose_language[subject] = ts
-    for subject, ts in enumerate(relational_data_list_RL.values()):
-      parcel_transpose_relational[subject] = ts
-    for subject, ts in enumerate(social_data_list_RL.values()):
-      parcel_transpose_social[subject] = ts
-
+    if RL_ONLY:
+      for subject, ts in enumerate(motor_data_list_LR.values()):
+        parcel_transpose_motor[subject] = ts
+      for subject, ts in enumerate(wm_data_list_LR.values()):
+        try:
+          parcel_transpose_wm[subject] = ts
+        except:
+          print(f"Subject {subject} WM timeseries is of the wrong dimenstions: {ts.shape} instead of ({TIMEPOINTS_WM}, {N_PARCELS})")
+      for subject, ts in enumerate(gambling_data_list_LR.values()):
+        try:
+          parcel_transpose_gambling[subject] = ts
+        except:
+          print(f"Subject {subject} Gambling timeseries is of the wrong dimenstions: {ts.shape} instead of ({TIMEPOINTS_GAMBLING}, {N_PARCELS})")
+      for subject, ts in enumerate(emotion_data_list_LR.values()):
+        try:
+          parcel_transpose_emotion[subject] = ts
+        except:
+          print(f"Subject {subject} Gambling timeseries is of the wrong dimenstions: {ts.shape} instead of ({TIMEPOINTS_EMOTION}, {N_PARCELS})")
+      for subject, ts in enumerate(language_data_list_LR.values()):
+        try:
+          parcel_transpose_language[subject] = ts
+        except:
+          print(f"Subject {subject} Gambling timeseries is of the wrong dimenstions: {ts.shape} instead of ({TIMEPOINTS_LANGUAGE}, {N_PARCELS})")
+      for subject, ts in enumerate(relational_data_list_LR.values()):
+        try:
+          parcel_transpose_relational[subject] = ts
+        except:
+          print(f"Subject {subject} Gambling timeseries is of the wrong dimenstions: {ts.shape} instead of ({TIMEPOINTS_RELATIONAL}, {N_PARCELS})")
+      for subject, ts in enumerate(social_data_list_LR.values()):
+        try:
+          parcel_transpose_social[subject] = ts
+        except:
+          print(f"Subject {subject} Gambling timeseries is of the wrong dimenstions: {ts.shape} instead of ({TIMEPOINTS_SOCIAL}, {N_PARCELS})")
+    else:
+      for subject, ts in enumerate(motor_data_dict.values()):
+        try:
+          parcel_transpose_motor[subject] = ts
+        except:
+          #print(f"Subject {subject} Motor timeseries is of the wrong dimenstions: {ts.shape} instead of ({TIMEPOINTS_MOTOR}, {N_PARCELS})")
+          excluded['motor'] = excluded['motor'] + 1
+      for subject, ts in enumerate(wm_data_dict.values()):
+        try:
+          parcel_transpose_wm[subject] = ts
+        except:
+          #print(f"Subject {subject} WM timeseries is of the wrong dimenstions: {ts.shape} instead of ({TIMEPOINTS_WM}, {N_PARCELS})")
+          excluded['wm'] = excluded['wm'] + 1
+      for subject, ts in enumerate(gambling_data_dict.values()):
+        try:
+          parcel_transpose_gambling[subject] = ts
+        except:
+          #print(f"Subject {subject} Gambling timeseries is of the wrong dimenstions: {ts.shape} instead of ({TIMEPOINTS_GAMBLING}, {N_PARCELS})")
+          excluded['gambling'] = excluded['gambling'] + 1
+      for subject, ts in enumerate(emotion_data_dict.values()):
+        try:
+          parcel_transpose_emotion[subject] = ts
+        except:
+          #print(f"Subject {subject} Emotion timeseries is of the wrong dimenstions: {ts.shape} instead of ({TIMEPOINTS_EMOTION}, {N_PARCELS})")
+          excluded['emotion'] = excluded['emotion'] + 1
+      for subject, ts in enumerate(language_data_dict.values()):
+        try:
+          parcel_transpose_language[subject] = ts
+        except:
+          #print(f"Subject {subject} Language timeseries is of the wrong dimenstions: {ts.shape} instead of ({TIMEPOINTS_LANGUAGE}, {N_PARCELS})")
+          excluded['language'] = excluded['language'] + 1
+      for subject, ts in enumerate(relational_data_dict.values()):
+        try:
+          parcel_transpose_relational[subject] = ts
+        except:
+          #print(f"Subject {subject} Relational timeseries is of the wrong dimenstions: {ts.shape} instead of ({TIMEPOINTS_RELATIONAL}, {N_PARCELS})")
+          excluded['relational'] = excluded['relational'] + 1
+      for subject, ts in enumerate(social_data_dict.values()):
+        try:
+          parcel_transpose_social[subject] = ts
+        except:
+          #print(f"Subject {subject} Social timeseries is of the wrong dimenstions: {ts.shape} instead of ({TIMEPOINTS_SOCIAL}, {N_PARCELS})")
+          excluded['social'] = excluded['social'] + 1
+      
   #Make the dataframes
   parcel_transpose_motor_dfs = []
   parcel_transpose_motor = list(parcel_transpose_motor)
@@ -1019,7 +1258,7 @@ if True:
         parcel_transpose_relational_dfs.append(pd.DataFrame(array, columns = networks))
     for array in parcel_transpose_social:
         parcel_transpose_social_dfs.append(pd.DataFrame(array, columns = networks))
-  
+
   # Create a new dataframe where we standardize each network in a new object  
   scaler = StandardScaler() 
   network_columns_motor = [] 
@@ -1105,13 +1344,13 @@ if True:
       input_data_social_network_connections[subject, :] = sym_matrix_to_vec(fc_matrix_social_networks[subject], 
                                                                     discard_diagonal=True)
   #Make objects dataframes
-  input_data_emotion_network_connections = pd.DataFrame(input_data_emotion_network_connections)
-  input_data_gambling_network_connections = pd.DataFrame(input_data_gambling_network_connections)
-  input_data_language_network_connections = pd.DataFrame(input_data_language_network_connections)
-  input_data_motor_network_connections = pd.DataFrame(input_data_motor_network_connections)
-  input_data_relational_network_connections = pd.DataFrame(input_data_relational_network_connections)
-  input_data_social_network_connections = pd.DataFrame(input_data_social_network_connections)
-  input_data_wm_network_connections = pd.DataFrame(input_data_wm_network_connections)
+  input_data_emotion_network_connections = pd.DataFrame(input_data_emotion_network_connections).dropna(axis='index')
+  input_data_gambling_network_connections = pd.DataFrame(input_data_gambling_network_connections).dropna(axis='index')
+  input_data_language_network_connections = pd.DataFrame(input_data_language_network_connections).dropna(axis='index')
+  input_data_motor_network_connections = pd.DataFrame(input_data_motor_network_connections).dropna(axis='index')
+  input_data_relational_network_connections = pd.DataFrame(input_data_relational_network_connections).dropna(axis='index')
+  input_data_social_network_connections = pd.DataFrame(input_data_social_network_connections).dropna(axis='index')
+  input_data_wm_network_connections = pd.DataFrame(input_data_wm_network_connections).dropna(axis='index')
 
   # Add the labels for each task
   input_data_emotion_network_connections['task'] = 1
@@ -1190,7 +1429,7 @@ if True:
 #######################################
 #### Checking for multicolinearity ####
 #######################################
-if True:
+if True: 
   import seaborn as sns
   import matplotlib.pyplot as plt
 
@@ -1208,10 +1447,10 @@ if True:
   vif_info_centered['Column'] = X_network_connections_centered.columns
   vif_info_centered.sort_values('VIF', ascending=False, inplace=True)
 
-  ##################################
-  #### making test-train splits ####
-  ##################################
-
+##################################
+#### making test-train splits ####
+##################################
+if True:
   #Parcel data partitioning and transforming
   train_X_parcels, test_X_parcels, train_y_parcels, test_y_parcels = train_test_split(X_parcels, y_parcels, test_size = 0.2)
   train_X_parcels = scaler.fit_transform(train_X_parcels)
@@ -1274,8 +1513,12 @@ if True:
     return output_list
       
   #Retrive the list of connections and netowrks for the connection data
-  list_of_connections = np.array(vector_names(region_info['name'], []))
-  list_of_networks = np.array(vector_names(region_info['network'], []))
+  if glasser:
+    list_of_connections = np.array(vector_names(region_info['name'], []))
+    list_of_networks = np.array(vector_names(region_info['network'], []))
+  else:
+    list_of_connections = np.array(vector_names(regions, []))
+    list_of_networks = np.array(vector_names(networks, []))
 
   #Make a dataframe with task coefficients and labels for SVC
   svm_coef = svm_coef_parcel #svm_coef_parcel svm_coef_parcel_connections svm_coef_network_sum svm_coef_network_connection
@@ -1440,8 +1683,13 @@ if True:
       
 
   #Retrive the list of connections and netowrks for the connection data
-  list_of_connections = np.array(vector_names(region_info['name'], []))
-  list_of_networks = np.array(vector_names(region_info['network'], []))
+  if glasser:
+    list_of_connections = np.array(vector_names(region_info['name'], []))
+    list_of_networks = np.array(vector_names(region_info['network'], []))
+  else:
+    list_of_connections = np.array(vector_names(regions, []))
+    list_of_networks = np.array(vector_names(networks, []))
+
 
 #################################################################################
 ##### Here is where it stops working for me, var declaration out of order? ######
