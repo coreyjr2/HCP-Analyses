@@ -1550,7 +1550,7 @@ if True:
 if True:
   ##### Parcels #####
   if True:
-    forest = RandomForestClassifier(random_state=1, n_estimators=1000)
+    forest = RandomForestClassifier(random_state=1, n_estimators=5000)
     forest.fit(train_X_parcels, train_y_parcels)
     pred_y_parcels = forest.predict(test_X_parcels)
     # How does it perform?
@@ -1580,7 +1580,7 @@ if True:
 
   ##### Parcel connections #####
   if True:
-    forest = RandomForestClassifier(random_state=1, n_estimators=1000)
+    forest = RandomForestClassifier(random_state=1, n_estimators=5000)
     forest.fit(train_X_parcon, train_y_parcon)
     pred_y_parcon = np.array(forest.predict(test_X_parcon).astype(int))
     # How does it perform?
@@ -1610,7 +1610,7 @@ if True:
 
   ##### Network summations #####
   if True:
-    forest = RandomForestClassifier(random_state=1, n_estimators=1000)
+    forest = RandomForestClassifier(random_state=1, n_estimators=5000)
     forest.fit(train_X_network, train_y_network)
     pred_y_network = forest.predict(test_X_network)
     # How does it perform?
@@ -1640,7 +1640,7 @@ if True:
 
   ##### Network Connections #####
   if True:
-    forest = RandomForestClassifier(random_state=1, n_estimators=1000)
+    forest = RandomForestClassifier(random_state=1, n_estimators=5000)
     forest.fit(train_X_netcon, train_y_netcon)
     pred_y_netcon = forest.predict(test_X_netcon)
     # How does it perform?
