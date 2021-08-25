@@ -85,8 +85,7 @@ for subject in subject_list:
                 tasks_missing[subject] = str(task)
         if task == "tfMRI_GAMBLING":
             try:
-                gambling_data_list_LR[subject] = np.load(f'/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/HCP_1200_NumPy/{subject}/MNINonLinear/Results/{task}_LR/{task}_LR.npy')
-            except:
+                gambling_data_list_LR[subject] = np.load(f'/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/HCP_1200_NumPy/{subject}/MNINonLinear/Results/{task}_LR/{task}_LR.npy')                
                 tasks_missing[subject] = str(task)
         if task == "tfMRI_LANGUAGE":
             try:
