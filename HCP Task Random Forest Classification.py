@@ -33,8 +33,8 @@ if True:
   import hcp_utils as hcp
   import datetime as dt
   from nilearn import datasets
-
-
+  import brainconn
+  import seaborn as sns
 
 #record the start time 
 #start_time = time.time()
@@ -84,110 +84,103 @@ class FileDirr(object):
         self.hcp_output = self.hcp_rest = str(self.hcp + 'output' + sep) 
         self.hcp_full = str(self.hcp + 'HCP_1200' + sep)
 
-# The data shared for NMA projects is a subset of the full HCP dataset
-if glasser:
-  N_SUBJECTS = 339
-else:
+# Analysis metadata
+if True:
+  # The data shared for NMA projects is a subset of the full HCP dataset
+  if glasser:
+    N_SUBJECTS = 339
+  else:
+    N_SUBJECTS = len(subjects)
+
+  # The data have already been aggregated into ROIs from the Glasser parcellation
+  if glasser:
+    N_PARCELS = 360
+  else:
+    # The full dataset is stored using the MSDL Parcellation, doi: 10.1007/978-3-642-22092-0_46
+    N_PARCELS = 39
+
+  # How many networks?
+  if glasser:
+    N_NETWORKS = 12 
+  else:
+    N_NETWORKS = 17
+
+  # The acquisition parameters for all tasks were identical
+  TR = 0.72  # Time resolution, in sec
+
+  # The parcels are matched across hemispheres with the same order
+  HEMIS = ["Right", "Left"]
+
+  # Each experiment was repeated multiple times in each subject
+  N_RUNS_REST = 4
+  N_RUNS_TASK = 2
+
+  # Time series data are organized by experiment, with each experiment
+  # having an LR and RL (phase-encode direction) acquistion
+  BOLD_NAMES = [ "rfMRI_REST1_LR", 
+                "rfMRI_REST1_RL", 
+                "rfMRI_REST2_LR", 
+                "rfMRI_REST2_RL", 
+                "tfMRI_MOTOR_RL", 
+                "tfMRI_MOTOR_LR",
+                "tfMRI_WM_RL", 
+                "tfMRI_WM_LR",
+                "tfMRI_EMOTION_RL", 
+                "tfMRI_EMOTION_LR",
+                "tfMRI_GAMBLING_RL", 
+                "tfMRI_GAMBLING_LR", 
+                "tfMRI_LANGUAGE_RL", 
+                "tfMRI_LANGUAGE_LR", 
+                "tfMRI_RELATIONAL_RL", 
+                "tfMRI_RELATIONAL_LR", 
+                "tfMRI_SOCIAL_RL", 
+                "tfMRI_SOCIAL_LR"]
+
+  # This will use all subjects:
+  if glasser:
+    subjects = range(N_SUBJECTS) #This no longer works since the subjects are no longer incremental ints
+
+  #You may want to limit the subjects used during code development. This will only load in 10 subjects if you use this list.
+  #SUBJECT_SUBSET = 100
+  subjects = subjects[:]
   N_SUBJECTS = len(subjects)
 
-# The data have already been aggregated into ROIs from the Glasser parcellation
-if glasser:
-  N_PARCELS = 360
-else:
-  # The full dataset is stored using the MSDL Parcellation, doi: 10.1007/978-3-642-22092-0_46
-  N_PARCELS = 39
+  ''' #import the demographics and bheavior data --MISSING IN FULL DATASET
+    demographics = pd.read_csv('/Volumes/Byrgenwerth/Datasets/HCP/HCP_demographics/demographics_behavior.csv')
 
-# How many networks?
-if glasser:
-  N_NETWORKS = 12 
-else:
-  N_NETWORKS = 17
+    #What is our gender breakdown?
+    demographics['Gender'].value_counts()
+    demographics['Age'].value_counts()
+  '''
 
-# The acquisition parameters for all tasks were identical
-TR = 0.72  # Time resolution, in sec
-
-# The parcels are matched across hemispheres with the same order
-HEMIS = ["Right", "Left"]
-
-# Each experiment was repeated multiple times in each subject
-N_RUNS_REST = 4
-N_RUNS_TASK = 2
-
-# Time series data are organized by experiment, with each experiment
-# having an LR and RL (phase-encode direction) acquistion
-BOLD_NAMES = [ "rfMRI_REST1_LR", 
-              "rfMRI_REST1_RL", 
-              "rfMRI_REST2_LR", 
-              "rfMRI_REST2_RL", 
-              "tfMRI_MOTOR_RL", 
-              "tfMRI_MOTOR_LR",
-              "tfMRI_WM_RL", 
-              "tfMRI_WM_LR",
-              "tfMRI_EMOTION_RL", 
-              "tfMRI_EMOTION_LR",
-              "tfMRI_GAMBLING_RL", 
-              "tfMRI_GAMBLING_LR", 
-              "tfMRI_LANGUAGE_RL", 
-              "tfMRI_LANGUAGE_LR", 
-              "tfMRI_RELATIONAL_RL", 
-              "tfMRI_RELATIONAL_LR", 
-              "tfMRI_SOCIAL_RL", 
-              "tfMRI_SOCIAL_LR"]
-
-# This will use all subjects:
-if glasser:
-  subjects = range(N_SUBJECTS) #This no longer works since the subjects are no longer incremental ints
-
-#You may want to limit the subjects used during code development. This will only load in 10 subjects if you use this list.
-#SUBJECT_SUBSET = 100
-subjects = subjects[:]
-N_SUBJECTS = len(subjects)
-
-
-#import the demographics and bheavior data --MISSING IN FULL DATASET
-''' 
-demographics = pd.read_csv('/Volumes/Byrgenwerth/Datasets/HCP/HCP_demographics/demographics_behavior.csv')
-
-#What is our gender breakdown?
-demographics['Gender'].value_counts()
-demographics['Age'].value_counts()
-'''
-#For visualization - COULD NOT GET THIS TO WORK WITH msdl ATLAS
-''' 
-with np.load(f"{HCP_DIR}hcp_atlas.npz") as dobj:
-  atlas = dict(**dobj)
-'''
-
-
-#let's generate some information about the regions using the rest data
-if glasser:
-  regions = np.load(f"{HCP_DIR}hcp_rest\\regions.npy").T
-  region_info = dict(
-      name=regions[0].tolist(),
-      network=regions[1],
-      myelin=regions[2].astype(np.float),
-  )
-  region_transpose = pd.DataFrame(regions.T, columns=['Region', 'Network', 'Myelination'])
-  #print(region_info)
-  regions = region_info['name']
-  networks = region_info['network']
-else:
-  atlas_MSDL = datasets.fetch_atlas_msdl()
-  regions = atlas_MSDL['labels']
-  networks = atlas_MSDL['networks']
-  ''' region_coords = []
-  # Not sure if it is this:
-  region_coords_1 = [coord for tup in regions['region_coords'] for coord in tup]
-  #or this:
-  for x in range(3):
-        for tup in regions['region_coords']:
-            region_coords.append(tup[x]) 
-  region_info = dict(
-      name=regions['labels'],
-      network=regions['networks'],
-      myelin=regions['region_coords'],
-  ) '''
-
+  # Pull information about the atlas
+  if glasser:
+    regions = np.load(f"{HCP_DIR}hcp_rest\\regions.npy").T
+    region_info = dict(
+        name=regions[0].tolist(),
+        network=regions[1],
+        myelin=regions[2].astype(np.float),
+    )
+    region_transpose = pd.DataFrame(regions.T, columns=['Region', 'Network', 'Myelination'])
+    #print(region_info)
+    regions = region_info['name']
+    networks = region_info['network']
+  else:
+    atlas_MSDL = datasets.fetch_atlas_msdl()
+    regions = atlas_MSDL['labels']
+    networks = atlas_MSDL['networks']
+    ''' region_coords = []
+    # Not sure if it is this:
+    region_coords_1 = [coord for tup in regions['region_coords'] for coord in tup]
+    #or this:
+    for x in range(3):
+          for tup in regions['region_coords']:
+              region_coords.append(tup[x]) 
+    region_info = dict(
+        name=regions['labels'],
+        network=regions['networks'],
+        myelin=regions['region_coords'],
+    ) '''
 
 ######################################
 ###### Define useful functions #######
@@ -417,6 +410,18 @@ if True:
     avg_data = np.concatenate(selected_data, axis=-1).mean(axis=-1)
 
     return avg_data
+
+  def brainconn_arrays(corr, p_thresh=0.2):
+    '''
+      Takes a correlational matrix
+      retruns a tuple of a correlational matrix with a zeroed diagonal and a binary ajacency matrix using a p theshold of p_thresh
+    '''
+    adj_wei = corr - np.eye(corr.shape[0])
+    adj_bin = brainconn.utils.binarize(brainconn.utils.threshold_proportional(adj_wei, p_thresh))
+    return (adj_wei, p_thresh)
+
+
+  
 
 ################################
 #### Making the input data #####
@@ -670,6 +675,7 @@ if True:
   RL_ONLY = False
 else:
   RL_ONLY = True
+
 ##################################
 #### Parcel-based input data #####
 ##################################
@@ -946,9 +952,53 @@ if True:
     del vector_relational 
     del vector_social 
 
-##################################
-#### Network Graph Creation #####
-##################################
+#########################################
+## Graph Theory Metrics with brainconn ##
+#########################################
+if True:
+  # Create dictionary to contain objects
+  brainconn_dict = {
+    'motor':[],
+    'wm':[],
+    'gambling':[],
+    'emotion':[],
+    'language':[],
+    'relational':[],
+    'social':[],
+  }
+  # Iterate through functional connectivity matrices and add to the network analysis dictionary
+  for corr in fc_matrix_motor:
+    adj_wei = corr - np.eye(corr.shape[0])  # Weighted matrix
+    adj_bin = brainconn.utils.binarize(brainconn.utils.threshold_proportional(adj_wei, 0.2)) # Binary matrix with a theshold of .2
+    brainconn_dict['motor'].append((adj_wei, adj_bin))
+  for corr in fc_matrix_wm:
+    adj_wei = corr - np.eye(corr.shape[0])  # Weighted matrix
+    adj_bin = brainconn.utils.binarize(brainconn.utils.threshold_proportional(adj_wei, 0.2)) # Binary matrix with a theshold of .2
+    brainconn_dict['wm'].append((adj_wei, adj_bin))
+  for corr in fc_matrix_gambling:
+    adj_wei = corr - np.eye(corr.shape[0])  # Weighted matrix
+    adj_bin = brainconn.utils.binarize(brainconn.utils.threshold_proportional(adj_wei, 0.2)) # Binary matrix with a theshold of .2
+    brainconn_dict['gambling'].append((adj_wei, adj_bin))
+  for corr in fc_matrix_emotion:
+    adj_wei = corr - np.eye(corr.shape[0])  # Weighted matrix
+    adj_bin = brainconn.utils.binarize(brainconn.utils.threshold_proportional(adj_wei, 0.2)) # Binary matrix with a theshold of .2
+    brainconn_dict['emotion'].append((adj_wei, adj_bin))
+  for corr in fc_matrix_language:
+    adj_wei = corr - np.eye(corr.shape[0])  # Weighted matrix
+    adj_bin = brainconn.utils.binarize(brainconn.utils.threshold_proportional(adj_wei, 0.2)) # Binary matrix with a theshold of .2
+    brainconn_dict['language'].append((adj_wei, adj_bin))
+  for corr in fc_matrix_relational:
+    adj_wei = corr - np.eye(corr.shape[0])  # Weighted matrix
+    adj_bin = brainconn.utils.binarize(brainconn.utils.threshold_proportional(adj_wei, 0.2)) # Binary matrix with a theshold of .2
+    brainconn_dict['relational'].append((adj_wei, adj_bin))
+  for corr in fc_matrix_social:
+    adj_wei = corr - np.eye(corr.shape[0])  # Weighted matrix
+    adj_bin = brainconn.utils.binarize(brainconn.utils.threshold_proportional(adj_wei, 0.2)) # Binary matrix with a theshold of .2
+    brainconn_dict['social'].append((adj_wei, adj_bin))
+
+###############################################
+#### Network Graph Creation with networkx #####
+###############################################
 # This bit takes a very long time to run
 if False:
   import networkx as nx
