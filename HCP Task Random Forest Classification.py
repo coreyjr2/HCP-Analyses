@@ -30,10 +30,10 @@ if True:
   from sklearn.model_selection import train_test_split
   import getpass
   import platform
-  import hcp_utils as hcp
+  #import hcp_utils as hcp
   import datetime as dt
   from nilearn import datasets
-  import brainconn
+  #import brainconn
   import seaborn as sns
 
 #record the start time 
@@ -53,12 +53,14 @@ if getpass.getuser() == 'kyle':
   subjects = pd.read_csv('C:\\Users\\kyle\\repos\\HCP-Task-Classification-01\\subject_list.csv')['ID']
   path_pattern = "S:\\HCP\\HCP_1200\\{}\\MNINonLinear\\Results\\{}\\{}.npy"
 else:
-  HCP_DIR = "/Volumes/Byrgenwerth/Datasets/HCP/"
+  HCP_DIR = "/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/HCP_1200_Numpy/"
+  basepath = str('/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/HCP_1200_Numpy/{}/MNINonLinear/Results/')
   HCP_DIR_REST = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_rest/subjects/"
   HCP_DIR_TASK = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_task/subjects/"
   HCP_DIR_EVS = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_task/"
   HCP_DIR_BEHAVIOR = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_behavior/"
-
+  subjects = pd.read_csv('/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/subject_list.csv')['ID']
+  path_pattern ="/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/HCP_1200_Numpy/{}/MNINonLinear/Results/{}/{}.npy"
   if not os.path.isdir(HCP_DIR): os.mkdir(HCP_DIR)
 
 class FileDirr(object):
@@ -320,6 +322,7 @@ if True:
     else:
       bold_path = basepath.format(subject) + bold_run #f"{HCP_DIR}/hcp_task/subjects/{subject}/timeseries"
       bold_file = f"{bold_run}.npy"
+    print(f"{bold_path}{sep}{bold_file}")
     ts = np.load(f"{bold_path}{sep}{bold_file}")
     if remove_mean:
       ts -= ts.mean(axis=1, keepdims=True)
@@ -500,6 +503,7 @@ if True:
           if 'MOTOR' in task:
             if 'LR' in task:
               motor_data_list_LR[subject] = np.load(path_pattern.format(subject, task, task))
+              
             else:
               motor_data_list_RL[subject] = np.load(path_pattern.format(subject, task, task))
           elif 'WM' in task:
@@ -539,7 +543,9 @@ if True:
               rest_data_list_RL[subject] = np.load(path_pattern.format(subject, task, task)) '''
         except:
           tasks_missing.append(f"{subject}: {task}")
-         
+   
+            
+
 ##################################
 #### Concatenating timeseries ####
 ##################################
@@ -955,7 +961,7 @@ if True:
 #########################################
 ## Graph Theory Metrics with brainconn ##
 #########################################
-if True:
+if False:
   # Create dictionary to contain objects
   brainconn_dict = {
     'motor':[],
@@ -1496,6 +1502,9 @@ if True:
   vif_info_centered['VIF'] = [variance_inflation_factor(X_network_connections_centered.values, i) for i in range(X_network_connections_centered.shape[1])]
   vif_info_centered['Column'] = X_network_connections_centered.columns
   vif_info_centered.sort_values('VIF', ascending=False, inplace=True)
+
+
+
 
 ##################################
 #### making test-train splits ####
