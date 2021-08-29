@@ -85,7 +85,7 @@ for subject in subject_list:
                 tasks_missing[subject] = str(task)
         if task == "tfMRI_GAMBLING":
             try:
-                gambling_data_list_LR[subject] = np.load(f'/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/HCP_1200_NumPy/{subject}/MNINonLinear/Results/{task}_LR/{task}_LR.npy')
+                gambling_data_list_LR[subject] = np.load(f'/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/HCP_1200_NumPy/{subject}/MNINonLinear/Results/{task}_LR/{task}_LR.npy')                
             except:
                 tasks_missing[subject] = str(task)
         if task == "tfMRI_LANGUAGE":
@@ -594,6 +594,34 @@ elapsed_time = time.time() - start_time
 print(f"Elapsed time to preprocess input data: "
       f"{elapsed_time:.3f} seconds")
 
+
+##############################################
+#### parcel connections feature selection ####
+##############################################
+
+
+parcel_connection_corr = np.corrcoef(parcel_connections_task_data.T)
+
+
+
+
+feature_correlation_with_outcome = pd.Series(parcel_connection_corr[:, 741])
+
+
+correlated_features = feature_correlation_with_outcome.index
+Rank_order_features = list(Rank_order_features)
+Non_zero_features = Rank_order_features[:561]
+Non_zero_features = str(Non_zero_features)
+
+Permutation_features_full_sorted = Permutation_features_full_sorted.reset_index()
+Permutation_features_full_sorted.drop('index', axis=1, inplace=True)
+
+
+
+
+
+
+
 ##################################
 #### making test-train splits ####
 ##################################
@@ -613,6 +641,17 @@ test_X_network = scaler.transform(test_X_network)
 
 #Network connection data
 train_X_netcon, test_X_netcon, train_y_netcon, test_y_netcon = train_test_split(X_network_connections, y_network_connections, test_size = 0.2)
+
+###############################
+###### LASSO Classifier #######
+###############################
+
+from sklearn import linear_model
+
+lasso = linear_model.Lasso(alpha=.000001, normalize=True, tol=.01)
+lasso.fit(train_X_parcon, train_y_parcon)
+print(lasso.score(train_X_parcon, train_y_parcon))
+print(lasso.score(test_X_parcon, test_y_parcon))
 
 ########################################
 ###### Support Vector Classifier #######
