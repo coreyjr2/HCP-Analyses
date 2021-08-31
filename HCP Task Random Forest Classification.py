@@ -836,9 +836,9 @@ else:
 ##################################
 if True:
   #Initialize dataframes
-  parcel_average_motor = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
-  parcel_average_wm = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
-  parcel_average_gambling = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
+  parcel_average_motor = np.zeros((len(motor_data_dict), N_PARCELS), dtype='float64')
+  parcel_average_wm = np.zeros((len(wm_data_dict), N_PARCELS), dtype='float64')
+  parcel_average_gambling = np.zeros((len(gambling_data_dict), N_PARCELS), dtype='float64')
   parcel_average_emotion = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
   parcel_average_language = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
   parcel_average_relational = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
@@ -952,13 +952,13 @@ if True:
 #############################################
 if True:
   #Make FC matrices for each subject for each task
-  fc_matrix_motor = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-  fc_matrix_wm = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-  fc_matrix_gambling = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-  fc_matrix_emotion = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-  fc_matrix_language = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-  fc_matrix_relational = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-  fc_matrix_social = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
+  fc_matrix_motor = np.zeros((len(motor_data_dict), N_PARCELS, N_PARCELS))
+  fc_matrix_wm = np.zeros((len(wm_data_dict), N_PARCELS, N_PARCELS))
+  fc_matrix_gambling = np.zeros((len(gambling_data_dict), N_PARCELS, N_PARCELS))
+  fc_matrix_emotion = np.zeros((len(emotion_data_dict), N_PARCELS, N_PARCELS))
+  fc_matrix_language = np.zeros((len(language_data_dict), N_PARCELS, N_PARCELS))
+  fc_matrix_relational = np.zeros((len(relational_data_dict), N_PARCELS, N_PARCELS))
+  fc_matrix_social = np.zeros((len(social_data_dict), N_PARCELS, N_PARCELS))
 
   # Calculate the correlations (FC) for each task
   if glasser:
@@ -1019,41 +1019,41 @@ if True:
     vector_relational = np.zeros((N_SUBJECTS, 64620))
     vector_social = np.zeros((N_SUBJECTS, 64620))
   else:
-    vector_motor = np.zeros((N_SUBJECTS, 741))
-    vector_wm = np.zeros((N_SUBJECTS, 741))
-    vector_gambling = np.zeros((N_SUBJECTS, 741))
-    vector_emotion = np.zeros((N_SUBJECTS, 741))
-    vector_language = np.zeros((N_SUBJECTS, 741))
-    vector_relational = np.zeros((N_SUBJECTS, 741))
-    vector_social = np.zeros((N_SUBJECTS, 741))
+    vector_motor = np.zeros((len(motor_data_dict), 741))
+    vector_wm = np.zeros((len(wm_data_dict), 741))
+    vector_gambling = np.zeros((len(gambling_data_dict), 741))
+    vector_emotion = np.zeros((len(emotion_data_dict), 741))
+    vector_language = np.zeros((len(language_data_dict), 741))
+    vector_relational = np.zeros((len(relational_data_dict), 741))
+    vector_social = np.zeros((len(social_data_dict), 741))
 
   # Extract the diagonal of the FC matrix for each subject for each task
   subject_list = np.array(np.unique(range(len(subjects))))
-  for subject in subject_list:
+  for subject in range(len(motor_data_dict.keys())):
       vector_motor[subject,:] = sym_matrix_to_vec(fc_matrix_motor[subject,:,:], discard_diagonal=True)
       if glasser:
         vector_motor[subject,:] = fc_matrix_motor[subject][np.triu_indices_from(fc_matrix_motor[subject], k=1)]
-  for subject in subject_list:
+  for subject in range(len(wm_data_dict.keys())):
       vector_wm[subject,:] = sym_matrix_to_vec(fc_matrix_wm[subject,:,:], discard_diagonal=True)
       if glasser:
         vector_wm[subject,:] = fc_matrix_wm[subject][np.triu_indices_from(fc_matrix_wm[subject], k=1)]
-  for subject in subject_list:
+  for subject in range(len(gambling_data_dict.keys())):
       vector_gambling[subject,:] = sym_matrix_to_vec(fc_matrix_gambling[subject,:,:], discard_diagonal=True)
       if glasser:
         vector_gambling[subject,:] = fc_matrix_gambling[subject][np.triu_indices_from(fc_matrix_gambling[subject], k=1)]
-  for subject in subject_list:
+  for subject in range(len(emotion_data_dict.keys())):
       vector_emotion[subject,:] = sym_matrix_to_vec(fc_matrix_emotion[subject,:,:], discard_diagonal=True)
       if glasser:
         vector_emotion[subject,:] = fc_matrix_emotion[subject][np.triu_indices_from(fc_matrix_emotion[subject], k=1)]
-  for subject in subject_list:
+  for subject in range(len(language_data_dict.keys())):
       vector_language[subject,:] = sym_matrix_to_vec(fc_matrix_language[subject,:,:], discard_diagonal=True)
       if glasser:
         vector_language[subject,:] = fc_matrix_language[subject][np.triu_indices_from(fc_matrix_language[subject], k=1)]
-  for subject in subject_list:
+  for subject in range(len(relational_data_dict.keys())):
       vector_relational[subject,:] = sym_matrix_to_vec(fc_matrix_relational[subject,:,:], discard_diagonal=True)
       if glasser:
         vector_relational[subject,:] = fc_matrix_relational[subject][np.triu_indices_from(fc_matrix_relational[subject], k=1)]
-  for subject in subject_list:
+  for subject in range(len(social_data_dict.keys())):
       vector_social[subject,:] = sym_matrix_to_vec(fc_matrix_social[subject,:,:], discard_diagonal=True)
       if glasser:
         vector_social[subject,:] = fc_matrix_social[subject][np.triu_indices_from(fc_matrix_social[subject], k=1)]
@@ -1631,6 +1631,33 @@ if True:
   elapsed_time = dt.datetime.now() - total_start_time
   print(f"Elapsed time to preprocess input data: ", elapsed_time)
 
+
+##################################
+#### making test-train splits ####
+##################################
+if True:
+  #Parcel data partitioning and transforming
+  scaler = StandardScaler()
+  train_X_parcels, test_X_parcels, train_y_parcels, test_y_parcels = train_test_split(X_parcels, y_parcels, test_size = 0.2)
+  train_X_parcels = scaler.fit_transform(train_X_parcels)
+  test_X_parcels = scaler.transform(test_X_parcels)
+
+  # Parcel connection data
+  scaler = StandardScaler()
+  train_X_parcon, test_X_parcon, train_y_parcon, test_y_parcon = train_test_split(X_parcel_connections, y_parcel_connections, test_size = 0.2)
+  train_X_parcon = scaler.fit_transform(train_X_parcon)
+  test_X_parcon = scaler.transform(test_X_parcon)
+
+  # Network summation data
+  scaler = StandardScaler()
+  train_X_network, test_X_network, train_y_network, test_y_network = train_test_split(X_network, y_network, test_size = 0.2)
+  train_X_network = scaler.fit_transform(train_X_network)
+  test_X_network = scaler.transform(test_X_network)
+  
+  # Network connection data
+  scaler = StandardScaler()
+  train_X_netcon, test_X_netcon, train_y_netcon, test_y_netcon = train_test_split(X_network_connections, y_network_connections, test_size = 0.2)
+
 #######################################
 #### Checking for multicolinearity ####
 #######################################
@@ -1641,10 +1668,10 @@ if True:
   import statsmodels.api as sm
   from statsmodels.stats.outliers_influence import variance_inflation_factor
 
-  #Check for multicolinearity in the network connections
+  #Check for multicolinearity in the parcel connections
   vif_info = pd.DataFrame()
-  vif_info['VIF'] = [variance_inflation_factor(X_network_connections.values, i) for i in range(X_network_connections.shape[1])]
-  vif_info['Column'] = X_network_connections.columns
+  vif_info['VIF'] = [variance_inflation_factor(pd.DataFrame(train_X_parcon).values, i) for i in range(pd.DataFrame(train_X_parcon).shape[1])]
+  vif_info['Column'] = train_X_parcon.columns
   vif_info.sort_values('VIF', ascending=False, inplace=True)
 
   vif_info_centered = pd.DataFrame()
@@ -1660,52 +1687,9 @@ if True:
   train_X_parcels, test_X_parcels, train_y_parcels, test_y_parcels = train_test_split(X_parcels, y_parcels, test_size = 0.2)
   train_X_parcels = scaler.fit_transform(train_X_parcels)
   test_X_parcels = scaler.transform(test_X_parcels)
-
-  # Parcel connection data
-  train_X_parcon, test_X_parcon, train_y_parcon, test_y_parcon = train_test_split(X_parcel_connections, y_parcel_connections, test_size = 0.2)
-
-  # Network summation data
-  train_X_network, test_X_network, train_y_network, test_y_network = train_test_split(X_network, y_network, test_size = 0.2)
-  train_X_network = scaler.fit_transform(train_X_network)
-  test_X_network = scaler.transform(test_X_network)
-
-  train_X_netcon, test_X_netcon, train_y_netcon, test_y_netcon = train_test_split(X_network_connections, y_network_connections, test_size = 0.2)
-
-########################################
-###### Support Vector Classifier #######
-########################################
-if True:
-  # Parcels
-  lin_clf_parcel = svm.LinearSVC(C=1e-5)
-  lin_clf_parcel.fit(train_X_parcels, train_y_parcels)
-  print('SVC Parcel Training accuracy: ', lin_clf_parcel.score(train_X_parcels, train_y_parcels))
-  print('SVC Parcel Test accuracy: ', lin_clf_parcel.score(test_X_parcels, test_y_parcels))
-  svm_coef_parcel = pd.DataFrame(lin_clf_parcel.coef_.T)
-
-  # Parcel connections
-  lin_clf_parcel_connections = svm.LinearSVC()
-  lin_clf_parcel_connections.fit(train_X_parcon, train_y_parcon)
-  print('SVC Parcel Connection Training accuracy: ', lin_clf_parcel_connections.score(train_X_parcon, train_y_parcon))
-  print('SVC Parcel Connection Test accuracy: ', lin_clf_parcel_connections.score(test_X_parcon, test_y_parcon))
-  svm_coef_parcel_connections = pd.DataFrame(lin_clf_parcel_connections.coef_.T)
-
-  # Network summations
-  lin_clf_network_sum = svm.LinearSVC(C=1e-1)
-  lin_clf_network_sum.fit(train_X_network, train_y_network)
-  print('SVC Network Summation Training accuracy: ', lin_clf_network_sum.score(train_X_network, train_y_network))
-  print('SVC Network Summation Test accuracy: ', lin_clf_network_sum.score(test_X_network, test_y_network))
-  svm_coef_network_sum = pd.DataFrame(lin_clf_network_sum.coef_.T)
-
-  # Network connections
-  lin_clf_network_connection = svm.LinearSVC()
-  lin_clf_network_connection.fit(train_X_netcon, train_y_netcon)
-  print('SVC Network Connection Training accuracy: ', lin_clf_network_connection.score(train_X_netcon, train_y_netcon))
-  print('SVC Network Connection Test accuracy: ', lin_clf_network_connection.score(test_X_netcon, test_y_netcon))
-  svm_coef_network_connection = pd.DataFrame(lin_clf_network_connection.coef_.T)
-
-##################################
-######## SVC Importances #########
-##################################
+##############################################
+#### parcel connections feature selection ####
+##############################################
 if True:
     
   #Define function to retrive names of connections
@@ -1725,6 +1709,322 @@ if True:
     list_of_connections = np.array(vector_names(regions, []))
     list_of_networks = np.array(vector_names(networks, []))
 
+  parcel_connection_corr = np.corrcoef(parcel_connections_task_data.T)
+
+  feature_correlation_with_outcome = pd.DataFrame(parcel_connection_corr[:741, 741])
+
+  list_of_connections = pd.DataFrame(list_of_connections)
+  list_of_networks = pd.DataFrame(list_of_networks)
+
+
+  feat_corr_net_connections = pd.DataFrame(pd.concat([feature_correlation_with_outcome,  list_of_connections,  list_of_networks, vif_info], axis=1))
+  feat_corr_net_connections.columns = ['Correlation to outcome', 'Connections', 'Networks', "VIF"]
+
+  #Keep only features that have a correlation to the task greater than .1
+  top_feat_corr_net_connections = feat_corr_net_connections[feat_corr_net_connections['Correlation to outcome'] > .1]
+
+  top_feat_corr_net_connections_indices = list(top_feat_corr_net_connections.index)
+  data_top_feat_corr_net_connections = X_parcel_connections.iloc[:, top_feat_corr_net_connections_indices]
+
+
+
+  #Check for multicolinearity in the parcel connections top features
+  vif_info_top = pd.DataFrame()
+  vif_info_top['VIF'] = [variance_inflation_factor(pd.DataFrame(train_X_parcon_top).values, i) for i in range(pd.DataFrame(train_X_parcon_top).shape[1])]
+  vif_info_top['Column'] = train_X_parcon_top.columns
+  vif_info_top.sort_values('VIF', ascending=False, inplace=True)
+
+
+  # Parcel connection data
+  scaler = StandardScaler()
+  train_X_parcon_top, test_X_parcon_top, train_y_parcon_top, test_y_parcon_top = train_test_split(data_top_feat_corr_net_connections, y_parcel_connections, test_size = 0.2)
+  train_X_parcon_top = scaler.fit_transform(train_X_parcon_top)
+  test_X_parcon_top = scaler.transform(test_X_parcon_top)
+
+
+  # Parcel connections top features only SVC
+  lin_clf_parcel_connections = svm.LinearSVC(C=.1)
+  lin_clf_parcel_connections.fit(train_X_parcon_top, train_y_parcon_top)
+  print('SVC Parcel Connection Training accuracy: ', lin_clf_parcel_connections.score(train_X_parcon_top, train_y_parcon_top))
+  print('SVC Parcel Connection Test accuracy: ', lin_clf_parcel_connections.score(test_X_parcon_top, test_y_parcon_top))
+  svm_coef_parcel_connections = pd.DataFrame(lin_clf_parcel_connections.coef_.T)
+
+##### Parcel connections #####
+if True:
+  #Tune RFC hyperparameters
+  
+  # Number of trees in random forest
+  n_estimators = [int(x) for x in np.linspace(start = 200, stop = 1000, num = 10)]
+  # Number of features to consider at every split
+  max_features = ['auto', 'sqrt']
+  # Maximum number of levels in tree
+  max_depth = [int(x) for x in np.linspace(10, 110, num = 11)]
+  max_depth.append(None)
+  # Minimum number of samples required to split a node
+  min_samples_split = [2, 5, 10]
+  # Minimum number of samples required at each leaf node
+  min_samples_leaf = [1, 2, 4]
+  # Method of selecting samples for training each tree
+  bootstrap = [True, False]
+  # Create the random grid
+  random_grid = {'n_estimators': n_estimators,
+                'max_features': max_features,
+                'max_depth': max_depth,
+                'min_samples_split': min_samples_split,
+                'min_samples_leaf': min_samples_leaf,
+                'bootstrap': bootstrap}
+
+
+  ####################################
+  ## Search for RFC hyperparameters ##
+  ####################################
+
+  # # Use the random grid to search for best hyperparameters
+  # # First create the base model to tune
+  # # Random search of parameters, using 3 fold cross validation, 
+  # # search across 100 different combinations, and use all available cores
+  # rf = RandomForestClassifier()
+  # from sklearn.model_selection import RandomizedSearchCV
+  # rf_random = RandomizedSearchCV(estimator = rf, param_distributions = random_grid, n_iter = 100, cv = 3, verbose=2, random_state=42, n_jobs = -1)
+  # # Fit the random search model
+  # rf_random.fit(train_X_parcon_top, train_y_parcon_top)
+
+  # rf_random.best_params_
+
+  # def evaluate(model, test_features, test_labels):
+  # predictions = model.predict(test_features)
+  # errors = abs(predictions - test_labels)
+  # mape = 100 * np.mean(errors / test_labels)
+  # accuracy = 100 - mape
+  # print('Model Performance')
+  # print('Average Error: {:0.4f} degrees.'.format(np.mean(errors)))
+  # print('Accuracy = {:0.2f}%.'.format(accuracy))
+
+  # return accuracy
+  # base_model = RandomForestClassifier(n_estimators = 10, random_state = 42)
+  # base_model.fit(train_X_parcon_top, train_y_parcon_top)
+  # base_accuracy = evaluate(base_model, test_X_parcon_top, test_y_parcon_top)
+
+  # best_random = rf_random.best_estimator_
+  # random_accuracy = evaluate(best_random, test_X_parcon_top, test_y_parcon_top)
+
+  # print('Improvement of {:0.2f}%.'.format( 100 * (random_accuracy - base_accuracy) / base_accuracy))
+
+
+  forest = RandomForestClassifier(random_state=1, n_estimators=1000)
+  forest.fit(train_X_parcon_top, train_y_parcon_top)
+  pred_y_parcon_top = np.array(forest.predict(test_X_parcon_top).astype(int))
+  # How does it perform?
+  print('RFC Parcel Connection Training accuracy: ', forest.score(train_X_parcon_top, train_y_parcon_top))
+  print('RFC Parcel Connection Test accuracy: ', forest.score(test_X_parcon_top, test_y_parcon_top))
+
+  # Visualize the confusion matrix
+  print(classification_report(test_y_parcon_top,  pred_y_parcon_top))
+  from sklearn.metrics import confusion_matrix
+  cm = confusion_matrix(test_y_parcon_top, pred_y_parcon_top)
+  cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+  print(cm)
+  # let's see the cross validated score 
+  # score = cross_val_score(forest,X,y, cv = 10, scoring = 'accuracy')
+  # print(score)
+  #predictions = pd.Series(forest.predict(test_X_parcels))
+  predictions = pd.Series(pred_y_parcon_top)
+  ground_truth_test_y_parcon_top = pd.Series(test_y_parcon_top)
+  ground_truth_test_y_parcon_top = ground_truth_test_y_parcon_top.reset_index(drop = True)
+  predictions = predictions.rename("Task")
+  ground_truth_test_y_parcon_top = ground_truth_test_y_parcon_top.rename("Task")
+  predict_vs_true = pd.concat([ground_truth_test_y_parcon_top, predictions],axis =1)
+  predict_vs_true.columns = ["Actual", "Prediction"]
+  accuracy = predict_vs_true.duplicated()
+  accuracy.value_counts()
+
+
+########################################
+###### Support Vector Classifier #######
+########################################
+if True:
+  # Parcels
+  lin_clf_parcel = svm.LinearSVC(C=1e-5)
+  lin_clf_parcel.fit(train_X_parcels, train_y_parcels)
+  print('SVC Parcel Training accuracy: ', lin_clf_parcel.score(train_X_parcels, train_y_parcels))
+  print('SVC Parcel Test accuracy: ', lin_clf_parcel.score(test_X_parcels, test_y_parcels))
+  svm_coef_parcel = pd.DataFrame(lin_clf_parcel.coef_.T)
+
+  # Parcel connections
+  lin_clf_parcel_connections = svm.LinearSVC(C=.001)
+  lin_clf_parcel_connections.fit(train_X_parcon, train_y_parcon)
+  print('SVC Parcel Connection Training accuracy: ', lin_clf_parcel_connections.score(train_X_parcon, train_y_parcon))
+  print('SVC Parcel Connection Test accuracy: ', lin_clf_parcel_connections.score(test_X_parcon, test_y_parcon))
+  svm_coef_parcel_connections = pd.DataFrame(lin_clf_parcel_connections.coef_.T)
+
+  # Network summations
+  lin_clf_network_sum = svm.LinearSVC(C=1e-1)
+  lin_clf_network_sum.fit(train_X_network, train_y_network)
+  print('SVC Network Summation Training accuracy: ', lin_clf_network_sum.score(train_X_network, train_y_network))
+  print('SVC Network Summation Test accuracy: ', lin_clf_network_sum.score(test_X_network, test_y_network))
+  svm_coef_network_sum = pd.DataFrame(lin_clf_network_sum.coef_.T)
+
+  # Network connections
+  lin_clf_network_connection = svm.LinearSVC()
+  lin_clf_network_connection.fit(train_X_netcon, train_y_netcon)
+  print('SVC Network Connection Training accuracy: ', lin_clf_network_connection.score(train_X_netcon, train_y_netcon))
+  print('SVC Network Connection Test accuracy: ', lin_clf_network_connection.score(test_X_netcon, test_y_netcon))
+  svm_coef_network_connection = pd.DataFrame(lin_clf_network_connection.coef_.T)
+
+
+###########################################
+###### Principal Component Analysis #######
+###########################################
+
+from sklearn.decomposition import PCA
+ 
+pca = PCA().fit(train_X_parcon)
+
+plt.rcParams["figure.figsize"] = (30,20)
+
+fig, ax = plt.subplots()
+xi = np.arange(1, 742, step=1)
+y = np.cumsum(pca.explained_variance_ratio_)
+
+plt.ylim(0.0,1.1)
+plt.plot(xi, y, marker='o', linestyle='--', color='b')
+
+plt.xlabel('Number of Components')
+# plt.xticks(np.arange(0, 742, step=1)) #change from 0-based array index to 1-based human-readable label
+plt.ylabel('Cumulative variance (%)')
+plt.title('The number of components needed to explain variance')
+
+plt.axhline(y=0.95, color='r', linestyle='-')
+plt.text(0.5, 0.85, '95% cut-off threshold', color = 'red', fontsize=16)
+
+ax.grid(axis='x')
+plt.show()
+
+pca = PCA(300).fit(train_X_parcon)
+
+
+train_pca = pca.transform(train_X_parcon)
+test_pca = pca.transform(test_X_parcon)
+
+
+pca.components_.shape
+
+loadings = pca.components_.T * np.sqrt(pca.explained_variance_)
+
+loading_matrix = pd.DataFrame(loadings)
+
+
+
+
+# Parcel connections
+lin_clf_parcel_connections = svm.LinearSVC(C=.001)
+lin_clf_parcel_connections.fit(train_pca, train_y_parcon)
+print('SVC Parcel Connection Training accuracy: ', lin_clf_parcel_connections.score(train_pca, train_y_parcon))
+print('SVC Parcel Connection Test accuracy: ', lin_clf_parcel_connections.score(test_pca, test_y_parcon))
+svm_coef_parcel_connections = pd.DataFrame(lin_clf_parcel_connections.coef_.T)
+
+
+########################################
+###### Partial Least Squares LDA #######
+########################################
+# import PLSRegression from scikitlearn
+from sklearn.preprocessing import scale 
+from sklearn import model_selection
+from sklearn.model_selection import RepeatedKFold
+from sklearn.model_selection import train_test_split
+from sklearn.cross_decomposition import PLSRegression
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import cross_val_predict
+from sklearn.metrics import mean_squared_error, r2_score
+
+#https://stackoverflow.com/questions/53944247/performing-multiclass-pls-da-with-mlr-package-in-r
+
+# fit the pls regression
+my_plsr = PLSRegression(n_components=2, scale=False)
+my_plsr.fit(train_X_parcon, train_y_parcon)
+y_pred_pls= my_plsr.predict(test_X_parcon)
+plt.plot(y_pred_pls)
+# Cross-validation
+y_cv = cross_val_predict(my_plsr, train_X_parcon, train_y_parcon, cv=10)
+ 
+predictions = my_plsr.predict(test_X_parcon)
+round(predictions)
+
+# Calculate scores
+score = r2_score(train_y_parcon, y_cv)
+mse = mean_squared_error(train_y_parcon, y_cv)
+
+
+
+# extract scores (one score per individual per component)
+scores_df = pd.DataFrame(my_plsr.x_scores_)
+
+# standardize scores between -1 and 1 so they fit on the plot
+std_scores_dim1 = 2 * ( (scores_df[0] - min(scores_df[0])) / (max(scores_df[0]) - min(scores_df[0])) ) -1
+std_scores_dim2 = 2 * ( (scores_df[1] - min(scores_df[1])) / (max(scores_df[1]) - min(scores_df[1])) ) -1
+
+#extract loadings (one loading per variable per component)
+loadings_df = pd.DataFrame(my_plsr.x_loadings_)
+
+
+from scipy.signal import savgol_filter
+ 
+from sklearn.cross_decomposition import PLSRegression
+from sklearn.model_selection import KFold, cross_val_predict, train_test_split
+from sklearn.metrics import accuracy_score
+
+def optimise_pls_cv(X, y, n_comp):
+    # Define PLS object
+    pls = PLSRegression(n_components=n_comp)
+
+    # Cross-validation
+    y_cv = cross_val_predict(pls, X, y, cv=10)
+
+    # Calculate scores
+    r2 = r2_score(y, y_cv)
+    mse = mean_squared_error(y, y_cv)
+    rpd = y.std()/np.sqrt(mse)
+    
+    return (y_cv, r2, mse, rpd)
+
+
+r2s = []
+mses = []
+rpds = []
+xticks = np.arange(1, 40)
+for n_comp in xticks:
+    y_cv, r2, mse, rpd = optimise_pls_cv(train_X_parcon, train_y_parcon, n_comp)
+    r2s.append(r2)
+    mses.append(mse)
+    rpds.append(rpd)
+
+# Plot the mses
+def plot_metrics(vals, ylabel, objective):
+    with plt.style.context('ggplot'):
+        plt.plot(xticks, np.array(vals), '-v', color='blue', mfc='blue')
+        if objective=='min':
+            idx = np.argmin(vals)
+        else:
+            idx = np.argmax(vals)
+        plt.plot(xticks[idx], np.array(vals)[idx], 'P', ms=10, mfc='red')
+
+        plt.xlabel('Number of PLS components')
+        plt.xticks = xticks
+        plt.ylabel(ylabel)
+        plt.title('PLS')
+
+    plt.show()
+
+plot_metrics(mses, 'MSE', 'min')
+plot_metrics(rpds, 'RPD', 'max')
+plot_metrics(r2s, 'R2', 'max')
+
+
+##################################
+######## SVC Importances #########
+##################################
+
+if True:
   #Make a dataframe with task coefficients and labels for SVC
   svm_coef = svm_coef_parcel #svm_coef_parcel svm_coef_parcel_connections svm_coef_network_sum svm_coef_network_connection
   list_of_connections_series = pd.Series(list_of_connections)
@@ -1793,12 +2093,11 @@ if True:
     print('RFC Parcel Connection Test accuracy: ', forest.score(test_X_parcon, test_y_parcon))
 
     # Visualize the confusion matrix
-    from sklearn.metrics import classification_report
-    #print(classification_report(np.array(test_X_parcon), np.array(test_y_parcon).astype(int)))
+    print(classification_report(test_y_parcon,  pred_y_parcon))
     from sklearn.metrics import confusion_matrix
     cm = confusion_matrix(test_y_parcon, pred_y_parcon)
     cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-    #print(cm)
+    print(cm)
     # let's see the cross validated score 
     # score = cross_val_score(forest,X,y, cv = 10, scoring = 'accuracy')
     # print(score)
@@ -1823,7 +2122,6 @@ if True:
     print('RFC Network Connection Test accuracy: ', forest.score(test_X_network, test_y_network))
 
     # Visualize the confusion matrix
-    from sklearn.metrics import classification_report
     #print(classification_report(test_X_network, test_y_network))
     from sklearn.metrics import confusion_matrix
     cm = confusion_matrix(test_y_network, pred_y_network)
@@ -1853,7 +2151,6 @@ if True:
     print('RFC Network Connection Test accuracy: ', forest.score(test_X_netcon, test_y_netcon))
 
     # Visualize the confusion matrix
-    from sklearn.metrics import classification_report
     #print(classification_report(test_X_netcon, test_y_netcon))
     from sklearn.metrics import confusion_matrix
     cm = confusion_matrix(test_y_netcon, pred_y_netcon)
@@ -1896,46 +2193,55 @@ if True:
     list_of_networks = np.array(vector_names(networks, []))
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #################################################################################
 ##### Here is where it stops working for me, var declaration out of order? ######
 #################################################################################
 if False:
   #calculate the feature importances for RFC
-  feature_names = [f'feature {i}' for i in range(X.shape[1])]
-  start_time = time.time()
-  importances = forest.feature_importances_
-  std = np.std([
-      tree.feature_importances_ for tree in forest.estimators_], axis=0)
-  elapsed_time = time.time() - start_time
-  print(f"Elapsed time to compute the importances: "
-        f"{elapsed_time:.3f} seconds")
-  forest_importances = pd.Series(importances, index=feature_names)
+  feature_names = [f'feature {i}' for i in range(X_parcel_connections.shape[1])]
+  #start_time = time.time()
+  #importances = forest.feature_importances_
+  #std = np.std([
+  #    tree.feature_importances_ for tree in forest.estimators_], axis=0)
+  #elapsed_time = time.time() - start_time
+  #print(f"Elapsed time to compute the importances: "
+  #      f"{elapsed_time:.3f} seconds")
+  #forest_importances = pd.Series(importances, index=feature_names)
 
   #Don't run this unless you want to wait a long time... 
-  from sklearn.inspection import permutation_importance
-  start_time = time.time()
-  result = permutation_importance(forest, test_X_netcon, test_y_netcon, n_repeats=5, random_state=1, n_jobs=1)
-  elapsed_time = time.time() - start_time
-  print(f"Elapsed time to compute the importances: "
-        f"{elapsed_time:.3f} seconds")
+  #from sklearn.inspection import permutation_importance
+  #start_time = time.time()
+  #result = permutation_importance(forest, test_X_netcon, test_y_netcon, n_repeats=5, random_state=1, n_jobs=-1)
+  #elapsed_time = time.time() - start_time
+  #print(f"Elapsed time to compute the importances: "
+  #      f"{elapsed_time:.3f} seconds")
 
 
-  Permutation_forest_importances = pd.DataFrame(result.importances_mean, feature_names)
-  from numpy import savetxt
-  forest_importances.to_csv(f'C:\\Users\\kyle\\repos\\HCP-Analyses\\forest_importances_netcon.csv')
-
-  names1 = ['0','1','2','3','4','5','6']
+  #Permutation_forest_importances = pd.DataFrame(result.importances_mean, feature_names)
+  #from numpy import savetxt
+  #forest_importances.to_csv(f'C:\\Users\\kyle\\repos\\HCP-Analyses\\forest_importances_netcon.csv')
 
 
-  out1 = vector_names(names1, [])
-  print(out1)
-
-  forest_importances_series = np.squeeze(np.array(forest_importances))
+  #forest_importances_series = np.squeeze(np.array(forest_importances))
 
   #Now that we have the feature importances, let's organize them all into a separate dataframe
-  Permutation_features_full = pd.DataFrame(np.array((forest_importances_series,list_of_connections, list_of_networks)).T)
-  from numpy import savetxt
-  forest_importances.to_csv('C:\\Users\\kyle\\repos\\HCP-Analyses\\forest_importances_netcon.csv')
+  #Permutation_features_full = pd.DataFrame(np.array((forest_importances_series,list_of_connections, list_of_networks)).T)
+  #from numpy import savetxt
+  #forest_importances.to_csv('C:\\Users\\kyle\\repos\\HCP-Analyses\\forest_importances_netcon.csv')
 
   Permutation_features_full.to_csv('C:\\Users\\kyle\\repos\\HCP-Analyses\\Permutation_features_full.csv')
 
@@ -2021,7 +2327,7 @@ if False:
   top_features_only = Permutation_features_full_sorted.iloc[:562, :]
   top_features_indices = list(top_features_only.index)
   number_of_connections_top_features = top_features_only['Network connection'].value_counts()
-
+ 
 
   proportion_of_top_connections = number_of_connections_top_features / number_of_connections
 
