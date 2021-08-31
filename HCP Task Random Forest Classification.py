@@ -3,7 +3,7 @@
 """
 Created on Mon Dec 21 11:14:43 2020
 
-@author: cjrichier
+@author: cjrichier, kabaacke-psy
 """
 glasser = False #Set to true to use the smaller dataset with the glasser parcelation applied
 #################################################
@@ -50,7 +50,7 @@ if getpass.getuser() == 'kyle':
   HCP_DIR_TASK = f"{HCP_DIR}hcp_task\\subjects\\"
   HCP_1200 = f"{HCP_DIR}HCP_1200\\"
   basepath = str("S:\\HCP\\HCP_1200\\{}\\MNINonLinear\\Results\\")
-  subjects = pd.read_csv('C:\\Users\\kyle\\repos\\HCP-Task-Classification-01\\subject_list.csv')['ID']
+  subjects = pd.read_csv('C:\\Users\\kyle\\repos\\HCP-Analyses\\subject_list.csv')['ID']
   path_pattern = "S:\\HCP\\HCP_1200\\{}\\MNINonLinear\\Results\\{}\\{}.npy"
 else:
   HCP_DIR = "/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/HCP_1200_Numpy/"
@@ -414,6 +414,36 @@ if True:
 
     return avg_data
 
+  def calculate_FD_P(in_file): 
+    # Function taken from  FCP-INDI/C-PAC/CPAC/generate_motion_statistics/generate_motion_statistics.py
+    """
+    Method to calculate Framewise Displacement (FD)  as per Power et al., 2012
+    Parameters
+    ----------
+    in_file : string
+        movement parameters vector file path
+    Returns
+    -------
+    out_file : string
+        Frame-wise displacement mat
+        file path
+
+
+    # Modified to return a vector and using the order of the columns provided in HCP_1200
+    """
+
+    motion_params = np.genfromtxt(in_file).T
+
+    rotations = np.transpose(np.abs(np.diff(motion_params[3:6, :])))
+    translations = np.transpose(np.abs(np.diff(motion_params[0:3, :])))
+
+    fd = np.sum(translations, axis=1) + \
+      (50 * np.pi / 180) * np.sum(rotations, axis=1)
+
+    fd = np.insert(fd, 0, 0)
+
+    return fd
+
   def brainconn_arrays(corr, p_thresh=0.2):
     '''
       Takes a correlational matrix
@@ -424,7 +454,128 @@ if True:
     return (adj_wei, p_thresh)
 
 
-  
+
+# Import Demographic and behavioral data
+multi_dummy = True # Set True to create dummy columns per unique value in the categorical columns of Age, Gender, Acquisition, Release
+if False:
+  behavior_full = pd.read_csv(HCP_DIR + 'Behavior' + sep + 'behavior.csv')
+  demographics = behavior_full[['Subject','Release','Acquisition','Gender','Age']]
+  if multi_dummy:
+    demographics = demographics.join(pd.get_dummies(demographics['Age'], prefix='Age_'), how='outer')
+    demographics = demographics.join(pd.get_dummies(demographics['Gender'], prefix='Gender_'), how='outer')
+    demographics = demographics.join(pd.get_dummies(demographics['Acquisition'], prefix='Acquisition_'), how='outer')
+    demographics = demographics.join(pd.get_dummies(demographics['Release'], prefix='Release_'), how='outer')
+  demographics.to_csv(os.path.abspath(os.getcwd()) + sep + 'demographics_with_dummy_vars.csv', index=False)
+else:
+  demographics = pd.read_csv(os.path.abspath(os.getcwd()) + sep + 'demographics_with_dummy_vars.csv')
+
+# Import movement information
+if False:
+  movement = {}
+  for s in subjects:
+    movement[s] = {}
+    for t in BOLD_NAMES:
+      movement[s][t] = {}
+      try:
+        movement[s][t]['Physio_log'] = pd.read_csv( # See page 38 of HCP_1200 release manual. 400HZ approx 288 samples per frame
+          path_pattern[:-6].format(s, t) + t + '_Physio_log.txt',
+          sep='\t', 
+          header=None, 
+          names=[
+            'trigger_pulse','respiration','pulse_oximeter'
+          ]
+        )
+        #We can shift the timescale on this 
+      except:
+        movement[s][t]['Physio_log'] = None
+      try:
+        movement[s][t]['Movement_RelativeRMS_mean'] = pd.read_csv( # mean amount of motion between neighboring timepoints
+          path_pattern[:-6].format(s, t) + 'Movement_RelativeRMS_mean.txt',
+          sep='\t',
+          header=None,
+          names=['0']
+        )['0'][0]
+      except:
+        movement[s][t]['Movement_RelativeRMS_mean'] = None
+      try:
+        movement[s][t]['Movement_RelativeRMS'] = pd.read_csv( # amount of motion from the previous time point, alternative to FD see https://www.mail-archive.com/hcp-users@humanconnectome.org/msg04444.html
+          path_pattern[:-6].format(s, t) +'Movement_RelativeRMS.txt',
+          sep='\t',
+          header=None, 
+          names = ['Movement_RelativeRMS']
+        )
+      except:
+        movement[s][t]['Movement_RelativeRMS'] = None
+      try:
+        movement[s][t]['Movement_Regressors'] = pd.read_csv( # See HCP1200 release manual page 96, also see https://www.mail-archive.com/hcp-users@humanconnectome.org/msg02961.html
+          path_pattern[:-6].format(s, t) + 'Movement_Regressors.txt',
+          sep='\t',
+          header=None,
+          names = [
+            'trans_x','trans_y','trans_z',
+            'rot_x','rot_y','rot_z',
+            'trans_dx','trans_dy','trans_dz',
+            'rot_dx','rot_dy','rot_dz'
+          ]
+        )
+      except:
+        movement[s][t]['Movement_Regressors'] = None
+      try:
+          movement[s][t]['Movement_Regressors_dt'] = pd.read_csv( # Made from removing the mean and linear trend from each variable in Movement_Regressors.txt
+          path_pattern[:-6].format(s, t) + 'Movement_Regressors_dt.txt',
+          sep='\t',
+          header=None,
+          names = [
+            'trans_x_dt','trans_y_dt','trans_z_dt',
+            'rot_x_dt','rot_y_dt','rot_z_dt',
+            'trans_dx_dt','trans_dy_dt','trans_dz_dt',
+            'rot_dx_dt','rot_dy_dt','rot_dz_dt'
+          ]
+        )
+      except:
+        movement[s][t]['Movement_Regressors_dt'] = None
+
+  # Create a dictionary to store Movement_RelativeRMS_mean values per scan
+  task_number_dict = { "rfMRI_REST1_LR": 0, 
+                "rfMRI_REST1_RL": 0, 
+                "rfMRI_REST2_LR": 0, 
+                "rfMRI_REST2_RL": 0, 
+                "tfMRI_MOTOR_RL": 4, 
+                "tfMRI_MOTOR_LR": 4,
+                "tfMRI_WM_RL": 7, 
+                "tfMRI_WM_LR": 7,
+                "tfMRI_EMOTION_RL": 1, 
+                "tfMRI_EMOTION_LR": 1,
+                "tfMRI_GAMBLING_RL": 2, 
+                "tfMRI_GAMBLING_LR": 2, 
+                "tfMRI_LANGUAGE_RL": 3, 
+                "tfMRI_LANGUAGE_LR": 3, 
+                "tfMRI_RELATIONAL_RL": 5, 
+                "tfMRI_RELATIONAL_LR": 5, 
+                "tfMRI_SOCIAL_RL": 6, 
+                "tfMRI_SOCIAL_LR": 6}
+
+  relative_RMS_mean_dict = {}
+  for s in subjects:
+    for t in BOLD_NAMES:
+      relative_RMS_mean_dict[str(s)+t] = [s, t, task_number_dict[t], movement[s][t]['Movement_RelativeRMS_mean']]
+  # Create a dataframe to merge the demographics data onto
+  relative_RMS_means = pd.DataFrame.from_dict(relative_RMS_mean_dict, orient='index', columns = ['Subject','Run','task','Movement_RelativeRMS_mean'])
+  relative_RMS_means.to_csv(os.path.abspath(os.getcwd()) + sep + 'relative_RMS_means.csv', index=False)
+  relative_RMS_means_g = relative_RMS_means.groupby(['Subject','task'])
+  # Collapsed aross subject, task toa ccomidate concatenation of timeseries
+  relative_RMS_means_collapsed = pd.DataFrame(relative_RMS_means_g.agg(np.mean))
+  relative_RMS_means_collapsed.reset_index(inplace=True)
+  relative_RMS_means_collapsed.to_csv(os.path.abspath(os.getcwd()) + sep + 'relative_RMS_means_collapsed.csv', index=False)
+
+  # Merge demographics and motion data, duplicating dmeographics information to fill in all scans per subject
+  regressors = pd.merge(relative_RMS_means, demographics, how='left', on='Subject')
+  regressors.to_csv(os.path.abspath(os.getcwd()) + sep + 'regressors.csv', index=False)
+else:
+  relative_RMS_means = pd.read_csv(os.path.abspath(os.getcwd()) + sep + 'relative_RMS_means.csv')
+  relative_RMS_means_collapsed = pd.read_csv(os.path.abspath(os.getcwd()) + sep + 'relative_RMS_means_collapsed.csv')
+  regressors = pd.read_csv(os.path.abspath(os.getcwd()) + sep + 'regressors.csv')
+
 
 ################################
 #### Making the input data #####
@@ -544,8 +695,6 @@ if True:
         except:
           tasks_missing.append(f"{subject}: {task}")
    
-            
-
 ##################################
 #### Concatenating timeseries ####
 ##################################
@@ -1502,9 +1651,6 @@ if True:
   vif_info_centered['VIF'] = [variance_inflation_factor(X_network_connections_centered.values, i) for i in range(X_network_connections_centered.shape[1])]
   vif_info_centered['Column'] = X_network_connections_centered.columns
   vif_info_centered.sort_values('VIF', ascending=False, inplace=True)
-
-
-
 
 ##################################
 #### making test-train splits ####
