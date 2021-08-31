@@ -1561,7 +1561,9 @@ list_of_networks = pd.DataFrame(list_of_networks)
 
 
 feat_corr_net_connections = pd.DataFrame(pd.concat([feature_correlation_with_outcome,  list_of_connections,  list_of_networks, vif_info], axis=1))
-feat_corr_net_connections.columns = ['Correlation to outcome', 'Connections', 'Networks', "VIF"]
+#feat_corr_net_connections.columns = ['Correlation to outcome', 'Connections', 'Networks', "VIF"]
+feat_corr_net_connections.columns = ['Correlation to outcome', 'Connections', 'Networks']
+
 
 #Keep only features that have a correlation to the task greater than .1
 top_feat_corr_net_connections = feat_corr_net_connections[feat_corr_net_connections['Correlation to outcome'] > .1]
@@ -1585,20 +1587,19 @@ train_X_parcon_top = scaler.fit_transform(train_X_parcon_top)
 test_X_parcon_top = scaler.transform(test_X_parcon_top)
 
 
-  # Parcel connections top features only SVC
-  lin_clf_parcel_connections = svm.LinearSVC(C=.1)
-  lin_clf_parcel_connections.fit(train_X_parcon_top, train_y_parcon_top)
-  print('SVC Parcel Connection Training accuracy: ', lin_clf_parcel_connections.score(train_X_parcon_top, train_y_parcon_top))
-  print('SVC Parcel Connection Test accuracy: ', lin_clf_parcel_connections.score(test_X_parcon_top, test_y_parcon_top))
-  svm_coef_parcel_connections = pd.DataFrame(lin_clf_parcel_connections.coef_.T)
+# Parcel connections top features only SVC
+lin_clf_parcel_connections = svm.LinearSVC(C=.1)
+lin_clf_parcel_connections.fit(train_X_parcon_top, train_y_parcon_top)
+print('SVC Parcel Connection Training accuracy: ', lin_clf_parcel_connections.score(train_X_parcon_top, train_y_parcon_top))
+print('SVC Parcel Connection Test accuracy: ', lin_clf_parcel_connections.score(test_X_parcon_top, test_y_parcon_top))
+svm_coef_parcel_connections = pd.DataFrame(lin_clf_parcel_connections.coef_.T)
   
-   ##### Parcel connections #####
-  if True:
-      
-      
-      #Tune RFC hyperparameters
-      
-      # Number of trees in random forest
+##### Parcel connections #####if True:
+   
+   
+#Tune RFC hyperparameters
+
+# Number of trees in random forest
 n_estimators = [int(x) for x in np.linspace(start = 200, stop = 1000, num = 10)]
 # Number of features to consider at every split
 max_features = ['auto', 'sqrt']
