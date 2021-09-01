@@ -30,11 +30,19 @@ if True:
   from sklearn.model_selection import train_test_split
   import getpass
   import platform
-  #import hcp_utils as hcp
+  import hcp_utils as hcp
   import datetime as dt
   from nilearn import datasets
-  #import brainconn
+  import brainconn # pip install git+https://github.com/fiuneuro/brainconn@master
   import seaborn as sns
+  from sklearn.preprocessing import scale 
+  from sklearn import model_selection
+  from sklearn.model_selection import RepeatedKFold
+  from sklearn.model_selection import train_test_split
+  from sklearn.cross_decomposition import PLSRegression
+  from sklearn.metrics import mean_squared_error
+  from sklearn.model_selection import cross_val_predict
+  from sklearn.metrics import mean_squared_error, r2_score
 
 #record the start time 
 #start_time = time.time()
@@ -43,7 +51,7 @@ total_start_time = dt.datetime.now()
 
 sep = os.path.sep
 sys_name = platform.system() 
-
+visualization = False
 if getpass.getuser() == 'kyle':
   HCP_DIR = "S:\\HCP\\"
   HCP_DIR_REST = f"{HCP_DIR}hcp_rest\\subjects\\"
@@ -453,8 +461,6 @@ if True:
     adj_bin = brainconn.utils.binarize(brainconn.utils.threshold_proportional(adj_wei, p_thresh))
     return (adj_wei, p_thresh)
 
-
-
 # Import Demographic and behavioral data
 multi_dummy = True # Set True to create dummy columns per unique value in the categorical columns of Age, Gender, Acquisition, Release
 if False:
@@ -839,10 +845,10 @@ if True:
   parcel_average_motor = np.zeros((len(motor_data_dict), N_PARCELS), dtype='float64')
   parcel_average_wm = np.zeros((len(wm_data_dict), N_PARCELS), dtype='float64')
   parcel_average_gambling = np.zeros((len(gambling_data_dict), N_PARCELS), dtype='float64')
-  parcel_average_emotion = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
-  parcel_average_language = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
-  parcel_average_relational = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
-  parcel_average_social = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
+  parcel_average_emotion = np.zeros((len(emotion_data_dict), N_PARCELS), dtype='float64')
+  parcel_average_language = np.zeros((len(language_data_dict), N_PARCELS), dtype='float64')
+  parcel_average_relational = np.zeros((len(relational_data_dict), N_PARCELS), dtype='float64')
+  parcel_average_social = np.zeros((len(social_data_dict), N_PARCELS), dtype='float64')
 
   if glasser:
     #calculate average for each parcel in each task
@@ -903,13 +909,58 @@ if True:
     relational_parcels = pd.DataFrame(parcel_average_relational, columns= region_transpose['Network'])
     social_parcels = pd.DataFrame(parcel_average_social, columns= region_transpose['Network'])
   else:
-    motor_parcels = pd.DataFrame(parcel_average_motor, columns= networks)
-    wm_parcels = pd.DataFrame(parcel_average_wm, columns= networks)
-    gambling_parcels = pd.DataFrame(parcel_average_gambling, columns= networks)
-    emotion_parcels = pd.DataFrame(parcel_average_emotion, columns= networks)
-    language_parcels = pd.DataFrame(parcel_average_language, columns= networks)
-    relational_parcels = pd.DataFrame(parcel_average_relational, columns= networks)
-    social_parcels = pd.DataFrame(parcel_average_social, columns= networks)
+    motor_parcels = pd.DataFrame(parcel_average_motor, columns= regions)
+    wm_parcels = pd.DataFrame(parcel_average_wm, columns= regions)
+    gambling_parcels = pd.DataFrame(parcel_average_gambling, columns= regions)
+    emotion_parcels = pd.DataFrame(parcel_average_emotion, columns= regions)
+    language_parcels = pd.DataFrame(parcel_average_language, columns= regions)
+    relational_parcels = pd.DataFrame(parcel_average_relational, columns= regions)
+    social_parcels = pd.DataFrame(parcel_average_social, columns= regions)
+
+  if visualization:
+    emotion_parcel_ex = emotion_parcels.iloc[0]
+    gambling_parcel_ex = gambling_parcels.iloc[0]
+    language_parcel_ex = language_parcels.iloc[0]
+    motor_parcel_ex = motor_parcels.iloc[0]
+    relational_parcel_ex = relational_parcels.iloc[0]
+    social_parcel_ex = social_parcels.iloc[0]
+    wm_parcel_ex = wm_parcels.iloc[0]
+    parcel_ex_full = np.array([emotion_parcel_ex, gambling_parcel_ex, language_parcel_ex, motor_parcel_ex, relational_parcel_ex, social_parcel_ex, wm_parcel_ex])
+    ax_parcel = sns.heatmap(parcel_ex_full, cbar=False, xticklabels=False)
+    ax_parcel.set_yticklabels(['Emotion Processing','Gambling','Language','Motor','Relational Processing','Social','Working Memory'], rotation=0)
+    plt.xlabel('Parcels')
+    plt.ylabel('Tasks')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Visualization.png', transparent=True)
+
+    network_ex_full = pd.DataFrame(parcel_ex_full, columns= networks)
+    scaler = StandardScaler() 
+    network_ex_full = network_ex_full.groupby(lambda x:x, axis=1).sum()
+    ax_network = sns.heatmap(network_ex_full, cbar=False, xticklabels=False)
+    ax_network.set_yticklabels(['Emotion Processing','Gambling','Language','Motor','Relational Processing','Social','Working Memory'], rotation=0)
+    # ax_network.set_xticklabels([
+    #   'Ant IPS',
+    #   'Aud',
+    #   'Basal',
+    #   'Cereb',
+    #   'Cing-Ins',
+    #   'D Att',
+    #   'DMN',
+    #   'Dors PCC',
+    #   'L V Att',
+    #   'Language',
+    #   'Motor',
+    #   'Occ post',
+    #   'R V Att',
+    #   'Salience',
+    #   'Striate',
+    #   'Temporal',
+    #   'Vis Sec'
+    # ])
+    plt.xlabel('Networks')
+    plt.ylabel('Tasks')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Visualization no-network-names.png', transparent=True)
+
+        
 
   # Add the categorical label to each dataframe
   emotion_parcels['task'] = 1
@@ -939,13 +990,13 @@ if True:
   del parcel_average_relational
   del parcel_average_social
 
-  del motor_parcels
-  del wm_parcels
-  del gambling_parcels 
-  del emotion_parcels
-  del language_parcels
-  del relational_parcels
-  del social_parcels
+  # del motor_parcels
+  # del wm_parcels
+  # del gambling_parcels 
+  # del emotion_parcels
+  # del language_parcels
+  # del relational_parcels
+  # del social_parcels
 
 #############################################
 #### Parcel Connection-based input data #####
@@ -1007,6 +1058,47 @@ if True:
         fc_matrix_relational[subject] = np.corrcoef(ts.T)
       for subject, ts in enumerate(social_data_dict.values()):
         fc_matrix_social[subject] = np.corrcoef(ts.T)
+  
+
+  if visualization:
+    emotion_parcel_con_ex = fc_matrix_emotion[0]
+    mask = np.zeros_like(emotion_parcel_con_ex)
+    mask[np.triu_indices_from(mask)] = True
+
+    ax_parcel_con_emotion = sns.heatmap(emotion_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_parcel_con_emotion.set_title('Emotion Processing')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Emotion.png', transparent=True)
+
+    gambling_parcel_con_ex = fc_matrix_gambling[0]
+    ax_parcel_con_gambling = sns.heatmap(gambling_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_parcel_con_gambling.set_title('Gambling')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Gambling.png', transparent=True)
+
+    language_parcel_con_ex = fc_matrix_language[0]
+    ax_parcel_con_language = sns.heatmap(language_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_parcel_con_language.set_title('Language')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Language.png', transparent=True)
+
+    motor_parcel_con_ex = fc_matrix_motor[0]
+    ax_parcel_con_motor = sns.heatmap(motor_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_parcel_con_motor.set_title('Motor')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Motor.png', transparent=True)
+
+    relational_parcel_con_ex = fc_matrix_relational[0]
+    ax_parcel_con_relational = sns.heatmap(relational_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_parcel_con_relational.set_title('Relational Processing')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Relational Processing.png', transparent=True)
+
+    social_parcel_con_ex = fc_matrix_social[0]
+    ax_parcel_con_social = sns.heatmap(social_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_parcel_con_social.set_title('Social')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Social.png', transparent=True)
+
+    wm_parcel_con_ex = fc_matrix_wm[0]
+    ax_parcel_con_wm = sns.heatmap(wm_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_parcel_con_wm.set_title('Working Memory')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Working Memory.png', transparent=True)
+
 
 
   # Initialize the vector form of each task, where each row is a participant and each column is a connection
@@ -1088,6 +1180,8 @@ if True:
   # Make input data
   X_parcel_connections = parcel_connections_task_data.iloc[:, :-1]
   y_parcel_connections = parcel_connections_task_data.iloc[:,-1]
+  
+
   # Free up memory
   if False:
     # Delete unused preprocessing variables
@@ -1416,6 +1510,7 @@ if True:
           #print(f"Subject {subject} Social timeseries is of the wrong dimenstions: {ts.shape} instead of ({TIMEPOINTS_SOCIAL}, {N_PARCELS})")
           excluded['social'] = excluded['social'] + 1
       
+    
   #Make the dataframes
   parcel_transpose_motor_dfs = []
   parcel_transpose_motor = list(parcel_transpose_motor)
@@ -1512,6 +1607,45 @@ if True:
     fc_matrix_relational_networks[subject] = np.corrcoef(ts)
   for subject, ts in enumerate(network_columns_social):
     fc_matrix_social_networks[subject] = np.corrcoef(ts)
+
+  if visualization:
+    emotion_network_con_ex = fc_matrix_emotion_networks[0]
+    mask = np.zeros_like(emotion_network_con_ex)
+    mask[np.triu_indices_from(mask)] = True
+
+    ax_network_con_emotion = sns.heatmap(emotion_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_network_con_emotion.set_title('Emotion Processing')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Emotion.png', transparent=True)
+
+    gambling_network_con_ex = fc_matrix_gambling_networks[0]
+    ax_network_con_gambling = sns.heatmap(gambling_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_network_con_gambling.set_title('Gambling')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Gambling.png', transparent=True)
+
+    language_network_con_ex = fc_matrix_language_networks[0]
+    ax_network_con_language = sns.heatmap(language_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_network_con_language.set_title('Language')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Language.png', transparent=True)
+
+    motor_network_con_ex = fc_matrix_motor_networks[0]
+    ax_network_con_motor = sns.heatmap(motor_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_network_con_motor.set_title('Motor')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Motor.png', transparent=True)
+
+    relational_network_con_ex = fc_matrix_relational_networks[0]
+    ax_network_con_relational = sns.heatmap(relational_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_network_con_relational.set_title('Relational Processing')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Relational Processing.png', transparent=True)
+
+    social_network_con_ex = fc_matrix_social_networks[0]
+    ax_network_con_social = sns.heatmap(social_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_network_con_social.set_title('Social')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Social.png', transparent=True)
+
+    wm_network_con_ex = fc_matrix_wm_networks[0]
+    ax_network_con_wm = sns.heatmap(wm_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_network_con_wm.set_title('Working Memory')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Working Memory.png', transparent=True)
 
   #Make a vectorized form of the connections (unique FC matrix values)
   if glasser:
