@@ -930,35 +930,35 @@ if True:
     ax_parcel.set_yticklabels(['Emotion Processing','Gambling','Language','Motor','Relational Processing','Social','Working Memory'], rotation=0)
     plt.xlabel('Parcels')
     plt.ylabel('Tasks')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Visualization.png', transparent=True)
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Visualization.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     network_ex_full = pd.DataFrame(parcel_ex_full, columns= networks)
     scaler = StandardScaler() 
     network_ex_full = network_ex_full.groupby(lambda x:x, axis=1).sum()
-    ax_network = sns.heatmap(network_ex_full, cbar=False, xticklabels=False)
+    ax_network = sns.heatmap(network_ex_full, cbar=False)
     ax_network.set_yticklabels(['Emotion Processing','Gambling','Language','Motor','Relational Processing','Social','Working Memory'], rotation=0)
-    # ax_network.set_xticklabels([
-    #   'Ant IPS',
-    #   'Aud',
-    #   'Basal',
-    #   'Cereb',
-    #   'Cing-Ins',
-    #   'D Att',
-    #   'DMN',
-    #   'Dors PCC',
-    #   'L V Att',
-    #   'Language',
-    #   'Motor',
-    #   'Occ post',
-    #   'R V Att',
-    #   'Salience',
-    #   'Striate',
-    #   'Temporal',
-    #   'Vis Sec'
-    # ])
+    ax_network.set_xticklabels([
+      'Ant IPS',
+      'Aud',
+      'Basal',
+      'Cereb',
+      'Cing-Ins',
+      'D Att',
+      'DMN',
+      'Dors PCC',
+      'L V Att',
+      'Language',
+      'Motor',
+      'Occ post',
+      'R V Att',
+      'Salience',
+      'Striate',
+      'Temporal',
+      'Vis Sec'
+    ])
     plt.xlabel('Networks')
     plt.ylabel('Tasks')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Visualization no-network-names.png', transparent=True)
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Visualization.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
         
 
@@ -1067,37 +1067,37 @@ if True:
 
     ax_parcel_con_emotion = sns.heatmap(emotion_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_parcel_con_emotion.set_title('Emotion Processing')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Emotion.png', transparent=True)
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Emotion.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     gambling_parcel_con_ex = fc_matrix_gambling[0]
     ax_parcel_con_gambling = sns.heatmap(gambling_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_parcel_con_gambling.set_title('Gambling')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Gambling.png', transparent=True)
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Gambling.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     language_parcel_con_ex = fc_matrix_language[0]
     ax_parcel_con_language = sns.heatmap(language_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_parcel_con_language.set_title('Language')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Language.png', transparent=True)
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Language.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     motor_parcel_con_ex = fc_matrix_motor[0]
     ax_parcel_con_motor = sns.heatmap(motor_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_parcel_con_motor.set_title('Motor')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Motor.png', transparent=True)
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Motor.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     relational_parcel_con_ex = fc_matrix_relational[0]
     ax_parcel_con_relational = sns.heatmap(relational_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_parcel_con_relational.set_title('Relational Processing')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Relational Processing.png', transparent=True)
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Relational Processing.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     social_parcel_con_ex = fc_matrix_social[0]
     ax_parcel_con_social = sns.heatmap(social_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_parcel_con_social.set_title('Social')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Social.png', transparent=True)
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Social.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     wm_parcel_con_ex = fc_matrix_wm[0]
     ax_parcel_con_wm = sns.heatmap(wm_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_parcel_con_wm.set_title('Working Memory')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Working Memory.png', transparent=True)
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Working Memory.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
 
 
@@ -1615,37 +1615,37 @@ if True:
 
     ax_network_con_emotion = sns.heatmap(emotion_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_network_con_emotion.set_title('Emotion Processing')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Emotion.png', transparent=True)
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Emotion.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     gambling_network_con_ex = fc_matrix_gambling_networks[0]
     ax_network_con_gambling = sns.heatmap(gambling_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_network_con_gambling.set_title('Gambling')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Gambling.png', transparent=True)
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Gambling.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     language_network_con_ex = fc_matrix_language_networks[0]
     ax_network_con_language = sns.heatmap(language_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_network_con_language.set_title('Language')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Language.png', transparent=True)
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Language.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     motor_network_con_ex = fc_matrix_motor_networks[0]
     ax_network_con_motor = sns.heatmap(motor_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_network_con_motor.set_title('Motor')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Motor.png', transparent=True)
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Motor.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     relational_network_con_ex = fc_matrix_relational_networks[0]
     ax_network_con_relational = sns.heatmap(relational_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_network_con_relational.set_title('Relational Processing')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Relational Processing.png', transparent=True)
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Relational Processing.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     social_network_con_ex = fc_matrix_social_networks[0]
     ax_network_con_social = sns.heatmap(social_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_network_con_social.set_title('Social')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Social.png', transparent=True)
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Social.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     wm_network_con_ex = fc_matrix_wm_networks[0]
     ax_network_con_wm = sns.heatmap(wm_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_network_con_wm.set_title('Working Memory')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Working Memory.png', transparent=True)
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Working Memory.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
   #Make a vectorized form of the connections (unique FC matrix values)
   if glasser:
