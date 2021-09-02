@@ -3,7 +3,7 @@
 """
 Created on Mon Dec 21 11:14:43 2020
 
-@author: cjrichier
+@author: cjrichier, kabaacke-psy
 """
 glasser = False #Set to true to use the smaller dataset with the glasser parcelation applied
 #################################################
@@ -30,12 +30,30 @@ if True:
   from sklearn.model_selection import train_test_split
   import getpass
   import platform
-  #import hcp_utils as hcp
+  import hcp_utils as hcp
   import datetime as dt
   from nilearn import datasets
-  #import brainconn
+  import brainconn # pip install git+https://github.com/fiuneuro/brainconn@master
   import seaborn as sns
+  from sklearn.preprocessing import scale 
+  from sklearn import model_selection
+  from sklearn.model_selection import RepeatedKFold
+  from sklearn.model_selection import train_test_split
+  from sklearn.cross_decomposition import PLSRegression
+  from sklearn.metrics import mean_squared_error
+  from sklearn.model_selection import cross_val_predict
+  from sklearn.metrics import mean_squared_error, r2_score
+  from collections import defaultdict
 
+  import matplotlib.pyplot as plt
+  import numpy as np
+  from scipy.stats import spearmanr
+  from scipy.cluster import hierarchy
+
+  from sklearn.datasets import load_breast_cancer
+  from sklearn.ensemble import RandomForestClassifier
+  from sklearn.inspection import permutation_importance
+  from sklearn.model_selection import train_test_split
 #record the start time 
 #start_time = time.time()
 total_start_time = dt.datetime.now()
@@ -43,14 +61,14 @@ total_start_time = dt.datetime.now()
 
 sep = os.path.sep
 sys_name = platform.system() 
-
+visualization = False
 if getpass.getuser() == 'kyle':
   HCP_DIR = "S:\\HCP\\"
   HCP_DIR_REST = f"{HCP_DIR}hcp_rest\\subjects\\"
   HCP_DIR_TASK = f"{HCP_DIR}hcp_task\\subjects\\"
   HCP_1200 = f"{HCP_DIR}HCP_1200\\"
   basepath = str("S:\\HCP\\HCP_1200\\{}\\MNINonLinear\\Results\\")
-  subjects = pd.read_csv('C:\\Users\\kyle\\repos\\HCP-Task-Classification-01\\subject_list.csv')['ID']
+  subjects = pd.read_csv('C:\\Users\\kyle\\repos\\HCP-Analyses\\subject_list.csv')['ID']
   path_pattern = "S:\\HCP\\HCP_1200\\{}\\MNINonLinear\\Results\\{}\\{}.npy"
 else:
   HCP_DIR = "/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/HCP_1200_Numpy/"
@@ -414,6 +432,36 @@ if True:
 
     return avg_data
 
+  def calculate_FD_P(in_file): 
+    # Function taken from  FCP-INDI/C-PAC/CPAC/generate_motion_statistics/generate_motion_statistics.py
+    """
+    Method to calculate Framewise Displacement (FD)  as per Power et al., 2012
+    Parameters
+    ----------
+    in_file : string
+        movement parameters vector file path
+    Returns
+    -------
+    out_file : string
+        Frame-wise displacement mat
+        file path
+
+
+    # Modified to return a vector and using the order of the columns provided in HCP_1200
+    """
+
+    motion_params = np.genfromtxt(in_file).T
+
+    rotations = np.transpose(np.abs(np.diff(motion_params[3:6, :])))
+    translations = np.transpose(np.abs(np.diff(motion_params[0:3, :])))
+
+    fd = np.sum(translations, axis=1) + \
+      (50 * np.pi / 180) * np.sum(rotations, axis=1)
+
+    fd = np.insert(fd, 0, 0)
+
+    return fd
+
   def brainconn_arrays(corr, p_thresh=0.2):
     '''
       Takes a correlational matrix
@@ -423,8 +471,127 @@ if True:
     adj_bin = brainconn.utils.binarize(brainconn.utils.threshold_proportional(adj_wei, p_thresh))
     return (adj_wei, p_thresh)
 
+# Import Demographic and behavioral data
+multi_dummy = True # Set True to create dummy columns per unique value in the categorical columns of Age, Gender, Acquisition, Release
+if False:
+  behavior_full = pd.read_csv(HCP_DIR + 'Behavior' + sep + 'behavior.csv')
+  demographics = behavior_full[['Subject','Release','Acquisition','Gender','Age']]
+  if multi_dummy:
+    demographics = demographics.join(pd.get_dummies(demographics['Age'], prefix='Age_'), how='outer')
+    demographics = demographics.join(pd.get_dummies(demographics['Gender'], prefix='Gender_'), how='outer')
+    demographics = demographics.join(pd.get_dummies(demographics['Acquisition'], prefix='Acquisition_'), how='outer')
+    demographics = demographics.join(pd.get_dummies(demographics['Release'], prefix='Release_'), how='outer')
+  demographics.to_csv(os.path.abspath(os.getcwd()) + sep + 'demographics_with_dummy_vars.csv', index=False)
+else:
+  demographics = pd.read_csv(os.path.abspath(os.getcwd()) + sep + 'demographics_with_dummy_vars.csv')
 
-  
+# Import movement information
+if False:
+  movement = {}
+  for s in subjects:
+    movement[s] = {}
+    for t in BOLD_NAMES:
+      movement[s][t] = {}
+      try:
+        movement[s][t]['Physio_log'] = pd.read_csv( # See page 38 of HCP_1200 release manual. 400HZ approx 288 samples per frame
+          path_pattern[:-6].format(s, t) + t + '_Physio_log.txt',
+          sep='\t', 
+          header=None, 
+          names=[
+            'trigger_pulse','respiration','pulse_oximeter'
+          ]
+        )
+        #We can shift the timescale on this 
+      except:
+        movement[s][t]['Physio_log'] = None
+      try:
+        movement[s][t]['Movement_RelativeRMS_mean'] = pd.read_csv( # mean amount of motion between neighboring timepoints
+          path_pattern[:-6].format(s, t) + 'Movement_RelativeRMS_mean.txt',
+          sep='\t',
+          header=None,
+          names=['0']
+        )['0'][0]
+      except:
+        movement[s][t]['Movement_RelativeRMS_mean'] = None
+      try:
+        movement[s][t]['Movement_RelativeRMS'] = pd.read_csv( # amount of motion from the previous time point, alternative to FD see https://www.mail-archive.com/hcp-users@humanconnectome.org/msg04444.html
+          path_pattern[:-6].format(s, t) +'Movement_RelativeRMS.txt',
+          sep='\t',
+          header=None, 
+          names = ['Movement_RelativeRMS']
+        )
+      except:
+        movement[s][t]['Movement_RelativeRMS'] = None
+      try:
+        movement[s][t]['Movement_Regressors'] = pd.read_csv( # See HCP1200 release manual page 96, also see https://www.mail-archive.com/hcp-users@humanconnectome.org/msg02961.html
+          path_pattern[:-6].format(s, t) + 'Movement_Regressors.txt',
+          sep='\t',
+          header=None,
+          names = [
+            'trans_x','trans_y','trans_z',
+            'rot_x','rot_y','rot_z',
+            'trans_dx','trans_dy','trans_dz',
+            'rot_dx','rot_dy','rot_dz'
+          ]
+        )
+      except:
+        movement[s][t]['Movement_Regressors'] = None
+      try:
+          movement[s][t]['Movement_Regressors_dt'] = pd.read_csv( # Made from removing the mean and linear trend from each variable in Movement_Regressors.txt
+          path_pattern[:-6].format(s, t) + 'Movement_Regressors_dt.txt',
+          sep='\t',
+          header=None,
+          names = [
+            'trans_x_dt','trans_y_dt','trans_z_dt',
+            'rot_x_dt','rot_y_dt','rot_z_dt',
+            'trans_dx_dt','trans_dy_dt','trans_dz_dt',
+            'rot_dx_dt','rot_dy_dt','rot_dz_dt'
+          ]
+        )
+      except:
+        movement[s][t]['Movement_Regressors_dt'] = None
+
+  # Create a dictionary to store Movement_RelativeRMS_mean values per scan
+  task_number_dict = { "rfMRI_REST1_LR": 0, 
+                "rfMRI_REST1_RL": 0, 
+                "rfMRI_REST2_LR": 0, 
+                "rfMRI_REST2_RL": 0, 
+                "tfMRI_MOTOR_RL": 4, 
+                "tfMRI_MOTOR_LR": 4,
+                "tfMRI_WM_RL": 7, 
+                "tfMRI_WM_LR": 7,
+                "tfMRI_EMOTION_RL": 1, 
+                "tfMRI_EMOTION_LR": 1,
+                "tfMRI_GAMBLING_RL": 2, 
+                "tfMRI_GAMBLING_LR": 2, 
+                "tfMRI_LANGUAGE_RL": 3, 
+                "tfMRI_LANGUAGE_LR": 3, 
+                "tfMRI_RELATIONAL_RL": 5, 
+                "tfMRI_RELATIONAL_LR": 5, 
+                "tfMRI_SOCIAL_RL": 6, 
+                "tfMRI_SOCIAL_LR": 6}
+
+  relative_RMS_mean_dict = {}
+  for s in subjects:
+    for t in BOLD_NAMES:
+      relative_RMS_mean_dict[str(s)+t] = [s, t, task_number_dict[t], movement[s][t]['Movement_RelativeRMS_mean']]
+  # Create a dataframe to merge the demographics data onto
+  relative_RMS_means = pd.DataFrame.from_dict(relative_RMS_mean_dict, orient='index', columns = ['Subject','Run','task','Movement_RelativeRMS_mean'])
+  relative_RMS_means.to_csv(os.path.abspath(os.getcwd()) + sep + 'relative_RMS_means.csv', index=False)
+  relative_RMS_means_g = relative_RMS_means.groupby(['Subject','task'])
+  # Collapsed aross subject, task toa ccomidate concatenation of timeseries
+  relative_RMS_means_collapsed = pd.DataFrame(relative_RMS_means_g.agg(np.mean))
+  relative_RMS_means_collapsed.reset_index(inplace=True)
+  relative_RMS_means_collapsed.to_csv(os.path.abspath(os.getcwd()) + sep + 'relative_RMS_means_collapsed.csv', index=False)
+
+  # Merge demographics and motion data, duplicating dmeographics information to fill in all scans per subject
+  regressors = pd.merge(relative_RMS_means, demographics, how='left', on='Subject')
+  regressors.to_csv(os.path.abspath(os.getcwd()) + sep + 'regressors.csv', index=False)
+else:
+  relative_RMS_means = pd.read_csv(os.path.abspath(os.getcwd()) + sep + 'relative_RMS_means.csv')
+  relative_RMS_means_collapsed = pd.read_csv(os.path.abspath(os.getcwd()) + sep + 'relative_RMS_means_collapsed.csv')
+  regressors = pd.read_csv(os.path.abspath(os.getcwd()) + sep + 'regressors.csv')
+
 
 ################################
 #### Making the input data #####
@@ -544,8 +711,6 @@ if True:
         except:
           tasks_missing.append(f"{subject}: {task}")
    
-            
-
 ##################################
 #### Concatenating timeseries ####
 ##################################
@@ -690,10 +855,10 @@ if True:
   parcel_average_motor = np.zeros((len(motor_data_dict), N_PARCELS), dtype='float64')
   parcel_average_wm = np.zeros((len(wm_data_dict), N_PARCELS), dtype='float64')
   parcel_average_gambling = np.zeros((len(gambling_data_dict), N_PARCELS), dtype='float64')
-  parcel_average_emotion = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
-  parcel_average_language = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
-  parcel_average_relational = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
-  parcel_average_social = np.zeros((N_SUBJECTS, N_PARCELS), dtype='float64')
+  parcel_average_emotion = np.zeros((len(emotion_data_dict), N_PARCELS), dtype='float64')
+  parcel_average_language = np.zeros((len(language_data_dict), N_PARCELS), dtype='float64')
+  parcel_average_relational = np.zeros((len(relational_data_dict), N_PARCELS), dtype='float64')
+  parcel_average_social = np.zeros((len(social_data_dict), N_PARCELS), dtype='float64')
 
   if glasser:
     #calculate average for each parcel in each task
@@ -754,13 +919,58 @@ if True:
     relational_parcels = pd.DataFrame(parcel_average_relational, columns= region_transpose['Network'])
     social_parcels = pd.DataFrame(parcel_average_social, columns= region_transpose['Network'])
   else:
-    motor_parcels = pd.DataFrame(parcel_average_motor, columns= networks)
-    wm_parcels = pd.DataFrame(parcel_average_wm, columns= networks)
-    gambling_parcels = pd.DataFrame(parcel_average_gambling, columns= networks)
-    emotion_parcels = pd.DataFrame(parcel_average_emotion, columns= networks)
-    language_parcels = pd.DataFrame(parcel_average_language, columns= networks)
-    relational_parcels = pd.DataFrame(parcel_average_relational, columns= networks)
-    social_parcels = pd.DataFrame(parcel_average_social, columns= networks)
+    motor_parcels = pd.DataFrame(parcel_average_motor, columns= regions)
+    wm_parcels = pd.DataFrame(parcel_average_wm, columns= regions)
+    gambling_parcels = pd.DataFrame(parcel_average_gambling, columns= regions)
+    emotion_parcels = pd.DataFrame(parcel_average_emotion, columns= regions)
+    language_parcels = pd.DataFrame(parcel_average_language, columns= regions)
+    relational_parcels = pd.DataFrame(parcel_average_relational, columns= regions)
+    social_parcels = pd.DataFrame(parcel_average_social, columns= regions)
+
+  if visualization:
+    emotion_parcel_ex = emotion_parcels.iloc[0]
+    gambling_parcel_ex = gambling_parcels.iloc[0]
+    language_parcel_ex = language_parcels.iloc[0]
+    motor_parcel_ex = motor_parcels.iloc[0]
+    relational_parcel_ex = relational_parcels.iloc[0]
+    social_parcel_ex = social_parcels.iloc[0]
+    wm_parcel_ex = wm_parcels.iloc[0]
+    parcel_ex_full = np.array([emotion_parcel_ex, gambling_parcel_ex, language_parcel_ex, motor_parcel_ex, relational_parcel_ex, social_parcel_ex, wm_parcel_ex])
+    ax_parcel = sns.heatmap(parcel_ex_full, cbar=False, xticklabels=False)
+    ax_parcel.set_yticklabels(['Emotion Processing','Gambling','Language','Motor','Relational Processing','Social','Working Memory'], rotation=0)
+    plt.xlabel('Parcels')
+    plt.ylabel('Tasks')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Visualization.png', transparent=True, dpi = 1000, bbox_inches='tight')
+
+    network_ex_full = pd.DataFrame(parcel_ex_full, columns= networks)
+    scaler = StandardScaler() 
+    network_ex_full = network_ex_full.groupby(lambda x:x, axis=1).sum()
+    ax_network = sns.heatmap(network_ex_full, cbar=False)
+    ax_network.set_yticklabels(['Emotion Processing','Gambling','Language','Motor','Relational Processing','Social','Working Memory'], rotation=0)
+    ax_network.set_xticklabels([
+      'Ant IPS',
+      'Aud',
+      'Basal',
+      'Cereb',
+      'Cing-Ins',
+      'D Att',
+      'DMN',
+      'Dors PCC',
+      'L V Att',
+      'Language',
+      'Motor',
+      'Occ post',
+      'R V Att',
+      'Salience',
+      'Striate',
+      'Temporal',
+      'Vis Sec'
+    ])
+    plt.xlabel('Networks')
+    plt.ylabel('Tasks')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Visualization.png', transparent=True, dpi = 1000, bbox_inches='tight')
+
+        
 
   # Add the categorical label to each dataframe
   emotion_parcels['task'] = 1
@@ -790,13 +1000,13 @@ if True:
   del parcel_average_relational
   del parcel_average_social
 
-  del motor_parcels
-  del wm_parcels
-  del gambling_parcels 
-  del emotion_parcels
-  del language_parcels
-  del relational_parcels
-  del social_parcels
+  # del motor_parcels
+  # del wm_parcels
+  # del gambling_parcels 
+  # del emotion_parcels
+  # del language_parcels
+  # del relational_parcels
+  # del social_parcels
 
 #############################################
 #### Parcel Connection-based input data #####
@@ -858,6 +1068,47 @@ if True:
         fc_matrix_relational[subject] = np.corrcoef(ts.T)
       for subject, ts in enumerate(social_data_dict.values()):
         fc_matrix_social[subject] = np.corrcoef(ts.T)
+  
+
+  if visualization:
+    emotion_parcel_con_ex = fc_matrix_emotion[0]
+    mask = np.zeros_like(emotion_parcel_con_ex)
+    mask[np.triu_indices_from(mask)] = True
+
+    ax_parcel_con_emotion = sns.heatmap(emotion_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_parcel_con_emotion.set_title('Emotion Processing')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Emotion.png', transparent=True, dpi = 1000, bbox_inches='tight')
+
+    gambling_parcel_con_ex = fc_matrix_gambling[0]
+    ax_parcel_con_gambling = sns.heatmap(gambling_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_parcel_con_gambling.set_title('Gambling')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Gambling.png', transparent=True, dpi = 1000, bbox_inches='tight')
+
+    language_parcel_con_ex = fc_matrix_language[0]
+    ax_parcel_con_language = sns.heatmap(language_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_parcel_con_language.set_title('Language')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Language.png', transparent=True, dpi = 1000, bbox_inches='tight')
+
+    motor_parcel_con_ex = fc_matrix_motor[0]
+    ax_parcel_con_motor = sns.heatmap(motor_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_parcel_con_motor.set_title('Motor')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Motor.png', transparent=True, dpi = 1000, bbox_inches='tight')
+
+    relational_parcel_con_ex = fc_matrix_relational[0]
+    ax_parcel_con_relational = sns.heatmap(relational_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_parcel_con_relational.set_title('Relational Processing')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Relational Processing.png', transparent=True, dpi = 1000, bbox_inches='tight')
+
+    social_parcel_con_ex = fc_matrix_social[0]
+    ax_parcel_con_social = sns.heatmap(social_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_parcel_con_social.set_title('Social')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Social.png', transparent=True, dpi = 1000, bbox_inches='tight')
+
+    wm_parcel_con_ex = fc_matrix_wm[0]
+    ax_parcel_con_wm = sns.heatmap(wm_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_parcel_con_wm.set_title('Working Memory')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Working Memory.png', transparent=True, dpi = 1000, bbox_inches='tight')
+
 
 
   # Initialize the vector form of each task, where each row is a participant and each column is a connection
@@ -939,6 +1190,8 @@ if True:
   # Make input data
   X_parcel_connections = parcel_connections_task_data.iloc[:, :-1]
   y_parcel_connections = parcel_connections_task_data.iloc[:,-1]
+  
+
   # Free up memory
   if False:
     # Delete unused preprocessing variables
@@ -1267,6 +1520,7 @@ if True:
           #print(f"Subject {subject} Social timeseries is of the wrong dimenstions: {ts.shape} instead of ({TIMEPOINTS_SOCIAL}, {N_PARCELS})")
           excluded['social'] = excluded['social'] + 1
       
+    
   #Make the dataframes
   parcel_transpose_motor_dfs = []
   parcel_transpose_motor = list(parcel_transpose_motor)
@@ -1363,6 +1617,45 @@ if True:
     fc_matrix_relational_networks[subject] = np.corrcoef(ts)
   for subject, ts in enumerate(network_columns_social):
     fc_matrix_social_networks[subject] = np.corrcoef(ts)
+
+  if visualization:
+    emotion_network_con_ex = fc_matrix_emotion_networks[0]
+    mask = np.zeros_like(emotion_network_con_ex)
+    mask[np.triu_indices_from(mask)] = True
+
+    ax_network_con_emotion = sns.heatmap(emotion_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_network_con_emotion.set_title('Emotion Processing')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Emotion.png', transparent=True, dpi = 1000, bbox_inches='tight')
+
+    gambling_network_con_ex = fc_matrix_gambling_networks[0]
+    ax_network_con_gambling = sns.heatmap(gambling_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_network_con_gambling.set_title('Gambling')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Gambling.png', transparent=True, dpi = 1000, bbox_inches='tight')
+
+    language_network_con_ex = fc_matrix_language_networks[0]
+    ax_network_con_language = sns.heatmap(language_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_network_con_language.set_title('Language')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Language.png', transparent=True, dpi = 1000, bbox_inches='tight')
+
+    motor_network_con_ex = fc_matrix_motor_networks[0]
+    ax_network_con_motor = sns.heatmap(motor_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_network_con_motor.set_title('Motor')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Motor.png', transparent=True, dpi = 1000, bbox_inches='tight')
+
+    relational_network_con_ex = fc_matrix_relational_networks[0]
+    ax_network_con_relational = sns.heatmap(relational_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_network_con_relational.set_title('Relational Processing')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Relational Processing.png', transparent=True, dpi = 1000, bbox_inches='tight')
+
+    social_network_con_ex = fc_matrix_social_networks[0]
+    ax_network_con_social = sns.heatmap(social_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_network_con_social.set_title('Social')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Social.png', transparent=True, dpi = 1000, bbox_inches='tight')
+
+    wm_network_con_ex = fc_matrix_wm_networks[0]
+    ax_network_con_wm = sns.heatmap(wm_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
+    ax_network_con_wm.set_title('Working Memory')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Working Memory.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
   #Make a vectorized form of the connections (unique FC matrix values)
   if glasser:
@@ -1512,7 +1805,7 @@ if True:
 #######################################
 #### Checking for multicolinearity ####
 #######################################
-if True: 
+if False: 
   import seaborn as sns
   import matplotlib.pyplot as plt
 
@@ -1529,6 +1822,9 @@ if True:
   vif_info_centered['VIF'] = [variance_inflation_factor(X_network_connections_centered.values, i) for i in range(X_network_connections_centered.shape[1])]
   vif_info_centered['Column'] = X_network_connections_centered.columns
   vif_info_centered.sort_values('VIF', ascending=False, inplace=True)
+
+
+
 
 ##############################################
 #### parcel connections feature selection ####
@@ -1552,12 +1848,22 @@ if True:
     list_of_connections = np.array(vector_names(regions, []))
     list_of_networks = np.array(vector_names(networks, []))
 
-parcel_connection_corr = np.corrcoef(parcel_connections_task_data.T)
+  parcel_connection_corr = np.corrcoef(parcel_connections_task_data.T)
 
-feature_correlation_with_outcome = pd.DataFrame(parcel_connection_corr[:741, 741])
+  feature_correlation_with_outcome = pd.DataFrame(parcel_connection_corr[:741, 741])
 
-list_of_connections = pd.DataFrame(list_of_connections)
-list_of_networks = pd.DataFrame(list_of_networks)
+  list_of_connections = pd.DataFrame(list_of_connections)
+  list_of_networks = pd.DataFrame(list_of_networks)
+
+
+  feat_corr_net_connections = pd.DataFrame(pd.concat([feature_correlation_with_outcome,  list_of_connections,  list_of_networks, vif_info], axis=1))
+  feat_corr_net_connections.columns = ['Correlation to outcome', 'Connections', 'Networks', "VIF"]
+
+  #Keep only features that have a correlation to the task greater than .1
+  top_feat_corr_net_connections = feat_corr_net_connections[feat_corr_net_connections['Correlation to outcome'] > .1]
+
+  top_feat_corr_net_connections_indices = list(top_feat_corr_net_connections.index)
+  data_top_feat_corr_net_connections = X_parcel_connections.iloc[:, top_feat_corr_net_connections_indices]
 
 
 feat_corr_net_connections = pd.DataFrame(pd.concat([feature_correlation_with_outcome,  list_of_connections,  list_of_networks, vif_info], axis=1))
@@ -1565,26 +1871,63 @@ feat_corr_net_connections = pd.DataFrame(pd.concat([feature_correlation_with_out
 feat_corr_net_connections.columns = ['Correlation to outcome', 'Connections', 'Networks']
 
 
-#Keep only features that have a correlation to the task greater than .1
-top_feat_corr_net_connections = feat_corr_net_connections[feat_corr_net_connections['Correlation to outcome'] > .1]
-
-top_feat_corr_net_connections_indices = list(top_feat_corr_net_connections.index)
-data_top_feat_corr_net_connections = X_parcel_connections.iloc[:, top_feat_corr_net_connections_indices]
-
-
-
-#Check for multicolinearity in the parcel connections top features
-vif_info_top = pd.DataFrame()
-vif_info_top['VIF'] = [variance_inflation_factor(pd.DataFrame(train_X_parcon_top).values, i) for i in range(pd.DataFrame(train_X_parcon_top).shape[1])]
-vif_info_top['Column'] = train_X_parcon_top.columns
-vif_info_top.sort_values('VIF', ascending=False, inplace=True)
+  #Check for multicolinearity in the parcel connections top features
+  vif_info_top = pd.DataFrame()
+  vif_info_top['VIF'] = [variance_inflation_factor(pd.DataFrame(train_X_parcon_top).values, i) for i in range(pd.DataFrame(train_X_parcon_top).shape[1])]
+  vif_info_top['Column'] = train_X_parcon_top.columns
+  vif_info_top.sort_values('VIF', ascending=False, inplace=True)
 
 
- # Parcel connection data
-scaler = StandardScaler()
-train_X_parcon_top, test_X_parcon_top, train_y_parcon_top, test_y_parcon_top = train_test_split(data_top_feat_corr_net_connections, y_parcel_connections, test_size = 0.2)
-train_X_parcon_top = scaler.fit_transform(train_X_parcon_top)
-test_X_parcon_top = scaler.transform(test_X_parcon_top)
+  # Parcel connection data
+  scaler = StandardScaler()
+  train_X_parcon_top, test_X_parcon_top, train_y_parcon_top, test_y_parcon_top = train_test_split(data_top_feat_corr_net_connections, y_parcel_connections, test_size = 0.2)
+  train_X_parcon_top = scaler.fit_transform(train_X_parcon_top)
+  test_X_parcon_top = scaler.transform(test_X_parcon_top)
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8))
+corr = spearmanr(train_X_parcon).correlation
+
+corr_linkage = hierarchy.ward(corr)
+dendro = hierarchy.dendrogram(
+    corr_linkage, ax=ax1, leaf_rotation=90
+)
+dendro_idx = np.arange(0, len(dendro['ivl']))
+
+ax2.imshow(corr[dendro['leaves'], :][:, dendro['leaves']])
+ax2.set_xticks(dendro_idx)
+ax2.set_yticks(dendro_idx)
+ax2.set_xticklabels(dendro['ivl'], rotation='vertical')
+ax2.set_yticklabels(dendro['ivl'])
+fig.tight_layout()
+plt.show()
+
+n = []
+accuracy = []
+features = []
+for x in range(10):
+  n_sub = x+1
+  n.append(n)
+
+  cluster_ids = hierarchy.fcluster(corr_linkage, n_sub, criterion='distance')
+  cluster_id_to_feature_ids = defaultdict(list)
+  for idx, cluster_id in enumerate(cluster_ids):
+      cluster_id_to_feature_ids[cluster_id].append(idx)
+  selected_features = [v[0] for v in cluster_id_to_feature_ids.values()]
+
+  X_train_sel = train_X_parcon[:, selected_features]
+  X_test_sel = test_X_parcon[:, selected_features]
+
+  clf_sel = RandomForestClassifier(n_estimators=100, random_state=42)
+  clf_sel.fit(X_train_sel, train_y_parcon)
+  print("Accuracy on test data with {} features: {:.2f}".format(
+        X_train_sel.shape[1],
+        clf_sel.score(X_test_sel, test_y_parcon)))
+  features.append(X_train_sel.shape[1])
+  accuracy.append(clf_sel.score(X_test_sel, test_y_parcon))
+
+
+
+
 
 
 # Parcel connections top features only SVC
@@ -1619,70 +1962,101 @@ random_grid = {'n_estimators': n_estimators,
                'min_samples_split': min_samples_split,
                'min_samples_leaf': min_samples_leaf,
                'bootstrap': bootstrap}
+  # Parcel connections top features only SVC
+  lin_clf_parcel_connections = svm.LinearSVC(C=.1)
+  lin_clf_parcel_connections.fit(train_X_parcon_top, train_y_parcon_top)
+  print('SVC Parcel Connection Training accuracy: ', lin_clf_parcel_connections.score(train_X_parcon_top, train_y_parcon_top))
+  print('SVC Parcel Connection Test accuracy: ', lin_clf_parcel_connections.score(test_X_parcon_top, test_y_parcon_top))
+  svm_coef_parcel_connections = pd.DataFrame(lin_clf_parcel_connections.coef_.T)
+
+##### Parcel connections #####
+if True:
+  #Tune RFC hyperparameters
+  
+  # Number of trees in random forest
+  n_estimators = [int(x) for x in np.linspace(start = 200, stop = 1000, num = 10)]
+  # Number of features to consider at every split
+  max_features = ['auto', 'sqrt']
+  # Maximum number of levels in tree
+  max_depth = [int(x) for x in np.linspace(10, 110, num = 11)]
+  max_depth.append(None)
+  # Minimum number of samples required to split a node
+  min_samples_split = [2, 5, 10]
+  # Minimum number of samples required at each leaf node
+  min_samples_leaf = [1, 2, 4]
+  # Method of selecting samples for training each tree
+  bootstrap = [True, False]
+  # Create the random grid
+  random_grid = {'n_estimators': n_estimators,
+                'max_features': max_features,
+                'max_depth': max_depth,
+                'min_samples_split': min_samples_split,
+                'min_samples_leaf': min_samples_leaf,
+                'bootstrap': bootstrap}
 
 
-####################################
-## Search for RFC hyperparameters ##
-####################################
+  ####################################
+  ## Search for RFC hyperparameters ##
+  ####################################
 
-# # Use the random grid to search for best hyperparameters
-# # First create the base model to tune
-# # Random search of parameters, using 3 fold cross validation, 
-# # search across 100 different combinations, and use all available cores
-# rf = RandomForestClassifier()
-# from sklearn.model_selection import RandomizedSearchCV
-# rf_random = RandomizedSearchCV(estimator = rf, param_distributions = random_grid, n_iter = 100, cv = 3, verbose=2, random_state=42, n_jobs = -1)
-# # Fit the random search model
-# rf_random.fit(train_X_parcon_top, train_y_parcon_top)
+  # # Use the random grid to search for best hyperparameters
+  # # First create the base model to tune
+  # # Random search of parameters, using 3 fold cross validation, 
+  # # search across 100 different combinations, and use all available cores
+  # rf = RandomForestClassifier()
+  # from sklearn.model_selection import RandomizedSearchCV
+  # rf_random = RandomizedSearchCV(estimator = rf, param_distributions = random_grid, n_iter = 100, cv = 3, verbose=2, random_state=42, n_jobs = -1)
+  # # Fit the random search model
+  # rf_random.fit(train_X_parcon_top, train_y_parcon_top)
 
-# rf_random.best_params_
+  # rf_random.best_params_
 
-# def evaluate(model, test_features, test_labels):
-# predictions = model.predict(test_features)
-# errors = abs(predictions - test_labels)
-# mape = 100 * np.mean(errors / test_labels)
-# accuracy = 100 - mape
-# print('Model Performance')
-# print('Average Error: {:0.4f} degrees.'.format(np.mean(errors)))
-# print('Accuracy = {:0.2f}%.'.format(accuracy))
+  # def evaluate(model, test_features, test_labels):
+  # predictions = model.predict(test_features)
+  # errors = abs(predictions - test_labels)
+  # mape = 100 * np.mean(errors / test_labels)
+  # accuracy = 100 - mape
+  # print('Model Performance')
+  # print('Average Error: {:0.4f} degrees.'.format(np.mean(errors)))
+  # print('Accuracy = {:0.2f}%.'.format(accuracy))
 
-# return accuracy
-# base_model = RandomForestClassifier(n_estimators = 10, random_state = 42)
-# base_model.fit(train_X_parcon_top, train_y_parcon_top)
-# base_accuracy = evaluate(base_model, test_X_parcon_top, test_y_parcon_top)
+  # return accuracy
+  # base_model = RandomForestClassifier(n_estimators = 10, random_state = 42)
+  # base_model.fit(train_X_parcon_top, train_y_parcon_top)
+  # base_accuracy = evaluate(base_model, test_X_parcon_top, test_y_parcon_top)
 
-# best_random = rf_random.best_estimator_
-# random_accuracy = evaluate(best_random, test_X_parcon_top, test_y_parcon_top)
+  # best_random = rf_random.best_estimator_
+  # random_accuracy = evaluate(best_random, test_X_parcon_top, test_y_parcon_top)
 
-# print('Improvement of {:0.2f}%.'.format( 100 * (random_accuracy - base_accuracy) / base_accuracy))
+  # print('Improvement of {:0.2f}%.'.format( 100 * (random_accuracy - base_accuracy) / base_accuracy))
 
 
-    forest = RandomForestClassifier(random_state=1, n_estimators=1000)
-    forest.fit(train_X_parcon_top, train_y_parcon_top)
-    pred_y_parcon_top = np.array(forest.predict(test_X_parcon_top).astype(int))
-    # How does it perform?
-    print('RFC Parcel Connection Training accuracy: ', forest.score(train_X_parcon_top, train_y_parcon_top))
-    print('RFC Parcel Connection Test accuracy: ', forest.score(test_X_parcon_top, test_y_parcon_top))
+  forest = RandomForestClassifier(random_state=1, n_estimators=1000)
+  forest.fit(train_X_parcon_top, train_y_parcon_top)
+  pred_y_parcon_top = np.array(forest.predict(test_X_parcon_top).astype(int))
+  # How does it perform?
+  print('RFC Parcel Connection Training accuracy: ', forest.score(train_X_parcon_top, train_y_parcon_top))
+  print('RFC Parcel Connection Test accuracy: ', forest.score(test_X_parcon_top, test_y_parcon_top))
 
-    # Visualize the confusion matrix
-    print(classification_report(test_y_parcon_top,  pred_y_parcon_top))
-    from sklearn.metrics import confusion_matrix
-    cm = confusion_matrix(test_y_parcon_top, pred_y_parcon_top)
-    cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-    print(cm)
-    # let's see the cross validated score 
-    # score = cross_val_score(forest,X,y, cv = 10, scoring = 'accuracy')
-    # print(score)
-    #predictions = pd.Series(forest.predict(test_X_parcels))
-    predictions = pd.Series(pred_y_parcon_top)
-    ground_truth_test_y_parcon_top = pd.Series(test_y_parcon_top)
-    ground_truth_test_y_parcon_top = ground_truth_test_y_parcon_top.reset_index(drop = True)
-    predictions = predictions.rename("Task")
-    ground_truth_test_y_parcon_top = ground_truth_test_y_parcon_top.rename("Task")
-    predict_vs_true = pd.concat([ground_truth_test_y_parcon_top, predictions],axis =1)
-    predict_vs_true.columns = ["Actual", "Prediction"]
-    accuracy = predict_vs_true.duplicated()
-    accuracy.value_counts()
+  # Visualize the confusion matrix
+  print(classification_report(test_y_parcon_top,  pred_y_parcon_top))
+  from sklearn.metrics import confusion_matrix
+  cm = confusion_matrix(test_y_parcon_top, pred_y_parcon_top)
+  cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+  print(cm)
+  # let's see the cross validated score 
+  # score = cross_val_score(forest,X,y, cv = 10, scoring = 'accuracy')
+  # print(score)
+  #predictions = pd.Series(forest.predict(test_X_parcels))
+  predictions = pd.Series(pred_y_parcon_top)
+  ground_truth_test_y_parcon_top = pd.Series(test_y_parcon_top)
+  ground_truth_test_y_parcon_top = ground_truth_test_y_parcon_top.reset_index(drop = True)
+  predictions = predictions.rename("Task")
+  ground_truth_test_y_parcon_top = ground_truth_test_y_parcon_top.rename("Task")
+  predict_vs_true = pd.concat([ground_truth_test_y_parcon_top, predictions],axis =1)
+  predict_vs_true.columns = ["Actual", "Prediction"]
+  accuracy = predict_vs_true.duplicated()
+  accuracy.value_counts()
 
 
 ########################################
@@ -1783,7 +2157,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import cross_val_predict
 from sklearn.metrics import mean_squared_error, r2_score
 
-https://stackoverflow.com/questions/53944247/performing-multiclass-pls-da-with-mlr-package-in-r
+#https://stackoverflow.com/questions/53944247/performing-multiclass-pls-da-with-mlr-package-in-r
 
 # fit the pls regression
 my_plsr = PLSRegression(n_components=2, scale=False)
@@ -1870,7 +2244,7 @@ plot_metrics(r2s, 'R2', 'max')
 ######## SVC Importances #########
 ##################################
 
-
+if True:
   #Make a dataframe with task coefficients and labels for SVC
   svm_coef = svm_coef_parcel #svm_coef_parcel svm_coef_parcel_connections svm_coef_network_sum svm_coef_network_connection
   list_of_connections_series = pd.Series(list_of_connections)
@@ -2056,7 +2430,7 @@ if True:
 #################################################################################
 ##### Here is where it stops working for me, var declaration out of order? ######
 #################################################################################
-if True:
+if False:
   #calculate the feature importances for RFC
   feature_names = [f'feature {i}' for i in range(X_parcel_connections.shape[1])]
   #start_time = time.time()
