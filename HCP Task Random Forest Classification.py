@@ -43,7 +43,17 @@ if True:
   from sklearn.metrics import mean_squared_error
   from sklearn.model_selection import cross_val_predict
   from sklearn.metrics import mean_squared_error, r2_score
+  from collections import defaultdict
 
+  import matplotlib.pyplot as plt
+  import numpy as np
+  from scipy.stats import spearmanr
+  from scipy.cluster import hierarchy
+
+  from sklearn.datasets import load_breast_cancer
+  from sklearn.ensemble import RandomForestClassifier
+  from sklearn.inspection import permutation_importance
+  from sklearn.model_selection import train_test_split
 #record the start time 
 #start_time = time.time()
 total_start_time = dt.datetime.now()
@@ -1795,7 +1805,7 @@ if True:
 #######################################
 #### Checking for multicolinearity ####
 #######################################
-if True: 
+if False: 
   import seaborn as sns
   import matplotlib.pyplot as plt
 
@@ -1813,14 +1823,9 @@ if True:
   vif_info_centered['Column'] = X_network_connections_centered.columns
   vif_info_centered.sort_values('VIF', ascending=False, inplace=True)
 
-##################################
-#### making test-train splits ####
-##################################
-if True:
-  #Parcel data partitioning and transforming
-  train_X_parcels, test_X_parcels, train_y_parcels, test_y_parcels = train_test_split(X_parcels, y_parcels, test_size = 0.2)
-  train_X_parcels = scaler.fit_transform(train_X_parcels)
-  test_X_parcels = scaler.transform(test_X_parcels)
+
+
+
 ##############################################
 #### parcel connections feature selection ####
 ##############################################
@@ -1874,6 +1879,51 @@ if True:
   train_X_parcon_top, test_X_parcon_top, train_y_parcon_top, test_y_parcon_top = train_test_split(data_top_feat_corr_net_connections, y_parcel_connections, test_size = 0.2)
   train_X_parcon_top = scaler.fit_transform(train_X_parcon_top)
   test_X_parcon_top = scaler.transform(test_X_parcon_top)
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8))
+corr = spearmanr(train_X_parcon).correlation
+
+corr_linkage = hierarchy.ward(corr)
+dendro = hierarchy.dendrogram(
+    corr_linkage, ax=ax1, leaf_rotation=90
+)
+dendro_idx = np.arange(0, len(dendro['ivl']))
+
+ax2.imshow(corr[dendro['leaves'], :][:, dendro['leaves']])
+ax2.set_xticks(dendro_idx)
+ax2.set_yticks(dendro_idx)
+ax2.set_xticklabels(dendro['ivl'], rotation='vertical')
+ax2.set_yticklabels(dendro['ivl'])
+fig.tight_layout()
+plt.show()
+
+n = []
+accuracy = []
+features = []
+for x in range(10):
+  n_sub = x+1
+  n.append(n)
+
+  cluster_ids = hierarchy.fcluster(corr_linkage, n_sub, criterion='distance')
+  cluster_id_to_feature_ids = defaultdict(list)
+  for idx, cluster_id in enumerate(cluster_ids):
+      cluster_id_to_feature_ids[cluster_id].append(idx)
+  selected_features = [v[0] for v in cluster_id_to_feature_ids.values()]
+
+  X_train_sel = train_X_parcon[:, selected_features]
+  X_test_sel = test_X_parcon[:, selected_features]
+
+  clf_sel = RandomForestClassifier(n_estimators=100, random_state=42)
+  clf_sel.fit(X_train_sel, train_y_parcon)
+  print("Accuracy on test data with {} features: {:.2f}".format(
+        X_train_sel.shape[1],
+        clf_sel.score(X_test_sel, test_y_parcon)))
+  features.append(X_train_sel.shape[1])
+  accuracy.append(clf_sel.score(X_test_sel, test_y_parcon))
+
+
+
+
 
 
   # Parcel connections top features only SVC
