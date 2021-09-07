@@ -591,7 +591,15 @@ else:
   relative_RMS_means = pd.read_csv(os.path.abspath(os.getcwd()) + sep + 'relative_RMS_means.csv')
   relative_RMS_means_collapsed = pd.read_csv(os.path.abspath(os.getcwd()) + sep + 'relative_RMS_means_collapsed.csv')
   regressors = pd.read_csv(os.path.abspath(os.getcwd()) + sep + 'regressors.csv')
-
+  
+  regressors_matrix = regressors[['Subject', 'Run', 'task', 'Age__22-25', 'Age__26-30',
+       'Age__31-35', 'Age__36+', 'Gender__F', 'Gender__M', 'Acquisition__Q01',
+       'Acquisition__Q02', 'Acquisition__Q03', 'Acquisition__Q04',
+       'Acquisition__Q05', 'Acquisition__Q06', 'Acquisition__Q07',
+       'Acquisition__Q08', 'Acquisition__Q09', 'Acquisition__Q10',
+       'Acquisition__Q11', 'Acquisition__Q12', 'Acquisition__Q13',
+       'Release__MEG2', 'Release__Q1', 'Release__Q2', 'Release__Q3',
+       'Release__S1200', 'Release__S500', 'Release__S900']]
 
 ################################
 #### Making the input data #####
@@ -936,41 +944,41 @@ if True:
     social_parcel_ex = social_parcels.iloc[0]
     wm_parcel_ex = wm_parcels.iloc[0]
     parcel_ex_full = np.array([emotion_parcel_ex, gambling_parcel_ex, language_parcel_ex, motor_parcel_ex, relational_parcel_ex, social_parcel_ex, wm_parcel_ex])
-    ax_parcel = sns.heatmap(parcel_ex_full, cbar=False, xticklabels=False)
-    ax_parcel.set_yticklabels(['Emotion Processing','Gambling','Language','Motor','Relational Processing','Social','Working Memory'], rotation=0)
-    plt.xlabel('Parcels')
-    plt.ylabel('Tasks')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Visualization.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    ax_parcel = sns.heatmap(parcel_ex_full, cbar=False, xticklabels=False, yticklabels=False, cmap = 'mako')#, linewidths=1, linecolor='white')
+    # ax_parcel.set_yticklabels(['Emotion Processing','Gambling','Language','Motor','Relational Processing','Social','Working Memory'], rotation=0)
+    # plt.xlabel('Parcels', color='white')
+    # plt.ylabel('Tasks')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Visualization no_label mako.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     network_ex_full = pd.DataFrame(parcel_ex_full, columns= networks)
     scaler = StandardScaler() 
     network_ex_full = network_ex_full.groupby(lambda x:x, axis=1).sum()
-    ax_network = sns.heatmap(network_ex_full, cbar=False)
-    ax_network.set_yticklabels(['Emotion Processing','Gambling','Language','Motor','Relational Processing','Social','Working Memory'], rotation=0)
-    ax_network.set_xticklabels([
-      'Ant IPS',
-      'Aud',
-      'Basal',
-      'Cereb',
-      'Cing-Ins',
-      'D Att',
-      'DMN',
-      'Dors PCC',
-      'L V Att',
-      'Language',
-      'Motor',
-      'Occ post',
-      'R V Att',
-      'Salience',
-      'Striate',
-      'Temporal',
-      'Vis Sec'
-    ])
-    plt.xlabel('Networks')
-    plt.ylabel('Tasks')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Visualization.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    ax_network = sns.heatmap(network_ex_full, cbar=False, xticklabels=False, yticklabels=False, cmap = 'mako')#, linewidths=1, linecolor='white')
+    # ax_network.set_yticklabels(['Emotion Processing','Gambling','Language','Motor','Relational Processing','Social','Working Memory'], rotation=0)
+    # ax_network.set_xticklabels([
+    #   'Ant IPS',
+    #   'Aud',
+    #   'Basal',
+    #   'Cereb',
+    #   'Cing-Ins',
+    #   'D Att',
+    #   'DMN',
+    #   'Dors PCC',
+    #   'L V Att',
+    #   'Language',
+    #   'Motor',
+    #   'Occ post',
+    #   'R V Att',
+    #   'Salience',
+    #   'Striate',
+    #   'Temporal',
+    #   'Vis Sec'
+    # ])
+    # plt.xlabel('Networks')
+    # plt.ylabel('Tasks')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Visualization no_label mako.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
-        
+            
 
   # Add the categorical label to each dataframe
   emotion_parcels['task'] = 1
@@ -1075,9 +1083,9 @@ if True:
     mask = np.zeros_like(emotion_parcel_con_ex)
     mask[np.triu_indices_from(mask)] = True
 
-    ax_parcel_con_emotion = sns.heatmap(emotion_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
-    ax_parcel_con_emotion.set_title('Emotion Processing')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Emotion.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    ax_parcel_con_emotion = sns.heatmap(emotion_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False, cmap = 'mako')
+    #ax_parcel_con_emotion.set_title('Emotion Processing')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Emotion mako.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     gambling_parcel_con_ex = fc_matrix_gambling[0]
     ax_parcel_con_gambling = sns.heatmap(gambling_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
@@ -1623,9 +1631,9 @@ if True:
     mask = np.zeros_like(emotion_network_con_ex)
     mask[np.triu_indices_from(mask)] = True
 
-    ax_network_con_emotion = sns.heatmap(emotion_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
-    ax_network_con_emotion.set_title('Emotion Processing')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Emotion.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    ax_network_con_emotion = sns.heatmap(emotion_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False, cmap = 'mako')
+    #ax_network_con_emotion.set_title('Emotion Processing')
+    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Emotion no_label mako.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     gambling_network_con_ex = fc_matrix_gambling_networks[0]
     ax_network_con_gambling = sns.heatmap(gambling_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
