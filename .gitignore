@@ -1,3 +1,4 @@
 .vscode/settings.json
 Visuals/*
 *.zip
+nilearn_cache/
