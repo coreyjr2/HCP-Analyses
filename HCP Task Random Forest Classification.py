@@ -44,7 +44,8 @@ if True:
   from sklearn.model_selection import cross_val_predict
   from sklearn.metrics import mean_squared_error, r2_score
   from collections import defaultdict
-
+  from nilearn.input_data import NiftiLabelsMasker
+  from nilearn.input_data import NiftiMapsMasker
   import matplotlib.pyplot as plt
   import numpy as np
   from scipy.stats import spearmanr
@@ -60,6 +61,7 @@ total_start_time = dt.datetime.now()
 # Set relevant directories
 
 sep = os.path.sep
+source_path = os.path.abspath(os.getcwd()) + sep
 sys_name = platform.system() 
 visualization = False
 if getpass.getuser() == 'kyle':
@@ -206,6 +208,38 @@ if True:
 ###### Define useful functions #######
 ######################################
 if True:
+  def parcellate_timeseries(nifty_file, atlas_name, confounds=None):
+    # Other atlases in MNI found here: https://www.lead-dbs.org/helpsupport/knowledge-base/atlasesresources/cortical-atlas-parcellations-mni-space/
+    raw_timeseries = nib.load(nifty_file)
+    if atlas_name=='harvard_oxford':
+      atlas = datasets.fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm', symmetric_split=True)
+      atlas_filename = atlas.maps
+      masker = NiftiLabelsMasker(labels_img=atlas_filename, standardize=True)
+    elif atlas_name == 'msdl':
+      atlas = datasets.fetch_atlas_msdl()
+      atlas_filename = atlas.maps
+      masker = NiftiMapsMasker(maps_img=atlas_filename, standardize=True, memory='nilearn_cache')
+    elif atlas_name == 'mni_glasser':
+      atas_glasser_01_filename = source_path + 'MMP_in_MNI_corr.nii.gz'
+      masker = NiftiLabelsMasker(labels_img=atas_glasser_01_filename, standardize=True)
+    elif 'yeo' in atlas_name:
+      yeo = datasets.fetch_atlas_yeo_2011()
+      if atlas_name == 'yeo_7_thin':
+        masker = NiftiLabelsMasker(labels_img=yeo['thin_7'], standardize=True,memory='nilearn_cache')
+      elif atlas_name == 'yeo_7_thick':
+        masker = NiftiLabelsMasker(labels_img=yeo['thick_7'], standardize=True,memory='nilearn_cache')
+      elif atlas_name == 'yeo_17_thin':
+        masker = NiftiLabelsMasker(labels_img=yeo['thin_17'], standardize=True,memory='nilearn_cache')
+      elif atlas_name == 'yeo_17_thick':
+        masker = NiftiLabelsMasker(labels_img=yeo['thick_17'], standardize=True,memory='nilearn_cache')
+    #Transform the motor task imaging data with the masker and check the shape
+    masked_timeseries = []
+    if confounds is not None:
+      masked_timeseries = masker.fit_transform(raw_timeseries, counfounds = confounds)
+    else:
+      masked_timeseries = masker.fit_transform(raw_timeseries)
+    return masked_timeseries
+
   def get_image_ids(name):
     """Get the 1-based image indices for runs in a given experiment.
 
@@ -579,7 +613,7 @@ if False:
   relative_RMS_means = pd.DataFrame.from_dict(relative_RMS_mean_dict, orient='index', columns = ['Subject','Run','task','Movement_RelativeRMS_mean'])
   relative_RMS_means.to_csv(os.path.abspath(os.getcwd()) + sep + 'relative_RMS_means.csv', index=False)
   relative_RMS_means_g = relative_RMS_means.groupby(['Subject','task'])
-  # Collapsed aross subject, task toa ccomidate concatenation of timeseries
+  # Collapsed aross subject, task to accomidate concatenation of timeseries
   relative_RMS_means_collapsed = pd.DataFrame(relative_RMS_means_g.agg(np.mean))
   relative_RMS_means_collapsed.reset_index(inplace=True)
   relative_RMS_means_collapsed.to_csv(os.path.abspath(os.getcwd()) + sep + 'relative_RMS_means_collapsed.csv', index=False)
@@ -1830,9 +1864,6 @@ if False:
   vif_info_centered['VIF'] = [variance_inflation_factor(X_network_connections_centered.values, i) for i in range(X_network_connections_centered.shape[1])]
   vif_info_centered['Column'] = X_network_connections_centered.columns
   vif_info_centered.sort_values('VIF', ascending=False, inplace=True)
-
-
-
 
 ##############################################
 #### parcel connections feature selection ####
