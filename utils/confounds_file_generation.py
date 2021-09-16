@@ -1,7 +1,7 @@
 import pandas as pd
 
 subjects = pd.read_csv('C:\\Users\\kyle\\repos\\HCP-Analyses\\subject_list.csv')['ID']
-subjects = subjects[12:]
+subjects = subjects
 path_pattern = "S:\\HCP\\HCP_1200\\{}\\MNINonLinear\\Results\\{}\\{}.npy"
 BOLD_NAMES = [
   "rfMRI_REST1_LR", 
@@ -31,7 +31,7 @@ for s in subjects:
     try:
       confounds.append(pd.read_csv( # See HCP1200 release manual page 96, also see https://www.mail-archive.com/hcp-users@humanconnectome.org/msg02961.html
         path_pattern[:-6].format(s, t) + 'Movement_Regressors.txt',
-        sep='\t',
+        sep='  ',
         header=None,
         names = [
           'trans_x','trans_y','trans_z',
@@ -46,7 +46,7 @@ for s in subjects:
     try:
       confounds.append(pd.read_csv( # Made from removing the mean and linear trend from each variable in Movement_Regressors.txt
         path_pattern[:-6].format(s, t) + 'Movement_Regressors_dt.txt',
-        sep='\t',
+        sep='  ',
         header=None,
         names = [
           'trans_x_dt','trans_y_dt','trans_z_dt',
@@ -61,7 +61,7 @@ for s in subjects:
     try:
       confounds.append(pd.read_csv( # amount of motion from the previous time point, alternative to FD see https://www.mail-archive.com/hcp-users@humanconnectome.org/msg04444.html
         path_pattern[:-6].format(s, t) +'Movement_RelativeRMS.txt',
-        sep='\t',
+        sep='  ',
         header=None, 
         names = ['Movement_RelativeRMS']
       ))
