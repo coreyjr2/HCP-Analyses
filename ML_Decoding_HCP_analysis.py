@@ -12,12 +12,20 @@ import numpy as np
 from nilearn import datasets
 from nilearn.input_data import NiftiLabelsMasker
 from nilearn.input_data import NiftiMapsMasker
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix
+from sklearn.linear_model import LogisticRegression
+from sklearn import svm
+from pathlib import Path
 
 sep = os.path.sep
-source_path = os.path.abspath(os.getcwd()) + sep
+source_path = os.path.dirname(os.path.abspath(__file__)) + sep
 sys_name = platform.system() 
-parcel_dict = { #Parcels, unique values from cor matrix, N networks
-    'harvard_oxford':(96,4560),
+parcel_ref = { #Parcels, unique values from cor matrix, N networks
+    'harvard_oxford':(96,4560), #((1+p)p)/2 -p = lower diagonal
     'msdl':(39,741),
     'mni_glasser':(360,64620),
     'yeo_7_thin':(7,21),
@@ -43,11 +51,9 @@ def create_ordered_network_labels():
   full_label_file = pd.merge(glabels, gregions, how='left',on='Label')
   full_label_file.to_csv(source_path + 'mni_glasser_info.csv', index=False)
 
-
-def parcellate_timeseries(nifty_file, atlas_name, confounds=None):
+def parcellate_timeseries(nifty_file, atlas_name, confounds=None): # Tested
   # Other atlases in MNI found here: https://www.lead-dbs.org/helpsupport/knowledge-base/atlasesresources/cortical-atlas-parcellations-mni-space/
   raw_timeseries = nib.load(nifty_file)
-  #raise Exception(nifty_file, ' not available.')
   if atlas_name=='harvard_oxford':
     atlas = datasets.fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm', symmetric_split=True)
     atlas_filename = atlas.maps
@@ -56,9 +62,6 @@ def parcellate_timeseries(nifty_file, atlas_name, confounds=None):
     atlas = datasets.fetch_atlas_msdl()
     atlas_filename = atlas.maps
     masker = NiftiMapsMasker(maps_img=atlas_filename, standardize=True, memory='nilearn_cache')
-  elif atlas_name == 'mni_glasser':
-    atas_glasser_01_filename = source_path + 'MMP_in_MNI_corr.nii.gz' # Downlaoded from https://neurovault.org/collections/1549/
-    masker = NiftiLabelsMasker(labels_img=atas_glasser_01_filename, standardize=True)
   elif 'yeo' in atlas_name:
     yeo = datasets.fetch_atlas_yeo_2011()
     if atlas_name == 'yeo_7_thin':
@@ -69,6 +72,14 @@ def parcellate_timeseries(nifty_file, atlas_name, confounds=None):
       masker = NiftiLabelsMasker(labels_img=yeo['thin_17'], standardize=True,memory='nilearn_cache')
     elif atlas_name == 'yeo_17_thick':
       masker = NiftiLabelsMasker(labels_img=yeo['thick_17'], standardize=True,memory='nilearn_cache')
+  elif atlas_name == 'mni_glasser':
+    atas_glasser_01_filename = source_path + 'MMP_in_MNI_corr.nii.gz' # Downlaoded from https://neurovault.org/collections/1549/
+    masker = NiftiLabelsMasker(labels_img=atas_glasser_01_filename, standardize=True)
+  elif 'Schaefer2018_' in atlas_name:
+    atlas_filename = source_path + atlas_name + '.nii.gz'
+    masker = NiftiLabelsMasker(labels_img=atlas_filename, standardize=True)
+  else:
+    return NotImplementedError
   #Transform the motor task imaging data with the masker and check the shape
   masked_timeseries = []
   if confounds is not None:
@@ -77,7 +88,7 @@ def parcellate_timeseries(nifty_file, atlas_name, confounds=None):
     masked_timeseries = masker.fit_transform(raw_timeseries)
   return masked_timeseries
 
-def load_parcellated_task_timeseries(meta_dict, nifty_template, subjects, session, npy_template = None, run_names = ['RL','LR'], confounds_path = None):
+def load_parcellated_task_timeseries(meta_dict, nifty_template, subjects, session, npy_template = None, run_names = ['RL','LR'], confounds_path = None): # Tested
   remove_mean = meta_dict['subtract parcel-wise mean']
   atlas_name = meta_dict['atlas_name']
   concatenate = meta_dict['concatenate']
@@ -86,7 +97,7 @@ def load_parcellated_task_timeseries(meta_dict, nifty_template, subjects, sessio
   print('Loading in parcellated data for task: ', session)
   for subject in subjects:
     try:
-      print('\t',subject)
+      #print('\t',subject)
       sub_dict = {}
       for run in run_names:
         if confounds_path is not None:
@@ -110,44 +121,174 @@ def load_parcellated_task_timeseries(meta_dict, nifty_template, subjects, sessio
         concat_dict[subject] = np.vstack((sub_dict[run_names[0]], sub_dict[run_names[1]]))
       parcellated_dict[subject] = sub_dict
     except Exception as e:
-      print(f'Subject {subject} is not available: {e}')
+      #print(f'Subject {subject} is not available: {e}')
+      pass
   if concatenate:
     return concat_dict
   else:
     return parcellated_dict
 
-def generate_parcel_input_features(parcellated_data, labels):
+def generate_parcel_input_features(parcellated_data, labels): # Tested
   out_dict = {}
   out_df_dict = {}
   for session in parcellated_data.keys():
     parcel_dict = parcellated_data[session]
-    out_dict[session] = np.zeros((len(parcel_dict), parcel_dict[parcel_dict.keys()[0]].shape[1]), dtype='float64')
-    for subject, ts in enumerate(parcel_dict.values()):#(284, 78)
-      out_dict[session][subject] = np.mean(ts.T, axis=1)
-    out_df_dict[session] = pd.DataFrame(out_dict[session], columns= labels)
-    out_df_dict[session]['task'] = numeric_task_ref[session]
-  parcels_full = pd.DataFrame(np.concatenate(out_df_dict.values(), axis = 0))
+    out_dict[session] = {}
+    for subject in parcel_dict.keys():#(284, 78)
+      ts = parcel_dict[subject]
+      out_dict[session][subject] = list(np.mean(ts.T, axis=1))
+      out_dict[session][subject].append(subject)
+    labels2 = list(labels)
+    labels2.append('Subject')
+    out_df_dict[session] = pd.DataFrame.from_dict(out_dict[session], orient='index', columns = list(labels2))
+    sub = out_df_dict[session]['Subject']
+    out_df_dict[session].drop(labels=['Subject'], axis=1, inplace=True)
+    out_df_dict[session].insert(0, 'Subject', sub)
+    out_df_dict[session].insert(0, 'task',numeric_task_ref[session])
+  parcels_full = pd.DataFrame(pd.concat(list(out_df_dict.values()), axis = 0))
   return parcels_full
 
-def generate_network_input_features():
+def generate_network_input_features(parcels_full, networks, scale=False): # Tested
+  X_network = parcels_full[parcels_full.columns[2:]]
+  X_network.rename(
+    columns={i:j for i,j in zip(X_network.columns,networks)}, inplace=True
+  )
+  X_network = X_network.groupby(lambda x:x, axis=1).sum()
+  if scale:
+    scaler = StandardScaler() 
+    X_network_scaled = pd.DataFrame(scaler.fit_transform(X_network), columns = X_network.columns)
+    X_network_scaled.reset_index(drop=True, inplace=True)
+    X_network = X_network_scaled
+  parcels_full.reset_index(drop=True, inplace=True)
+  X_network.insert(0, 'Subject',parcels_full['Subject'])
+  X_network.insert(0, 'task',parcels_full['task'])
+  return X_network
+
+def connection_names(corr_matrix, labels): # Tested
+  name_idx = np.triu_indices_from(corr_matrix, k=1)
+  out_list = []
+  for i in range(len(name_idx[0])):
+    out_list.append(str(labels[name_idx[0][i]]) + '|' + str(labels[name_idx[1][i]]))
+  return out_list
+
+def generate_parcel_connection_features(parcellated_data, labels): # Tested
+  out_dict = {}
+  out_df_dict = {}
+  for session in parcellated_data.keys():
+    parcel_dict = parcellated_data[session]
+    out_dict[session] = {}
+    for subject in parcel_dict.keys():
+      ts = parcel_dict[subject]
+      cor_coef = np.corrcoef(ts.T)
+      out_dict[session][subject] = list(cor_coef[np.triu_indices_from(cor_coef, k=1)])
+      out_dict[session][subject].append(subject)
+      colnames = connection_names(cor_coef, labels)
+      colnames.append('Subject')
+    out_df_dict[session] = pd.DataFrame.from_dict(out_dict[session], orient='index', columns = colnames)
+    sub = out_df_dict[session]['Subject']
+    out_df_dict[session].drop(labels=['Subject'], axis=1, inplace=True)
+    out_df_dict[session].insert(0, 'Subject', sub)
+    out_df_dict[session].insert(0, 'task',numeric_task_ref[session])
+  parcels_connections_full = pd.DataFrame(pd.concat(list(out_df_dict.values()), axis = 0))
+  return parcels_connections_full
+
+def generate_network_connection_features(parcellated_data, networks): # Tested
+  scaler = StandardScaler() 
+  out_dict = {}
+  out_df_dict = {}
+  for session in parcellated_data.keys():
+    parcel_dict = parcellated_data[session]
+    out_dict[session] = {}
+    for subject in parcel_dict.keys():
+      ts = parcel_dict[subject]
+      cor_coef = np.corrcoef(scaler.fit_transform(pd.DataFrame(ts, columns = networks).groupby(lambda x:x, axis=1).sum()).T)
+      out_dict[session][subject] = list(cor_coef[np.triu_indices_from(cor_coef, k=1)])
+      out_dict[session][subject].append(subject)
+    colnames = connection_names(cor_coef, pd.DataFrame.from_dict({}, orient='index', columns = networks).groupby(lambda x:x, axis=1).sum().columns)
+    colnames.append('Subject')
+    out_df_dict[session] = pd.DataFrame.from_dict(out_dict[session], orient='index', columns = colnames)
+    sub = out_df_dict[session]['Subject']
+    out_df_dict[session].drop(labels=['Subject'], axis=1, inplace=True)
+    out_df_dict[session].insert(0, 'Subject', sub)
+    out_df_dict[session].insert(0, 'task',numeric_task_ref[session])
+  network_connections_full = pd.DataFrame(pd.concat(list(out_df_dict.values()), axis = 0))
+  return network_connections_full
+
+def XY_split(df, outcome_col, excluded = []): # Tested
+  excluded.append(outcome_col)
+  dfx = df.drop(labels=excluded, axis=1, inplace=False)
+  dfy = df[[outcome_col]]
+  return dfx, dfy
+
+def tune_hyperparams():
   pass
 
-def generate_connection_features():
-  pass
+def run_svc_new(train_x, train_y, test_x, test_y, random_state = 42, C=1):
+  l_scv =  svm.LinearSVC(random_state=random_state, C=C)
+  l_scv.fit(train_x, train_y.values.ravel())
+  y_pred = l_scv.predict(test_x)
+  training_accuracy = l_scv.score(train_x, train_y)
+  test_accuracy = l_scv.score(test_x, test_y)
+  classification_rep = classification_report(test_y, y_pred)
+  confusion_mat = confusion_matrix(test_y, y_pred)
+  out_dict = {
+    'Training Accuracy':training_accuracy,
+    'Test Accuracy':test_accuracy,
+    'Classification Report':classification_rep,
+    'Confusion Matrix': confusion_mat,
+    'Training N':len(train_x),
+    'Test N':len(test_x)
+  }
+  return out_dict
 
-def training_test_split():
-  pass
+def run_rfc(train_x, train_y, test_x, test_y, n_estimators = 500, random_state = 42):
+  forest = RandomForestClassifier(random_state=random_state ,n_estimators=n_estimators)
+  forest.fit(train_x, train_y.values.ravel())
+  pred_y = forest.predict(test_x)
+  training_accuracy = forest.score(train_x, train_y)
+  test_accuracy = forest.score(test_x, test_y)
+  classification_rep = classification_report(test_y, pred_y)
+  confusion_mat = confusion_matrix(test_y, pred_y)
+  out_dict = {
+    'Training Accuracy':training_accuracy,
+    'Test Accuracy':test_accuracy,
+    'Classification Report':classification_rep,
+    'Confusion Matrix': confusion_mat,
+    'Training N':len(train_x),
+    'Test N':len(test_x)
+  }
+  return out_dict
 
-def feature_reduction():
-  pass
+def run_models(meta_dict, out_dict, training_label, test_label, train_x, train_y, test_x, test_y):
+  svc_out = run_svc_new(train_x, train_y, test_x, test_y, random_state = meta_dict['Random State'], C=meta_dict['C'])
+  rf_out = run_rfc(train_x, train_y, test_x, test_y, random_state = meta_dict['Random State'], n_estimators=meta_dict['Random Forest Estimators'])
+  # Store output in output_dictionary
+  ind = len(out_dict.keys())
+  out_dict[ind] = [
+    training_label,               #'Training Data'
+    test_label,                   #'Test Data'
+    'SVM',                        #'Analysis Method'
+    svc_out['Training Accuracy'], #'Training Accuracy'
+    svc_out['Test Accuracy'],     #'Test Accuracy'
+    svc_out['Training N'],        #'Training N'
+    svc_out['Test N'],            #'Test N'
+    ''                            #'Notes'
+    ]
+  ind+=1
+  out_dict[ind] = [
+    training_label,               #'Training Data'
+    test_label,                   #'Test Data'
+    'RFC',                        #'Analysis Method'
+    rf_out['Training Accuracy'],  #'Training Accuracy'
+    rf_out['Test Accuracy'],      #'Test Accuracy'
+    rf_out['Training N'],         #'Training N'
+    rf_out['Test N'],             #'Test N'
+    'n_estimators='+str(meta_dict['Random Forest Estimators'])                 #'Notes'
+    ]
+  ind+=1
+  return out_dict
 
-def run_svc():
-  pass
-
-def run_rfc():
-  pass
-
-def fetch_labels(mea_dict):
+def fetch_labels(meta_dict):
   if 'glasser' in meta_dict['atlas_name']:
     regions_file = np.load(source_path + "glasser_regions.npy").T
     parcel_labels = regions_file[0]
@@ -156,9 +297,18 @@ def fetch_labels(mea_dict):
     atlas_MSDL = datasets.fetch_atlas_msdl()
     parcel_labels = atlas_MSDL['labels']
     network_labels = atlas_MSDL['networks']
+  elif meta_dict['atlas_name'] == 'mni_glasser':
+    info_file = pd.read_csv(source_path + 'mni_glasser_info.csv')
+    parcel_labels = info_file['Label']
+    network_labels = info_file['networks']
   else:
     raise NotImplementedError
   return parcel_labels, network_labels
+
+def feature_reduction(x, y, type):
+  if type == 'Logistic Regression':
+    lreg1 = LogisticRegression(random_state=meta_dict['Random State']).fit(x, y)
+    lreg1.get_params()
 
 if __name__=='__main__':
   total_start_time = dt.datetime.now()
@@ -170,23 +320,20 @@ if __name__=='__main__':
     'Random Forest Estimators': 1000,
     'Random State':42,
     'subtract parcel-wise mean': True,
-    'concatenate':True
+    'concatenate':True,
+    'C':1
   }
   # Generate unique hash for metadata
   dhash = hashlib.md5()
   encoded = json.dumps(meta_dict, sort_keys=True).encode()
   dhash.update(encoded)
   run_uid = dhash.hexdigest()
-  # Make folder to contain output
-  # try:
-  #   os.mkdir(source_path + 'Output' + sep + run_uid)
-  #   with open(source_path + 'Output' + sep + run_uid + sep + 'metadata.json', 'w') as outfile:
-  #     json.dump(meta_dict, outfile)
-  # except:
-  #   print(f'An analysis with this same metadata dictionary has been run: {run_uid}')
-  #   print('Would you like to re-run? (y/n)')
-  #   if not 'y' in input().lower():
-  #     raise Exception('Analyses halted.')
+  if os.path.exists(source_path + 'Output' + sep + run_uid + sep + 'metadata.json'):
+    print(f'An analysis with this same metadata dictionary has been run: {run_uid}')
+    print('Would you like to re-run? (y/n)')
+    if not 'y' in input().lower():
+      raise Exception('Analyses halted.')
+  
   if getpass.getuser() == 'kyle':
     HCP_DIR = "S:\\HCP\\"
     HCP_DIR_REST = f"{HCP_DIR}hcp_rest\\subjects\\"
@@ -197,21 +344,121 @@ if __name__=='__main__':
     path_pattern = "S:\\HCP\\HCP_1200\\{}\\MNINonLinear\\Results\\{}\\{}.npy"
     nifty_template_hcp = 'S:\\HCP\\HCP_1200\\{subject}\\MNINonLinear\\Results\\{session}_{run}\\{session}_{run}.nii.gz'
     npy_template_hcp = 'S:\\HCP\\HCP_1200\\{subject}\\MNINonLinear\\Results\\{session}_{run}\\{session}_{run}_{atlas_name}.npy'
+  else:
+    HCP_DIR = "/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/HCP_1200_Numpy/"
+    basepath = str('/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/HCP_1200_Numpy/{}/MNINonLinear/Results/')
+    HCP_DIR_REST = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_rest/subjects/"
+    HCP_DIR_TASK = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_task/subjects/"
+    HCP_DIR_EVS = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_task/"
+    HCP_DIR_BEHAVIOR = "/Volumes/Byrgenwerth/Datasets/HCP/hcp_behavior/"
+    subjects = pd.read_csv('/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/subject_list.csv')['ID']
+    path_pattern ="/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/HCP_1200_Numpy/{}/MNINonLinear/Results/{}/{}.npy"
+    if not os.path.isdir(HCP_DIR): os.mkdir(HCP_DIR)
   
   parcel_labels, network_labels = fetch_labels(meta_dict)
   #Use this line to subset the subject list to something shorter as needed
   subjects = subjects[:]
   sessions = [
-    #"tfMRI_MOTOR",
-    # "tfMRI_WM",
-    # "tfMRI_EMOTION",
-    # "tfMRI_GAMBLING",
+    "tfMRI_MOTOR",
+    "tfMRI_WM",
+    "tfMRI_EMOTION",
+    "tfMRI_GAMBLING",
     "tfMRI_LANGUAGE",
     "tfMRI_RELATIONAL",
     "tfMRI_SOCIAL"
   ]
-parcellated_data = {}
-for session in sessions:
-  parcellated_data[session] = load_parcellated_task_timeseries(meta_dict, nifty_template_hcp, subjects, session, npy_template = npy_template_hcp)
+  parcellated_data = {}
+  for session in sessions:
+    #Read in parcellated data, or parcellate data if meta-data conditions not met by available data
+    parcellated_data[session] = load_parcellated_task_timeseries(meta_dict, nifty_template_hcp, subjects, session, npy_template = npy_template_hcp)
 
-parcels_full = generate_parcel_input_features(parcellated_data, parcel_labels[0])
+  parcels_sums = generate_parcel_input_features(parcellated_data, parcel_labels)
+
+  network_sums = generate_network_input_features(parcels_sums, network_labels)
+  #network_sums_scaled = generate_network_input_features(parcels_sums, network_labels, scale=True)
+
+  parcel_connection_task_data = generate_parcel_connection_features(parcellated_data, parcel_labels)
+
+  network_connection_features = generate_network_connection_features(parcellated_data, network_labels)
+
+  demographics = pd.read_csv(source_path + 'demographics_with_dummy_vars.csv')
+  demographics_dummy = demographics[[
+    'Subject',
+    'Age__22-25',
+    'Age__26-30',
+    'Age__31-35',
+    'Age__36+',
+    'Gender__F',
+    'Gender__M',
+    'Acquisition__Q01',
+    'Acquisition__Q02',
+    'Acquisition__Q03',
+    'Acquisition__Q04',
+    'Acquisition__Q05',
+    'Acquisition__Q06',
+    'Acquisition__Q07',
+    'Acquisition__Q08',
+    'Acquisition__Q09',
+    'Acquisition__Q10',
+    'Acquisition__Q11',
+    'Acquisition__Q12',
+    'Acquisition__Q13'
+  ]]
+
+  relative_RMS_means_collapsed = pd.read_csv(source_path + 'relative_RMS_means_collapsed.csv')
+
+  confounds = pd.merge(relative_RMS_means_collapsed, demographics_dummy, how='left', on='Subject')
+
+  parcel_sum_input = pd.merge(confounds, parcels_sums, on=['Subject','task'], how = 'right')
+  network_sum_input = pd.merge(confounds, network_sums, on=['Subject','task'], how = 'right')
+  parcel_connection_input = pd.merge(confounds, parcel_connection_task_data, on=['Subject','task'], how = 'right')
+  network_connection_input = pd.merge(confounds, network_connection_features, on=['Subject','task'], how = 'right')
+
+  parcel_sum_x, parcel_sum_y = XY_split(parcel_sum_input, 'task')
+  network_sum_x, network_sum_y = XY_split(network_sum_input, 'task')
+  parcel_connection_x, parcel_connection_y = XY_split(parcel_connection_input, 'task')
+  network_connection_x, network_connection_y = XY_split(network_connection_input, 'task')
+
+  parcel_sum_x_train, parcel_sum_x_test, parcel_sum_y_train, parcel_sum_y_test = train_test_split(parcel_sum_x, parcel_sum_y, test_size = 0.2)
+  network_sum_x_train, network_sum_x_test, network_sum_y_train, network_sum_y_test = train_test_split(network_sum_x, network_sum_y, test_size = 0.2)
+  parcel_connection_x_train, parcel_connection_x_test, parcel_connection_y_train, parcel_connection_y_test = train_test_split(parcel_connection_x, parcel_connection_y, test_size = 0.2)
+  network_connection_x_train, network_connection_x_test, network_connection_y_train, network_connection_y_test = train_test_split(network_connection_x, network_connection_y, test_size = 0.2)
+  # TODO Scale here
+
+  # Feature Selection
+  lreg1 = LogisticRegression(random_state=meta_dict['Random State']).fit(parcel_sum_x_train, parcel_sum_y_train)
+  lreg1.get_params()
+
+  # Run Models
+  out_dict = {}
+  test_label = 'parcel_sum' 
+  training_label = 'parcel_sum' 
+  out_dict = run_models(meta_dict, out_dict, training_label, test_label, parcel_sum_x_train, parcel_sum_y_train, parcel_sum_x_test, parcel_sum_y_test)
+
+  test_label = 'network_sum' 
+  training_label = 'network_sum' 
+  out_dict = run_models(meta_dict, out_dict, training_label, test_label, network_sum_x_train, network_sum_y_train, network_sum_x_test, network_sum_y_test)
+
+  test_label = 'parcel_connection' 
+  training_label = 'parcel_connection' 
+  out_dict = run_models(meta_dict, out_dict, training_label, test_label, parcel_connection_x_train, parcel_connection_y_train, parcel_connection_x_test, parcel_connection_y_test)
+
+  test_label = 'network_connection' 
+  training_label = 'network_connection' 
+  out_dict = run_models(meta_dict, out_dict, training_label, test_label, network_connection_x_train, network_connection_y_train, network_connection_x_test, network_connection_y_test)
+
+  #Make folder to contain output
+  try:
+    os.mkdir(source_path + 'Output' + sep + run_uid)
+    with open(source_path + 'Output' + sep + run_uid + sep + 'metadata.json', 'w') as outfile:
+      json.dump(meta_dict, outfile)
+  except:
+    pass
+  output_df = pd.DataFrame.from_dict(out_dict, orient='index', columns = ['Training Data','Test Data','Analysis Method','Training Accuracy','Test Accuracy','Training N','Test N','Notes'])
+  output_df.to_csv(
+    source_path + 'Output' + sep + run_uid + sep + 'HCP Task Decoding.csv',
+    index=False
+    )
+  total_end_time = dt.datetime.now()
+  print('Done. Runtime: ', total_end_time - total_start_time)
+
