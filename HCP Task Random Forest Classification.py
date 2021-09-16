@@ -44,7 +44,8 @@ if True:
   from sklearn.model_selection import cross_val_predict
   from sklearn.metrics import mean_squared_error, r2_score
   from collections import defaultdict
-
+  from nilearn.input_data import NiftiLabelsMasker
+  from nilearn.input_data import NiftiMapsMasker
   import matplotlib.pyplot as plt
   import numpy as np
   from scipy.stats import spearmanr
@@ -60,6 +61,7 @@ total_start_time = dt.datetime.now()
 # Set relevant directories
 
 sep = os.path.sep
+source_path = os.path.dirname(os.path.abspath(__file__)) + sep
 sys_name = platform.system() 
 visualization = False
 if getpass.getuser() == 'kyle':
@@ -206,6 +208,38 @@ if True:
 ###### Define useful functions #######
 ######################################
 if True:
+  def parcellate_timeseries(nifty_file, atlas_name, confounds=None):
+    # Other atlases in MNI found here: https://www.lead-dbs.org/helpsupport/knowledge-base/atlasesresources/cortical-atlas-parcellations-mni-space/
+    raw_timeseries = nib.load(nifty_file)
+    if atlas_name=='harvard_oxford':
+      atlas = datasets.fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm', symmetric_split=True)
+      atlas_filename = atlas.maps
+      masker = NiftiLabelsMasker(labels_img=atlas_filename, standardize=True)
+    elif atlas_name == 'msdl':
+      atlas = datasets.fetch_atlas_msdl()
+      atlas_filename = atlas.maps
+      masker = NiftiMapsMasker(maps_img=atlas_filename, standardize=True, memory='nilearn_cache')
+    elif atlas_name == 'mni_glasser':
+      atas_glasser_01_filename = source_path + 'MMP_in_MNI_corr.nii.gz'
+      masker = NiftiLabelsMasker(labels_img=atas_glasser_01_filename, standardize=True)
+    elif 'yeo' in atlas_name:
+      yeo = datasets.fetch_atlas_yeo_2011()
+      if atlas_name == 'yeo_7_thin':
+        masker = NiftiLabelsMasker(labels_img=yeo['thin_7'], standardize=True,memory='nilearn_cache')
+      elif atlas_name == 'yeo_7_thick':
+        masker = NiftiLabelsMasker(labels_img=yeo['thick_7'], standardize=True,memory='nilearn_cache')
+      elif atlas_name == 'yeo_17_thin':
+        masker = NiftiLabelsMasker(labels_img=yeo['thin_17'], standardize=True,memory='nilearn_cache')
+      elif atlas_name == 'yeo_17_thick':
+        masker = NiftiLabelsMasker(labels_img=yeo['thick_17'], standardize=True,memory='nilearn_cache')
+    #Transform the motor task imaging data with the masker and check the shape
+    masked_timeseries = []
+    if confounds is not None:
+      masked_timeseries = masker.fit_transform(raw_timeseries, counfounds = confounds)
+    else:
+      masked_timeseries = masker.fit_transform(raw_timeseries)
+    return masked_timeseries
+
   def get_image_ids(name):
     """Get the 1-based image indices for runs in a given experiment.
 
@@ -481,9 +515,9 @@ if False:
     demographics = demographics.join(pd.get_dummies(demographics['Gender'], prefix='Gender_'), how='outer')
     demographics = demographics.join(pd.get_dummies(demographics['Acquisition'], prefix='Acquisition_'), how='outer')
     demographics = demographics.join(pd.get_dummies(demographics['Release'], prefix='Release_'), how='outer')
-  demographics.to_csv(os.path.abspath(os.getcwd()) + sep + 'demographics_with_dummy_vars.csv', index=False)
+  demographics.to_csv(source_path + sep + 'demographics_with_dummy_vars.csv', index=False)
 else:
-  demographics = pd.read_csv(os.path.abspath(os.getcwd()) + sep + 'demographics_with_dummy_vars.csv')
+  demographics = pd.read_csv(source_path + sep + 'demographics_with_dummy_vars.csv')
 
 # Import movement information
 if False:
@@ -577,21 +611,29 @@ if False:
       relative_RMS_mean_dict[str(s)+t] = [s, t, task_number_dict[t], movement[s][t]['Movement_RelativeRMS_mean']]
   # Create a dataframe to merge the demographics data onto
   relative_RMS_means = pd.DataFrame.from_dict(relative_RMS_mean_dict, orient='index', columns = ['Subject','Run','task','Movement_RelativeRMS_mean'])
-  relative_RMS_means.to_csv(os.path.abspath(os.getcwd()) + sep + 'relative_RMS_means.csv', index=False)
+  relative_RMS_means.to_csv(source_path + sep + 'relative_RMS_means.csv', index=False)
   relative_RMS_means_g = relative_RMS_means.groupby(['Subject','task'])
-  # Collapsed aross subject, task toa ccomidate concatenation of timeseries
+  # Collapsed aross subject, task to accomidate concatenation of timeseries
   relative_RMS_means_collapsed = pd.DataFrame(relative_RMS_means_g.agg(np.mean))
   relative_RMS_means_collapsed.reset_index(inplace=True)
-  relative_RMS_means_collapsed.to_csv(os.path.abspath(os.getcwd()) + sep + 'relative_RMS_means_collapsed.csv', index=False)
+  relative_RMS_means_collapsed.to_csv(source_path + sep + 'relative_RMS_means_collapsed.csv', index=False)
 
   # Merge demographics and motion data, duplicating dmeographics information to fill in all scans per subject
   regressors = pd.merge(relative_RMS_means, demographics, how='left', on='Subject')
-  regressors.to_csv(os.path.abspath(os.getcwd()) + sep + 'regressors.csv', index=False)
+  regressors.to_csv(source_path + sep + 'regressors.csv', index=False)
 else:
-  relative_RMS_means = pd.read_csv(os.path.abspath(os.getcwd()) + sep + 'relative_RMS_means.csv')
-  relative_RMS_means_collapsed = pd.read_csv(os.path.abspath(os.getcwd()) + sep + 'relative_RMS_means_collapsed.csv')
-  regressors = pd.read_csv(os.path.abspath(os.getcwd()) + sep + 'regressors.csv')
-
+  relative_RMS_means = pd.read_csv(source_path + sep + 'relative_RMS_means.csv')
+  relative_RMS_means_collapsed = pd.read_csv(source_path + sep + 'relative_RMS_means_collapsed.csv')
+  regressors = pd.read_csv(source_path + sep + 'regressors.csv')
+  
+  regressors_matrix = regressors[['Subject', 'Run', 'task', 'Age__22-25', 'Age__26-30',
+       'Age__31-35', 'Age__36+', 'Gender__F', 'Gender__M', 'Acquisition__Q01',
+       'Acquisition__Q02', 'Acquisition__Q03', 'Acquisition__Q04',
+       'Acquisition__Q05', 'Acquisition__Q06', 'Acquisition__Q07',
+       'Acquisition__Q08', 'Acquisition__Q09', 'Acquisition__Q10',
+       'Acquisition__Q11', 'Acquisition__Q12', 'Acquisition__Q13',
+       'Release__MEG2', 'Release__Q1', 'Release__Q2', 'Release__Q3',
+       'Release__S1200', 'Release__S500', 'Release__S900']]
 
 ################################
 #### Making the input data #####
@@ -936,41 +978,41 @@ if True:
     social_parcel_ex = social_parcels.iloc[0]
     wm_parcel_ex = wm_parcels.iloc[0]
     parcel_ex_full = np.array([emotion_parcel_ex, gambling_parcel_ex, language_parcel_ex, motor_parcel_ex, relational_parcel_ex, social_parcel_ex, wm_parcel_ex])
-    ax_parcel = sns.heatmap(parcel_ex_full, cbar=False, xticklabels=False)
-    ax_parcel.set_yticklabels(['Emotion Processing','Gambling','Language','Motor','Relational Processing','Social','Working Memory'], rotation=0)
-    plt.xlabel('Parcels')
-    plt.ylabel('Tasks')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Visualization.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    ax_parcel = sns.heatmap(parcel_ex_full, cbar=False, xticklabels=False, yticklabels=False, cmap = 'mako')#, linewidths=1, linecolor='white')
+    # ax_parcel.set_yticklabels(['Emotion Processing','Gambling','Language','Motor','Relational Processing','Social','Working Memory'], rotation=0)
+    # plt.xlabel('Parcels', color='white')
+    # plt.ylabel('Tasks')
+    plt.savefig(source_path + sep + 'Visuals' + sep + 'Parcel Visualization no_label mako.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     network_ex_full = pd.DataFrame(parcel_ex_full, columns= networks)
     scaler = StandardScaler() 
     network_ex_full = network_ex_full.groupby(lambda x:x, axis=1).sum()
-    ax_network = sns.heatmap(network_ex_full, cbar=False)
-    ax_network.set_yticklabels(['Emotion Processing','Gambling','Language','Motor','Relational Processing','Social','Working Memory'], rotation=0)
-    ax_network.set_xticklabels([
-      'Ant IPS',
-      'Aud',
-      'Basal',
-      'Cereb',
-      'Cing-Ins',
-      'D Att',
-      'DMN',
-      'Dors PCC',
-      'L V Att',
-      'Language',
-      'Motor',
-      'Occ post',
-      'R V Att',
-      'Salience',
-      'Striate',
-      'Temporal',
-      'Vis Sec'
-    ])
-    plt.xlabel('Networks')
-    plt.ylabel('Tasks')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Visualization.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    ax_network = sns.heatmap(network_ex_full, cbar=False, xticklabels=False, yticklabels=False, cmap = 'mako')#, linewidths=1, linecolor='white')
+    # ax_network.set_yticklabels(['Emotion Processing','Gambling','Language','Motor','Relational Processing','Social','Working Memory'], rotation=0)
+    # ax_network.set_xticklabels([
+    #   'Ant IPS',
+    #   'Aud',
+    #   'Basal',
+    #   'Cereb',
+    #   'Cing-Ins',
+    #   'D Att',
+    #   'DMN',
+    #   'Dors PCC',
+    #   'L V Att',
+    #   'Language',
+    #   'Motor',
+    #   'Occ post',
+    #   'R V Att',
+    #   'Salience',
+    #   'Striate',
+    #   'Temporal',
+    #   'Vis Sec'
+    # ])
+    # plt.xlabel('Networks')
+    # plt.ylabel('Tasks')
+    plt.savefig(source_path + sep + 'Visuals' + sep + 'Network Visualization no_label mako.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
-        
+            
 
   # Add the categorical label to each dataframe
   emotion_parcels['task'] = 1
@@ -1075,41 +1117,39 @@ if True:
     mask = np.zeros_like(emotion_parcel_con_ex)
     mask[np.triu_indices_from(mask)] = True
 
-    ax_parcel_con_emotion = sns.heatmap(emotion_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
-    ax_parcel_con_emotion.set_title('Emotion Processing')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Emotion.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    ax_parcel_con_emotion = sns.heatmap(emotion_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False, cmap = 'mako')
+    #ax_parcel_con_emotion.set_title('Emotion Processing')
+    plt.savefig(source_path + sep + 'Visuals' + sep + 'Parcel Connection Emotion mako.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     gambling_parcel_con_ex = fc_matrix_gambling[0]
     ax_parcel_con_gambling = sns.heatmap(gambling_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_parcel_con_gambling.set_title('Gambling')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Gambling.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    plt.savefig(source_path + sep + 'Visuals' + sep + 'Parcel Connection Gambling.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     language_parcel_con_ex = fc_matrix_language[0]
     ax_parcel_con_language = sns.heatmap(language_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_parcel_con_language.set_title('Language')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Language.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    plt.savefig(source_path + sep + 'Visuals' + sep + 'Parcel Connection Language.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     motor_parcel_con_ex = fc_matrix_motor[0]
     ax_parcel_con_motor = sns.heatmap(motor_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_parcel_con_motor.set_title('Motor')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Motor.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    plt.savefig(source_path + sep + 'Visuals' + sep + 'Parcel Connection Motor.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     relational_parcel_con_ex = fc_matrix_relational[0]
     ax_parcel_con_relational = sns.heatmap(relational_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_parcel_con_relational.set_title('Relational Processing')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Relational Processing.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    plt.savefig(source_path + sep + 'Visuals' + sep + 'Parcel Connection Relational Processing.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     social_parcel_con_ex = fc_matrix_social[0]
     ax_parcel_con_social = sns.heatmap(social_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_parcel_con_social.set_title('Social')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Social.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    plt.savefig(source_path + sep + 'Visuals' + sep + 'Parcel Connection Social.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     wm_parcel_con_ex = fc_matrix_wm[0]
     ax_parcel_con_wm = sns.heatmap(wm_parcel_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_parcel_con_wm.set_title('Working Memory')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Parcel Connection Working Memory.png', transparent=True, dpi = 1000, bbox_inches='tight')
-
-
+    plt.savefig(source_path + sep + 'Visuals' + sep + 'Parcel Connection Working Memory.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
   # Initialize the vector form of each task, where each row is a participant and each column is a connection
   if glasser:
@@ -1623,39 +1663,39 @@ if True:
     mask = np.zeros_like(emotion_network_con_ex)
     mask[np.triu_indices_from(mask)] = True
 
-    ax_network_con_emotion = sns.heatmap(emotion_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
-    ax_network_con_emotion.set_title('Emotion Processing')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Emotion.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    ax_network_con_emotion = sns.heatmap(emotion_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False, cmap = 'mako')
+    #ax_network_con_emotion.set_title('Emotion Processing')
+    plt.savefig(source_path + sep + 'Visuals' + sep + 'Network Connection Emotion no_label mako.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     gambling_network_con_ex = fc_matrix_gambling_networks[0]
     ax_network_con_gambling = sns.heatmap(gambling_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_network_con_gambling.set_title('Gambling')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Gambling.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    plt.savefig(source_path + sep + 'Visuals' + sep + 'Network Connection Gambling.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     language_network_con_ex = fc_matrix_language_networks[0]
     ax_network_con_language = sns.heatmap(language_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_network_con_language.set_title('Language')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Language.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    plt.savefig(source_path + sep + 'Visuals' + sep + 'Network Connection Language.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     motor_network_con_ex = fc_matrix_motor_networks[0]
     ax_network_con_motor = sns.heatmap(motor_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_network_con_motor.set_title('Motor')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Motor.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    plt.savefig(source_path + sep + 'Visuals' + sep + 'Network Connection Motor.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     relational_network_con_ex = fc_matrix_relational_networks[0]
     ax_network_con_relational = sns.heatmap(relational_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_network_con_relational.set_title('Relational Processing')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Relational Processing.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    plt.savefig(source_path + sep + 'Visuals' + sep + 'Network Connection Relational Processing.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     social_network_con_ex = fc_matrix_social_networks[0]
     ax_network_con_social = sns.heatmap(social_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_network_con_social.set_title('Social')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Social.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    plt.savefig(source_path + sep + 'Visuals' + sep + 'Network Connection Social.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
     wm_network_con_ex = fc_matrix_wm_networks[0]
     ax_network_con_wm = sns.heatmap(wm_network_con_ex, mask=mask, cbar=False, xticklabels=False, yticklabels=False)
     ax_network_con_wm.set_title('Working Memory')
-    plt.savefig(os.path.abspath(os.getcwd()) + sep + 'Visuals' + sep + 'Network Connection Working Memory.png', transparent=True, dpi = 1000, bbox_inches='tight')
+    plt.savefig(source_path + sep + 'Visuals' + sep + 'Network Connection Working Memory.png', transparent=True, dpi = 1000, bbox_inches='tight')
 
   #Make a vectorized form of the connections (unique FC matrix values)
   if glasser:
@@ -1822,9 +1862,6 @@ if False:
   vif_info_centered['VIF'] = [variance_inflation_factor(X_network_connections_centered.values, i) for i in range(X_network_connections_centered.shape[1])]
   vif_info_centered['Column'] = X_network_connections_centered.columns
   vif_info_centered.sort_values('VIF', ascending=False, inplace=True)
-
-
-
 
 ##############################################
 #### parcel connections feature selection ####
@@ -2396,12 +2433,12 @@ if True:
 if True:
   #Define function to retrive names of connections
   def vector_names(names, output_list):
-      cur = names[0]
-      for n in names[1:]:
-          output_list.append((str(cur) + ' | ' + str(n)))
-      if len(names)>2:
-          output_list = vector_names(names[1:], output_list)
-      return output_list
+    cur = names[0]
+    for n in names[1:]:
+      output_list.append((str(cur) + ' | ' + str(n)))
+    if len(names)>2:
+      output_list = vector_names(names[1:], output_list)
+    return output_list
       
 
   #Retrive the list of connections and netowrks for the connection data
