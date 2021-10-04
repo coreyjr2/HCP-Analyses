@@ -24,8 +24,8 @@ from pathlib import Path
 sep = os.path.sep
 source_path = os.path.dirname(os.path.abspath(__file__)) + sep
 sys_name = platform.system() 
-parcel_ref = { #Parcels, unique values from cor matrix, N networks
-    'harvard_oxford':(96,4560), #((1+p)p)/2 -p = lower diagonal
+parcel_ref = { #Parcels, unique values from cor matrix, N networks;   #Unused#
+    'harvard_oxford':(96,4560), #(((1+p)p)/2)-p=.5p(p-1) lower diagonal
     'msdl':(39,741),
     'mni_glasser':(360,64620),
     'yeo_7_thin':(7,21),
@@ -164,6 +164,16 @@ def generate_network_input_features(parcels_full, networks, scale=False): # Test
   X_network.insert(0, 'task',parcels_full['task'])
   return X_network
 
+def mean_norm(df_input):
+  return df_input.apply(lambda x: (x-x.mean())/ x.std(), axis=0)
+
+def scale_subset(df, cols_to_exclude):
+  df_excluded = df[cols_to_exclude]
+  df_temp = df.drop(cols_to_exclude, axis=1, inplace=False)
+  df_temp = mean_norm(df_temp)
+  df_ret = pd.concat([df_excluded, df_temp], axis=1, join='inner')
+  return df_ret
+
 def connection_names(corr_matrix, labels): # Tested
   name_idx = np.triu_indices_from(corr_matrix, k=1)
   out_list = []
@@ -260,8 +270,14 @@ def run_rfc(train_x, train_y, test_x, test_y, n_estimators = 500, random_state =
   return out_dict
 
 def run_models(meta_dict, out_dict, training_label, test_label, train_x, train_y, test_x, test_y):
+  dhash = hashlib.md5()
+  encoded = json.dumps(meta_dict, sort_keys=True).encode()
+  dhash.update(encoded)
+  run_uid = dhash.hexdigest()
   svc_out = run_svc_new(train_x, train_y, test_x, test_y, random_state = meta_dict['Random State'], C=meta_dict['C'])
+  pd.DataFrame(svc_out['Confusion Matrix']).to_csv(source_path + 'Output' + sep + run_uid + sep + training_label + '_' + test_label + 'SCV Confusion Matrix.csv', index=False)
   rf_out = run_rfc(train_x, train_y, test_x, test_y, random_state = meta_dict['Random State'], n_estimators=meta_dict['Random Forest Estimators'])
+  pd.DataFrame(rf_out['Confusion Matrix']).to_csv(source_path + 'Output' + sep + run_uid + sep + training_label + '_' + test_label + 'RFC Confusion Matrix.csv', index=False)
   # Store output in output_dictionary
   ind = len(out_dict.keys())
   out_dict[ind] = [
@@ -288,7 +304,7 @@ def run_models(meta_dict, out_dict, training_label, test_label, train_x, train_y
   ind+=1
   return out_dict
 
-def fetch_labels(meta_dict):
+def fetch_labels(meta_dict, json_path = None):
   if 'glasser' in meta_dict['atlas_name']:
     regions_file = np.load(source_path + "glasser_regions.npy").T
     parcel_labels = regions_file[0]
@@ -302,7 +318,21 @@ def fetch_labels(meta_dict):
     parcel_labels = info_file['Label']
     network_labels = info_file['networks']
   else:
-    raise NotImplementedError
+    # try:
+    print(json_path + meta_dict['atlas_name'] + '_parcellation-metadata.json')
+    parc_meta_dict = json.load(open(json_path + meta_dict['atlas_name'] + '_parcellation-metadata.json'))
+    network_info = pd.read_csv(source_path + 'misc' + sep + parc_meta_dict['atlas_name'] + '.Centroid_RAS.csv')
+    info_temp = network_info['ROI Name'].str.split('_', expand=True)
+    info_temp.columns = ['Parcelation Name','Hemisphere','ICN','sub1','sub2']
+    info_temp['Parcel Names'] = info_temp['sub1'] + '_' + info_temp['sub2']
+    info_temp.drop(columns=['sub1','sub2'], axis=1, inplace=True)
+    network_info_full = pd.DataFrame.join(info_temp, network_info)
+    network_mapping = pd.read_csv(source_path + 'misc' + sep + '7NetworksOrderedNames.csv')
+    network_info_full = pd.merge(network_info_full, network_mapping, how='left', on='ICN')
+    parcel_labels = network_info_full['Parcel Names']
+    network_labels = network_info_full['Network Name']
+    # except:
+    #   raise NotImplementedError
   return parcel_labels, network_labels
 
 def feature_reduction(x, y, type):
@@ -313,26 +343,33 @@ def feature_reduction(x, y, type):
 if __name__=='__main__':
   total_start_time = dt.datetime.now()
   meta_dict = {
-    'atlas_name' : 'mni_glasser',
+    'atlas_name' : '69354adf',
     'smoothed' : False,
     'ICA-Aroma' : False,
     'confounds': [],
     'Random Forest Estimators': 1000,
     'Random State':42,
     'subtract parcel-wise mean': True,
-    'concatenate':True,
-    'C':1
+    'concatenate':True
+    #'C':1
   }
   # Generate unique hash for metadata
   dhash = hashlib.md5()
   encoded = json.dumps(meta_dict, sort_keys=True).encode()
   dhash.update(encoded)
   run_uid = dhash.hexdigest()
-  if os.path.exists(source_path + 'Output' + sep + run_uid + sep + 'metadata.json'):
-    print(f'An analysis with this same metadata dictionary has been run: {run_uid}')
-    print('Would you like to re-run? (y/n)')
-    if not 'y' in input().lower():
-      raise Exception('Analyses halted.')
+  #Make folder to contain output
+  try:
+    os.mkdir(source_path + 'Output' + sep + run_uid)
+    with open(source_path + 'Output' + sep + run_uid + sep + 'metadata.json', 'w') as outfile:
+      json.dump(meta_dict, outfile)
+  except:
+    pass
+  # if os.path.exists(source_path + 'Output' + sep + run_uid + sep + 'metadata.json'):
+  #   print(f'An analysis with this same metadata dictionary has been run: {run_uid}')
+  #   print('Would you like to re-run? (y/n)')
+  #   if not 'y' in input().lower():
+  #     raise Exception('Analyses halted.')
   
   if getpass.getuser() == 'kyle':
     HCP_DIR = "S:\\HCP\\"
@@ -343,7 +380,8 @@ if __name__=='__main__':
     subjects = pd.read_csv('C:\\Users\\kyle\\repos\\HCP-Analyses\\subject_list.csv')['ID']
     path_pattern = "S:\\HCP\\HCP_1200\\{}\\MNINonLinear\\Results\\{}\\{}.npy"
     nifty_template_hcp = 'S:\\HCP\\HCP_1200\\{subject}\\MNINonLinear\\Results\\{session}_{run}\\{session}_{run}.nii.gz'
-    npy_template_hcp = 'S:\\HCP\\HCP_1200\\{subject}\\MNINonLinear\\Results\\{session}_{run}\\{session}_{run}_{atlas_name}.npy'
+    npy_template_hcp_alt = 'S:\\HCP\\HCP_1200\\{subject}\\MNINonLinear\\Results\\{session}_{run}\\{session}_{run}_{atlas_name}.npy'
+    npy_template_hcp = 'S:\\HCP\\HCP_1200\\{subject}\\MNINonLinear\\Results\\{session}_{run}\\{atlas_name}_{session}_{run}.npy'
   else:
     HCP_DIR = "/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/HCP_1200_Numpy/"
     basepath = str('/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/HCP_1200_Numpy/{}/MNINonLinear/Results/')
@@ -355,7 +393,7 @@ if __name__=='__main__':
     path_pattern ="/Volumes/Byrgenwerth/Datasets/HCP 1200 MSDL Numpy/HCP_1200_Numpy/{}/MNINonLinear/Results/{}/{}.npy"
     if not os.path.isdir(HCP_DIR): os.mkdir(HCP_DIR)
   
-  parcel_labels, network_labels = fetch_labels(meta_dict)
+  parcel_labels, network_labels = fetch_labels(meta_dict, HCP_1200)
   #Use this line to subset the subject list to something shorter as needed
   subjects = subjects[:]
   sessions = [
@@ -367,6 +405,7 @@ if __name__=='__main__':
     "tfMRI_RELATIONAL",
     "tfMRI_SOCIAL"
   ]
+
   parcellated_data = {}
   for session in sessions:
     #Read in parcellated data, or parcellate data if meta-data conditions not met by available data
@@ -409,10 +448,10 @@ if __name__=='__main__':
 
   confounds = pd.merge(relative_RMS_means_collapsed, demographics_dummy, how='left', on='Subject')
 
-  parcel_sum_input = pd.merge(confounds, parcels_sums, on=['Subject','task'], how = 'right')
-  network_sum_input = pd.merge(confounds, network_sums, on=['Subject','task'], how = 'right')
-  parcel_connection_input = pd.merge(confounds, parcel_connection_task_data, on=['Subject','task'], how = 'right')
-  network_connection_input = pd.merge(confounds, network_connection_features, on=['Subject','task'], how = 'right')
+  parcel_sum_input = pd.merge(confounds, parcels_sums, on=['Subject','task'], how = 'right').dropna()
+  network_sum_input = pd.merge(confounds, network_sums, on=['Subject','task'], how = 'right').dropna()
+  parcel_connection_input = pd.merge(confounds, parcel_connection_task_data, on=['Subject','task'], how = 'right').dropna()
+  network_connection_input = pd.merge(confounds, network_connection_features, on=['Subject','task'], how = 'right').dropna()
 
   parcel_sum_x, parcel_sum_y = XY_split(parcel_sum_input, 'task')
   network_sum_x, network_sum_y = XY_split(network_sum_input, 'task')
@@ -423,14 +462,33 @@ if __name__=='__main__':
   network_sum_x_train, network_sum_x_test, network_sum_y_train, network_sum_y_test = train_test_split(network_sum_x, network_sum_y, test_size = 0.2)
   parcel_connection_x_train, parcel_connection_x_test, parcel_connection_y_train, parcel_connection_y_test = train_test_split(parcel_connection_x, parcel_connection_y, test_size = 0.2)
   network_connection_x_train, network_connection_x_test, network_connection_y_train, network_connection_y_test = train_test_split(network_connection_x, network_connection_y, test_size = 0.2)
-  # TODO Scale here
+
+  # Scaling non-categorical Variables
+  cols_to_exclude = list(confounds.columns)
+  cols_to_exclude.remove('task')
+  parcel_sum_x_train = scale_subset(parcel_sum_x_train, cols_to_exclude)
+  parcel_sum_x_test = scale_subset(parcel_sum_x_test, cols_to_exclude)
+  network_sum_x_train = scale_subset(network_sum_x_train, cols_to_exclude)
+  network_sum_x_test = scale_subset(network_sum_x_test, cols_to_exclude)
+  parcel_connection_x_train = scale_subset(parcel_connection_x_train, cols_to_exclude)
+  parcel_connection_x_test = scale_subset(parcel_connection_x_test, cols_to_exclude)
+  network_connection_x_train = scale_subset(network_connection_x_train, cols_to_exclude)
+  network_connection_x_test = scale_subset(network_connection_x_test, cols_to_exclude)
 
   # Feature Selection
-  lreg1 = LogisticRegression(random_state=meta_dict['Random State']).fit(parcel_sum_x_train, parcel_sum_y_train)
-  lreg1.get_params()
+  # lreg1 = LogisticRegression(random_state=meta_dict['Random State']).fit(parcel_sum_x_train, parcel_sum_y_train)
+  # lreg1.get_params()
 
   # Run Models
   out_dict = {}
+  confounds_complete = confounds.dropna(axis=0, how='any')
+  confounds_y = confounds_complete[['task']]
+  confounds_x = confounds_complete.loc[:,confounds_complete.columns != 'task']
+  confounds_x_train, confounds_x_test, confounds_y_train, confounds_y_test = train_test_split(confounds_x, confounds_y, test_size = 0.2)
+  test_label = 'confounds' 
+  training_label = 'confounds'
+  out_dict = run_models(meta_dict, out_dict, training_label, test_label, confounds_x_train, confounds_y_train, confounds_x_test, confounds_y_test)
+
   test_label = 'parcel_sum' 
   training_label = 'parcel_sum' 
   out_dict = run_models(meta_dict, out_dict, training_label, test_label, parcel_sum_x_train, parcel_sum_y_train, parcel_sum_x_test, parcel_sum_y_test)
@@ -447,13 +505,7 @@ if __name__=='__main__':
   training_label = 'network_connection' 
   out_dict = run_models(meta_dict, out_dict, training_label, test_label, network_connection_x_train, network_connection_y_train, network_connection_x_test, network_connection_y_test)
 
-  #Make folder to contain output
-  try:
-    os.mkdir(source_path + 'Output' + sep + run_uid)
-    with open(source_path + 'Output' + sep + run_uid + sep + 'metadata.json', 'w') as outfile:
-      json.dump(meta_dict, outfile)
-  except:
-    pass
+
   output_df = pd.DataFrame.from_dict(out_dict, orient='index', columns = ['Training Data','Test Data','Analysis Method','Training Accuracy','Test Accuracy','Training N','Test N','Notes'])
   output_df.to_csv(
     source_path + 'Output' + sep + run_uid + sep + 'HCP Task Decoding.csv',
