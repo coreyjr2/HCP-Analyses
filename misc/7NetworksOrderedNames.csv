@@ -1,0 +1,8 @@
+Network Order,Network Name,ICN,Mat Name
+1, Visual,Vis,1Vis
+2, Somatomotor,SomMot,2Motor
+3, Dorsal Attention,DorsAttn,3Dorsal
+4, Salience / Ventral Attention,SalVentAttn,4Ventral
+5, Limbic,Limbic,5Limbic
+6, Control,Cont,6Frontoparietal
+7, Default,Default,7DMN
