@@ -10,14 +10,13 @@ import datetime as dt
 import nibabel as nib
 import numpy as np
 from nilearn import datasets
-from nilearn.input_data import NiftiLabelsMasker
-from nilearn.input_data import NiftiMapsMasker
+from nilearn.input_data import NiftiLabelsMasker, NiftiMapsMasker
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import cross_val_score, train_test_split, KFold
+
 from sklearn import svm
 from pathlib import Path
 
@@ -148,20 +147,18 @@ def generate_parcel_input_features(parcellated_data, labels): # Tested
   parcels_full = pd.DataFrame(pd.concat(list(out_df_dict.values()), axis = 0))
   return parcels_full
 
-def generate_network_input_features(parcels_full, networks, scale=False): # Tested
-  X_network = parcels_full[parcels_full.columns[2:]]
+def generate_network_input_features(parcels_full, networks): # Tested
+  X_network = parcels_full.copy()[parcels_full.columns[2:]]
   X_network.rename(
     columns={i:j for i,j in zip(X_network.columns,networks)}, inplace=True
   )
   X_network = X_network.groupby(lambda x:x, axis=1).sum()
-  if scale:
-    scaler = StandardScaler() 
-    X_network_scaled = pd.DataFrame(scaler.fit_transform(X_network), columns = X_network.columns)
-    X_network_scaled.reset_index(drop=True, inplace=True)
-    X_network = X_network_scaled
   parcels_full.reset_index(drop=True, inplace=True)
+  X_network.reset_index(drop=True, inplace=True)
   X_network.insert(0, 'Subject',parcels_full['Subject'])
+  X_network['Subject'] = parcels_full['Subject']
   X_network.insert(0, 'task',parcels_full['task'])
+  X_network['task'] = parcels_full['task']
   return X_network
 
 def mean_norm(df_input):
@@ -233,12 +230,42 @@ def XY_split(df, outcome_col, excluded = []): # Tested
 def tune_hyperparams():
   pass
 
-def run_svc_new(train_x, train_y, test_x, test_y, random_state = 42, C=1):
-  l_scv =  svm.LinearSVC(random_state=random_state, C=C)
-  l_scv.fit(train_x, train_y.values.ravel())
-  y_pred = l_scv.predict(test_x)
-  training_accuracy = l_scv.score(train_x, train_y)
-  test_accuracy = l_scv.score(test_x, test_y)
+def run_svc_new(train_x, train_y, test_x, test_y, random_state = 42, k=5):
+  '''
+  performs k-fold cross validation on the training data
+  tests the winning model from cross-validation on the test data
+  within k-folds, also iterates through values for C
+  returns out_dict
+  *new keys for out_dict:
+    C
+    k
+    winning_fold
+    fold_accuracy
+  '''
+  k_fold = KFold(n_splits=k)
+  l_svc =  svm.SVC(kernel='linear')
+  SVCs = []
+  accuracies = []
+  folds = []
+  fold = 0
+  C_s = np.logspace(-10, 0, 10)
+  Cs = []
+  for train_indices, test_indices in k_fold.split(train_x):
+    fold+=1
+    for C in C_s:
+      l_svc_temp = svm.SVC(kernel='linear')
+      l_svc_temp.C = C
+      l_svc_temp.fit(train_x.iloc[train_indices], train_y.iloc[train_indices])
+      accuracies.append(l_svc_temp.score(train_x.iloc[test_indices], train_y.iloc[test_indices]))
+      SVCs.append(l_svc_temp)
+      folds.append(fold)
+      Cs.append(C) # Just to check that you have the right model and .copy() is working
+  max_training_accuracy = max(accuracies)
+  max_index = accuracies.index(max_training_accuracy)
+  l_svc = SVCs[max_index]
+  y_pred = l_svc.predict(test_x)
+  training_accuracy = l_svc.score(train_x, train_y)
+  test_accuracy = l_svc.score(test_x, test_y)
   classification_rep = classification_report(test_y, y_pred)
   confusion_mat = confusion_matrix(test_y, y_pred)
   out_dict = {
@@ -247,7 +274,11 @@ def run_svc_new(train_x, train_y, test_x, test_y, random_state = 42, C=1):
     'Classification Report':classification_rep,
     'Confusion Matrix': confusion_mat,
     'Training N':len(train_x),
-    'Test N':len(test_x)
+    'Test N':len(test_x),
+    'k-folds':k,
+    'C':l_svc.C,
+    'Winning Fold':folds[max_index],
+    'Fold Accuracy':accuracies[max_index]
   }
   return out_dict
 
@@ -274,7 +305,7 @@ def run_models(meta_dict, out_dict, training_label, test_label, train_x, train_y
   encoded = json.dumps(meta_dict, sort_keys=True).encode()
   dhash.update(encoded)
   run_uid = dhash.hexdigest()
-  svc_out = run_svc_new(train_x, train_y, test_x, test_y, random_state = meta_dict['Random State'], C=meta_dict['C'])
+  svc_out = run_svc_new(train_x, train_y, test_x, test_y, random_state = meta_dict['Random State'])
   pd.DataFrame(svc_out['Confusion Matrix']).to_csv(source_path + 'Output' + sep + run_uid + sep + training_label + '_' + test_label + 'SCV Confusion Matrix.csv', index=False)
   rf_out = run_rfc(train_x, train_y, test_x, test_y, random_state = meta_dict['Random State'], n_estimators=meta_dict['Random Forest Estimators'])
   pd.DataFrame(rf_out['Confusion Matrix']).to_csv(source_path + 'Output' + sep + run_uid + sep + training_label + '_' + test_label + 'RFC Confusion Matrix.csv', index=False)
@@ -329,7 +360,7 @@ def fetch_labels(meta_dict, json_path = None):
     network_info_full = pd.DataFrame.join(info_temp, network_info)
     network_mapping = pd.read_csv(source_path + 'misc' + sep + '7NetworksOrderedNames.csv')
     network_info_full = pd.merge(network_info_full, network_mapping, how='left', on='ICN')
-    parcel_labels = network_info_full['Parcel Names']
+    parcel_labels = network_info_full['ROI Name']
     network_labels = network_info_full['Network Name']
     # except:
     #   raise NotImplementedError
@@ -351,7 +382,6 @@ if __name__=='__main__':
     'Random State':42,
     'subtract parcel-wise mean': True,
     'concatenate':True
-    #'C':1
   }
   # Generate unique hash for metadata
   dhash = hashlib.md5()
@@ -414,7 +444,6 @@ if __name__=='__main__':
   parcels_sums = generate_parcel_input_features(parcellated_data, parcel_labels)
 
   network_sums = generate_network_input_features(parcels_sums, network_labels)
-  #network_sums_scaled = generate_network_input_features(parcels_sums, network_labels, scale=True)
 
   parcel_connection_task_data = generate_parcel_connection_features(parcellated_data, parcel_labels)
 
@@ -487,6 +516,21 @@ if __name__=='__main__':
   confounds_x_train, confounds_x_test, confounds_y_train, confounds_y_test = train_test_split(confounds_x, confounds_y, test_size = 0.2)
   test_label = 'confounds' 
   training_label = 'confounds'
+
+  # meta_dict = meta_dict
+  # out_dict = out_dict
+  # training_label = training_label
+  # test_label = test_label
+  # train_x = confounds_x_train
+  # train_y = confounds_y_train
+  # test_x = confounds_x_test
+  # test_y = confounds_y_test
+
+
+
+
+
+
   out_dict = run_models(meta_dict, out_dict, training_label, test_label, confounds_x_train, confounds_y_train, confounds_x_test, confounds_y_test)
 
   test_label = 'parcel_sum' 
