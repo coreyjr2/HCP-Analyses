@@ -15,7 +15,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import cross_val_score, train_test_split, KFold
+from sklearn.model_selection import cross_val_score, train_test_split, KFold, GridSearchCV
 
 from sklearn import svm
 from pathlib import Path
@@ -517,37 +517,90 @@ if __name__=='__main__':
   test_label = 'confounds' 
   training_label = 'confounds'
 
-  # meta_dict = meta_dict
-  # out_dict = out_dict
-  # training_label = training_label
-  # test_label = test_label
-  # train_x = confounds_x_train
-  # train_y = confounds_y_train
-  # test_x = confounds_x_test
-  # test_y = confounds_y_test
+  meta_dict = meta_dict
+  out_dict = out_dict
+  training_label = training_label
+  test_label = test_label
+  train_x = confounds_x_train
+  train_y = confounds_y_train
+  test_x = confounds_x_test
+  test_y = confounds_y_test
 
+  C_s = list(np.logspace(-10, 0, 4))
+  svc =  svm.SVC()
+  parameters = {'kernel':['linear'], 'C':C_s}
+  n_folds=5
+  clf = GridSearchCV(svc, parameters, cv=n_folds, refit=False, n_jobs=3)
 
-
-
-
-
-  out_dict = run_models(meta_dict, out_dict, training_label, test_label, confounds_x_train, confounds_y_train, confounds_x_test, confounds_y_test)
+  clf.fit(train_x, train_y)
+  #out_dict = run_models(meta_dict, out_dict, training_label, test_label, confounds_x_train, confounds_y_train, confounds_x_test, confounds_y_test)
 
   test_label = 'parcel_sum' 
   training_label = 'parcel_sum' 
-  out_dict = run_models(meta_dict, out_dict, training_label, test_label, parcel_sum_x_train, parcel_sum_y_train, parcel_sum_x_test, parcel_sum_y_test)
+  #out_dict = run_models(meta_dict, out_dict, training_label, test_label, parcel_sum_x_train, parcel_sum_y_train, parcel_sum_x_test, parcel_sum_y_test)
 
   test_label = 'network_sum' 
   training_label = 'network_sum' 
-  out_dict = run_models(meta_dict, out_dict, training_label, test_label, network_sum_x_train, network_sum_y_train, network_sum_x_test, network_sum_y_test)
+  meta_dict = meta_dict
+  out_dict = out_dict
+  training_label = training_label
+  test_label = test_label
+  train_x = network_sum_x_train
+  train_y = network_sum_y_train
+  test_x = network_sum_x_test
+  test_y = network_sum_y_test
+
+  start_time = dt.datetime.now()
+  C_s = list(np.logspace(0, -10, 4))
+  svc =  svm.SVC()
+  parameters = {'kernel':['linear'], 'C':C_s[0:1]}
+  n_folds=3
+  clf = GridSearchCV(svc, parameters, cv=n_folds, refit=True)
+
+  clf.fit(train_x, train_y)
+
+  print(clf.best_params_)
+  print(clf.best_score_)
+  results = pd.DataFrame(clf.cv_results_)
+
+  clf.score(network_sum_x_test, network_sum_y_test)
+  
+  end_time = dt.datetime.now()
+  print('Network Sum done. Runtime: ', end_time - start_time)
+  
+  #out_dict = run_models(meta_dict, out_dict, training_label, test_label, network_sum_x_train, network_sum_y_train, network_sum_x_test, network_sum_y_test)
 
   test_label = 'parcel_connection' 
   training_label = 'parcel_connection' 
-  out_dict = run_models(meta_dict, out_dict, training_label, test_label, parcel_connection_x_train, parcel_connection_y_train, parcel_connection_x_test, parcel_connection_y_test)
+  #out_dict = run_models(meta_dict, out_dict, training_label, test_label, parcel_connection_x_train, parcel_connection_y_train, parcel_connection_x_test, parcel_connection_y_test)
 
   test_label = 'network_connection' 
   training_label = 'network_connection' 
-  out_dict = run_models(meta_dict, out_dict, training_label, test_label, network_connection_x_train, network_connection_y_train, network_connection_x_test, network_connection_y_test)
+  training_label = training_label
+  test_label = test_label
+  train_x = network_connection_x_train
+  train_y = network_connection_y_train
+  test_x = network_connection_x_test
+  test_y = network_connection_y_test
+
+  start_time = dt.datetime.now()
+  C_s = list(np.logspace(0, -10, 4))
+  svc =  svm.SVC()
+  parameters = {'kernel':['linear'], 'C':C_s[0:3]}
+  n_folds=5
+  clf = GridSearchCV(svc, parameters, cv=n_folds, refit=True, n_jobs=-1)
+
+  clf.fit(train_x, train_y)
+
+  print(clf.best_params_)
+  print(clf.best_score_)
+  results = pd.DataFrame(clf.cv_results_)
+
+  print(clf.score(network_connection_x_test, network_connection_y_test))
+  
+  end_time = dt.datetime.now()
+  print('Network Connection done. Runtime: ', end_time - start_time)
+  #out_dict = run_models(meta_dict, out_dict, training_label, test_label, network_connection_x_train, network_connection_y_train, network_connection_x_test, network_connection_y_test)
 
 
   output_df = pd.DataFrame.from_dict(out_dict, orient='index', columns = ['Training Data','Test Data','Analysis Method','Training Accuracy','Test Accuracy','Training N','Test N','Notes'])
