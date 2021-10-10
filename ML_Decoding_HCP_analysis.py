@@ -16,9 +16,19 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score, train_test_split, KFold, GridSearchCV
+from sklearn.feature_selection import SelectFromModel
+from sklearn.decomposition import PCA
+from sklearn.inspection import permutation_importance
 
 from sklearn import svm
 from pathlib import Path
+
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy.stats import spearmanr
+from scipy.cluster import hierarchy
+from collections import defaultdict
 
 sep = os.path.sep
 source_path = os.path.dirname(os.path.abspath(__file__)) + sep
@@ -371,6 +381,50 @@ def feature_reduction(x, y, type):
     lreg1 = LogisticRegression(random_state=meta_dict['Random State']).fit(x, y)
     lreg1.get_params()
 
+def vif_checking(x):
+  # Returns dataframe with information on VIF
+  vif_info = pd.DataFrame()
+  vif_info['VIF'] = [variance_inflation_factor(pd.DataFrame(x).values, i) for i in range(pd.DataFrame(x).shape[1])]
+  vif_info['Column'] = x.columns
+  vif_info.sort_values('VIF', ascending=False, inplace=True)
+  return vif_info
+
+def correlational_fs(x, y): # On hold for now
+  clf = LogisticRegression(random_state=0).fit(x, y)
+
+def hierarchical_fs(x, n_sub):
+  # Returns an index of features to be used
+  corr = spearmanr(x).correlation
+  corr_linkage = hierarchy.ward(corr)
+  cluster_ids = hierarchy.fcluster(corr_linkage, n_sub, criterion='distance')
+  cluster_id_to_feature_ids = defaultdict(list)
+  for idx, cluster_id in enumerate(cluster_ids):
+      cluster_id_to_feature_ids[cluster_id].append(idx)
+  selected_features = [v[0] for v in cluster_id_to_feature_ids.values()]
+  return selected_features
+
+def pca_fs(train_x, test_x, k_components=None):
+  if k_components!=None:
+    pca = PCA(k_components).fit(train_x)
+  else:
+    pca = PCA().fit(train_x)
+  train_pca = pca.transform(train_x)
+  test_pca = pca.transform(test_x)
+  return train_pca, test_pca, pca
+
+def random_forest_fs(x, y, n_estimators, n_repeats=10, n_jobs=1):
+  #Returns a list of columns to use as features
+  sel = SelectFromModel(RandomForestClassifier(n_estimators = n_estimators, n_repeats=n_repeats, n_jobs=n_jobs, random_state=42))
+  sel.fit(x,y)
+  return list(sel.get_support())
+
+def random_forest_fs_v2(x, y, n_estimators, n_repeats=10, n_jobs=1):
+  #Returns a list of columns to use as features
+  forest = RandomForestClassifier(random_state=42 ,n_estimators=n_estimators)
+  result = permutation_importance(forest, x, y, n_repeats=10, random_state=42, n_jobs=n_jobs)
+  forest_importances = pd.Series(result.importances_mean, index=x.columns)
+  return forest_importances
+
 if __name__=='__main__':
   total_start_time = dt.datetime.now()
   meta_dict = {
@@ -503,6 +557,12 @@ if __name__=='__main__':
   parcel_connection_x_test = scale_subset(parcel_connection_x_test, cols_to_exclude)
   network_connection_x_train = scale_subset(network_connection_x_train, cols_to_exclude)
   network_connection_x_test = scale_subset(network_connection_x_test, cols_to_exclude)
+
+  # Check VIFs - SAVE THIS FOR WHEN WER HAVE INFITNITE COMPUTE TIME OR OUR DATA IS REDUCED
+  # parcel_sum_vif = vif_checking(parcel_sum_x_train)
+  # network_sum_vif = vif_checking(network_sum_x_train)
+  # parcel_connection_vif = vif_checking(parcel_connection_x_train)
+  # network_connection_vif = vif_checking(network_connection_x_test)
 
   # Feature Selection
   # lreg1 = LogisticRegression(random_state=meta_dict['Random State']).fit(parcel_sum_x_train, parcel_sum_y_train)
