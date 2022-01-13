@@ -7,7 +7,7 @@ from scp import SCPClient
 import zipfile
 import getpass
 username = 'kbaacke'
-hostname = 'r2.psych.uiuc.edu'
+hostname = 'dx.psych.uiuc.edu'
 
 def createSSHClient(server, port, user, password):
     client = paramiko.SSHClient()
@@ -20,7 +20,7 @@ sep = os.path.sep
 dest_sep = '/'
 source_path = os.path.abspath(os.path.dirname(os.path.abspath(__file__))) + sep
 base = f'C:\\Users\\kyle\\repos\\'
-dest_base = '/mnt/usb1/Code/'
+dest_base = '/home/kbaacke/'
 
 shutil.make_archive(f'{base}HCP_Analyses', 'zip', f'{base}HCP-Analyses')
 
