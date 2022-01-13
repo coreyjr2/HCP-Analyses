@@ -363,6 +363,20 @@ try:
     selected_features = [v[0] for v in cluster_id_to_feature_ids.values()]
     return selected_features
 
+  def hierarchical_fs_v2(x, start_level, end_level):
+    # Returns an index of features to be used
+    corr = spearmanr(x).correlation
+    corr_linkage = hierarchy.ward(corr)
+    out = {}
+    for n in range(start_level, end_level):
+      cluster_ids = hierarchy.fcluster(corr_linkage, n, criterion='distance')
+      cluster_id_to_feature_ids = defaultdict(list)
+      for idx, cluster_id in enumerate(cluster_ids):
+          cluster_id_to_feature_ids[cluster_id].append(idx)
+      selected_features = [v[0] for v in cluster_id_to_feature_ids.values()]
+      out[n] = selected_features
+    return out
+
   def pca_fs(train_x, test_x, k_components=None):
     if k_components!=None:
       pca = PCA(k_components).fit(train_x)
@@ -372,9 +386,9 @@ try:
     test_pca = pca.transform(test_x)
     return train_pca, test_pca, pca
 
-  def random_forest_fs(x, y, n_estimators, n_repeats=10, n_jobs=1):
+  def random_forest_fs(x, y, n_estimators, n_repeats=10, n_jobs=1, max_features = 500):
     #Returns a list of columns to use as features
-    sel = SelectFromModel(RandomForestClassifier(n_estimators = n_estimators, n_jobs=n_jobs, random_state=42), max_features=500)
+    sel = SelectFromModel(RandomForestClassifier(n_estimators = n_estimators, n_jobs=n_jobs, random_state=42), max_features=max_features)
     sel.fit(x,y)
     return list(sel.get_support())
 
@@ -385,6 +399,13 @@ try:
     result = permutation_importance(forest, x, y, n_repeats=10, random_state=42, n_jobs=n_jobs)
     forest_importances = pd.Series(result.importances_mean, index=x.columns)
     return forest_importances
+
+  def random_forest_fs_v3(x, y, n_estimators, n_repeats=10, n_jobs=1):
+    #Returns a list of columns to use as features
+    forest = RandomForestClassifier(random_state=42 ,n_estimators=n_estimators)
+    forest.fit(x,y)
+    importances = forest.feature_importances_
+    return importances
 
   def fetch_labels(meta_dict, json_path = None):
     if 'glasser' in meta_dict['atlas_name']:
@@ -581,6 +602,16 @@ try:
     }
   }
 
+for k in feature_set_dict.keys():
+  print(k)
+  for x in feature_set_dict[k]['hierarchical_selected_features'].keys():
+    print(x, len(feature_set_dict[k]['hierarchical_selected_features'][x]))
+
+
+for n in range(7,20):
+  feature_set_dict[k]['hierarchical_selected_features'][n] = hierarchical_fs(feature_set_dict[k]['train_x'],n)
+  np.save(f'{fs_outpath}{k}/{run_uid}_hierarchical-{n}.npy',np.array(feature_set_dict[k]['hierarchical_selected_features'][n]))
+  
   sub_start_time = dt.datetime.now()
   logging.info(f'Attempting to read data from {fs_outpath}: {sub_start_time}')
   try:
@@ -765,6 +796,8 @@ try:
       sub_end_time = dt.datetime.now()
       logging.info(f'\tPCA Done: {sub_end_time}')
 
+imp1 = random_forest_fs_v3(feature_set_dict[k]['train_x'], np.array(feature_set_dict[k]['train_y']['task']), n_estimators = 500, n_repeats=10, n_jobs=10)
+
     try:
       sub_start_time = dt.datetime.now()
       feature_set_dict[k]['fr_features_v1'] = np.load(f'{fs_outpath}{k}/{run_uid}_fr_features_v1.npy')
@@ -773,7 +806,7 @@ try:
     except:
       sub_start_time = dt.datetime.now()
       logging.info(f'\tRandom Forest FS V1 Started: {sub_start_time}')
-      feature_set_dict[k]['fr_features_v1'] = random_forest_fs(feature_set_dict[k]['train_x'], feature_set_dict[k]['train_y'], n_estimators = 500, n_repeats=10, n_jobs=2)
+      feature_set_dict[k]['fr_features_v1'] = random_forest_fs(feature_set_dict[k]['train_x'], feature_set_dict[k]['train_y'].to_numpy(), n_estimators = 500, n_repeats=10, n_jobs=10)
       np.save(f'{fs_outpath}{k}/{run_uid}_fr_features_v1.npy',feature_set_dict[k]['fr_features_v1'])
       sub_end_time = dt.datetime.now()
       logging.info(f'\tRandom Forest FS V1 Done: {sub_end_time}')
