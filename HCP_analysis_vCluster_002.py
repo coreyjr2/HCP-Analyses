@@ -23,6 +23,8 @@ Info:
 
 '''
 Runs:
+1.
+  *NOTE: Ran this on dx, 
   python3 HCP_analysis_vCluster_001.py \
     -source_path /mnt/usb1/HCP_1200/HCP_69354adf \
     -uname kbaacke \
@@ -31,20 +33,33 @@ Runs:
     --output /home/kbaacke/output/ \
     --n_jobs 7 \
     -atlas_path /mnt/usb1/HCP_1200/HCP_69354adf/69354adf_parcellation-metadata.json \
-    --confounds_subset Subject "Age__22-25" "Age__26-30" "Age__31-35" "Age__36+" Gender__F Gender__M
-    
+    --confound_subset Subject "Age__22-25" "Age__26-30" "Age__31-35" "Age__36+" Gender__F Gender__M
+
 
 '''
-v1_argslist = [
-  '-source_path', '/mnt/usb1/HCP_1200/HCP_69354adf',
+v1_argslist = [ # Used on dx and ran out of RAM on the parcell connection hierarchical clustering step
+  '-source_path', '/mnt/usb1/HCP_69354adf',
   '-uname', 'kbaacke',
-  '-datahost', 'r2.psych.uiuc.edu ',
+  '-datahost', 'r2.psych.uiuc.edu',
   '-local_path', '/home/kbaacke/temp/',
   '--output', '/home/kbaacke/output/',
-  '--n_jobs', '7',
+  '--remote_output','/mnt/usb1/Code/'
+  '--n_jobs', '4',
   '-atlas_path', '/mnt/usb1/HCP_1200/HCP_69354adf/69354adf_parcellation-metadata.json',
-  '--confounds_subset', 'Subject', 'Age__22-25', 'Age__26-30', 'Age__31-35', 'Age__36+', 'Gender__F', 'Gender__M'
+  '--confound_subset', 'Subject', 'Age__22-25', 'Age__26-30', 'Age__31-35', 'Age__36+', 'Gender__F', 'Gender__M'
 ]
+v2_argslist = [ # Used on dx and ran out of RAM on the parcell connection hierarchical clustering step
+  # '-source_path', '/mnt/usb1/HCP_69354adf',
+  # '-uname', 'kbaacke',
+  # '-datahost', 'r2.psych.uiuc.edu',
+  '-local_path', '/mnt/usb1/',
+  '--output', '/mnt/usb1/hcp_analysis_output/',
+  '--remote_output','/mnt/usb1/Code/'
+  '--n_jobs', '8',
+  '-atlas_path', '/mnt/usb1/HCP_69354adf/HCP_69354adf/69354adf_parcellation-metadata.json',
+  '--confound_subset', 'Subject', 'Age__22-25', 'Age__26-30', 'Age__31-35', 'Age__36+', 'Gender__F', 'Gender__M'
+]
+
 # TODO: dafualt immplicit parcellation metadata search in source_path
 
 # Imports
@@ -59,7 +74,7 @@ try:
   import hashlib # Not on Cluster
   import paramiko
   import sys
-  from scp import SCPClient
+  from scp import SCPClient ############################ Mising
   import shutil
   import getpass
   import nibabel as nib
@@ -84,6 +99,9 @@ try:
   from scipy.cluster import hierarchy
   from collections import defaultdict
   import pickle as pk
+  from skopt import BayesSearchCV ############################ Mising
+  from skopt.space import Real, Categorical, Integer ############################ Mising
+  from operator import itemgetter
 except Exception as e:
   print(f'Error loading libraries: ')
   raise Exception(e)
@@ -91,7 +109,8 @@ except Exception as e:
 
 # Global Variables
 sep = os.path.sep
-source_path = os.path.dirname(os.path.abspath(__file__)) + sep
+source_path = '/home/kbaacke/HCP_Analyses/'
+# source_path = os.path.dirname(os.path.abspath(__file__)) + sep
 sys_name = platform.system() 
 hostname = platform.node()
 
@@ -101,10 +120,10 @@ try:
   def parse_args(args):
     #Presets
     parser = argparse.ArgumentParser(
-        description=''
+        description='Analysis Script for task decoding.'
       )
     parser.add_argument(
-      "-source_path", help='Full base-path on the Data Node where the data is stored.', required=True
+      "-source_path", help='Full base-path on the Data Node where the data is stored.', required=False, default=None
     )
     parser.add_argument(
       "-uname", help='Username to use when requesting files from the data node via scp.', required=False
@@ -116,13 +135,15 @@ try:
       "-local_path", help='Full base-path on the local machine where data will be stored (or is already stored).', required=True
     )
     parser.add_argument(
-      "--output", help=f'Full path to the location ot store the output. Defaults to the source path fo this python file + \'Output{sep}\'', required=False
+      "--output", help=f'Full local path to the location ot store the output. Defaults to the source path fo this python file + \'Output{sep}\'', required=False
+    )
+    parser.add_argument(
+      "--remote_output", help=f'Full remote path to the location ot store the output. By default will not send the output to the data host.', required=False
     )
     parser.add_argument(
       "--n_jobs", help="Specify number of CPUs to use in the analysis. Default is 1. Set to -1 to use all available cores.", required=False, default=1
     )
-    # Context Specific
-    parser.add_argument(
+    parser.add_argument(# Context Specific
       "-atlas_path",
       help=f'''
         Full path to the metadata json file for the parcellation.\nEx: S:{sep}HCP{sep}HCP_83e395d0{sep}83e395d0_parcellation-metadata.json
@@ -195,14 +216,12 @@ try:
       required=False
     )
     return parser.parse_known_args(args)
-
   def createSSHClient(server, user, password, port=22):
       client = paramiko.SSHClient()
       client.load_system_host_keys()
       client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
       client.connect(server, port, user, password)
       return client
-
   def generate_uid(meta_dict, hash_len=6):
     dhash = hashlib.md5()
     encoded = json.dumps(meta_dict, sort_keys=True).encode()
@@ -213,7 +232,6 @@ except Exception as e:
   print(f'Error defining template functions: ')
   raise Exception(e)
 
-
 # Custom Functions
 try:
   def create_ordered_network_labels():
@@ -222,8 +240,7 @@ try:
     glabels = pd.read_csv(source_path + 'Glasser_labels.csv')
     full_label_file = pd.merge(glabels, gregions, how='left',on='Label')
     full_label_file.to_csv(source_path + 'mni_glasser_info.csv', index=False)
-
-  def load_parcellated_task_timeseries_v2(meta_dict,subjects, session, npy_template, run_names = ['RL','LR'], confounds_path = None): # un-Tested
+  def load_parcellated_task_timeseries_v2(meta_dict,subjects, session, npy_template, basepath, run_names = ['RL','LR'], confounds_path = None): # un-Tested
     # New version that only takes parcellated data
     remove_mean = meta_dict['subtract parcel-wise mean']
     atlas_name = meta_dict['atlas_name']
@@ -237,7 +254,7 @@ try:
         sub_dict = {}
         for run in run_names:
           # First try to load in numpy file
-          masked_timeseries = np.load(npy_template.format(subject=subject, session=session, run=run, atlas_name=atlas_name))
+          masked_timeseries = np.load(npy_template.format(subject=subject, session=session, run=run, atlas_name=atlas_name, basepath = basepath, sep = sep))
           if remove_mean:
             masked_timeseries -= masked_timeseries.mean(axis=1, keepdims=True)
           sub_dict[run] = masked_timeseries
@@ -245,13 +262,12 @@ try:
           concat_dict[subject] = np.vstack((sub_dict[run_names[0]], sub_dict[run_names[1]]))
         parcellated_dict[subject] = sub_dict
       except Exception as e:
-        #print(f'Subject {subject} is not available: {e}')
+        print(f'Subject {subject} is not available: {e}')
         pass
     if concatenate:
       return concat_dict
     else:
       return parcellated_dict
-
   def generate_parcel_input_features(parcellated_data, labels): # Tested
     out_dict = {}
     out_df_dict = {}
@@ -271,7 +287,6 @@ try:
       out_df_dict[session].insert(0, 'task',numeric_task_ref[session])
     parcels_full = pd.DataFrame(pd.concat(list(out_df_dict.values()), axis = 0))
     return parcels_full
-
   def generate_network_input_features(parcels_full, networks): # Tested
     X_network = parcels_full.copy()[parcels_full.columns[2:]]
     X_network.rename(
@@ -285,24 +300,20 @@ try:
     X_network.insert(0, 'task',parcels_full['task'])
     X_network['task'] = parcels_full['task']
     return X_network
-
   def mean_norm(df_input):
     return df_input.apply(lambda x: (x-x.mean())/ x.std(), axis=0)
-
   def scale_subset(df, cols_to_exclude):
     df_excluded = df[cols_to_exclude]
     df_temp = df.drop(cols_to_exclude, axis=1, inplace=False)
     df_temp = mean_norm(df_temp)
     df_ret = pd.concat([df_excluded, df_temp], axis=1, join='inner')
     return df_ret
-
   def connection_names(corr_matrix, labels): # Tested
     name_idx = np.triu_indices_from(corr_matrix, k=1)
     out_list = []
     for i in range(len(name_idx[0])):
       out_list.append(str(labels[name_idx[0][i]]) + '|' + str(labels[name_idx[1][i]]))
     return out_list
-
   def generate_parcel_connection_features(parcellated_data, labels): # Tested
     out_dict = {}
     out_df_dict = {}
@@ -323,7 +334,6 @@ try:
       out_df_dict[session].insert(0, 'task',numeric_task_ref[session])
     parcels_connections_full = pd.DataFrame(pd.concat(list(out_df_dict.values()), axis = 0))
     return parcels_connections_full
-
   def generate_network_connection_features(parcellated_data, networks): # Tested
     scaler = StandardScaler() 
     out_dict = {}
@@ -345,13 +355,11 @@ try:
       out_df_dict[session].insert(0, 'task',numeric_task_ref[session])
     network_connections_full = pd.DataFrame(pd.concat(list(out_df_dict.values()), axis = 0))
     return network_connections_full
-
   def XY_split(df, outcome_col, excluded = []): # Tested
     excluded.append(outcome_col)
     dfx = df.drop(labels=excluded, axis=1, inplace=False)
     dfy = df[[outcome_col]]
     return dfx, dfy
-
   def hierarchical_fs(x, n_sub):
     # Returns an index of features to be used
     corr = spearmanr(x).correlation
@@ -362,7 +370,19 @@ try:
         cluster_id_to_feature_ids[cluster_id].append(idx)
     selected_features = [v[0] for v in cluster_id_to_feature_ids.values()]
     return selected_features
-
+  def hierarchical_fs_v2(x, start_level, end_level):
+    # Returns an index of features to be used
+    corr = spearmanr(x).correlation
+    corr_linkage = hierarchy.ward(corr)
+    out = {}
+    for n in range(start_level, end_level):
+      cluster_ids = hierarchy.fcluster(corr_linkage, n, criterion='distance')
+      cluster_id_to_feature_ids = defaultdict(list)
+      for idx, cluster_id in enumerate(cluster_ids):
+          cluster_id_to_feature_ids[cluster_id].append(idx)
+      selected_features = [v[0] for v in cluster_id_to_feature_ids.values()]
+      out[n] = selected_features
+    return out
   def pca_fs(train_x, test_x, k_components=None):
     if k_components!=None:
       pca = PCA(k_components).fit(train_x)
@@ -371,13 +391,11 @@ try:
     train_pca = pca.transform(train_x)
     test_pca = pca.transform(test_x)
     return train_pca, test_pca, pca
-
-  def random_forest_fs(x, y, n_estimators, n_repeats=10, n_jobs=1):
+  def random_forest_fs(x, y, n_estimators, n_repeats=10, n_jobs=1, max_features = 500):
     #Returns a list of columns to use as features
-    sel = SelectFromModel(RandomForestClassifier(n_estimators = n_estimators, n_jobs=n_jobs, random_state=42), max_features=500)
+    sel = SelectFromModel(RandomForestClassifier(n_estimators = n_estimators, n_jobs=n_jobs, random_state=42), max_features=max_features)
     sel.fit(x,y)
     return list(sel.get_support())
-
   def random_forest_fs_v2(x, y, n_estimators, n_repeats=10, n_jobs=1):
     #Returns a list of columns to use as features
     forest = RandomForestClassifier(random_state=42 ,n_estimators=n_estimators)
@@ -385,7 +403,12 @@ try:
     result = permutation_importance(forest, x, y, n_repeats=10, random_state=42, n_jobs=n_jobs)
     forest_importances = pd.Series(result.importances_mean, index=x.columns)
     return forest_importances
-
+  def random_forest_fs_v3(x, y, n_estimators, n_repeats=10, n_jobs=1):
+    #Returns a list of columns to use as features
+    forest = RandomForestClassifier(random_state=42 ,n_estimators=n_estimators)
+    forest.fit(x,y)
+    importances = forest.feature_importances_
+    return importances
   def fetch_labels(meta_dict, json_path = None):
     if 'glasser' in meta_dict['atlas_name']:
       regions_file = np.load(source_path + "glasser_regions.npy").T
@@ -425,28 +448,17 @@ except Exception as e:
 #   sys.argv[1:]
 # )
 
-args, leftovers = parse_args( # Uncomment to get the documentation
-  ['-h']
-)
+# args, leftovers = parse_args( # Uncomment to get the documentation
+#   ['-h']
+# )
 
-# args, leforvers = parse_args(v1_argslist)
+args, leforvers = parse_args(v2_argslist)
 
-# Generate meta-dict
-# meta_dict = {
-#   'atlas_name' : '69354adf',
-#   'smoothed' : False,
-#   'ICA-Aroma' : False,
-#   'confounds': [],
-#   'Random Forest Estimators': 1000,
-#   'Random State':42,
-#   'subtract parcel-wise mean': True, # Fixing this at true, no cli arg
-#   'concatenate':True
-# }
 
 #### TODO: Change atlas_name to parcellation UID, import atlas_name from meta_dict
 args.atlas_name = os.path.basename(args.atlas_path)[:8] # Pull the atlas_name from the atlas_path variable (UID)
 
-parcellation_dict = json.load(open(args.atlas_path))
+parcellation_dict = json.load(open(args.atlas_path)) # ERROR didn't transfer files yet
 
 '''
 actual_atlas_name = parcellation_dict['atlas_name']
@@ -457,31 +469,26 @@ meta_dict = {
   'smoothed' : args.smoothed,
   'ICA-Aroma' : args.ica_aroma,
   # 'confounds': args.,
-  'Random Forest Estimators': 1000,
-  'Random State':42,
   'subtract parcel-wise mean': True, # Fixing this at true, no cli arg
   'concatenate':args.concatenate
 }
 
 if args.confounds is not "None":
   demographics = pd.read_csv(args.confounds)
-  if args.confounds_subset is not None:
-    demographics_dummy = demographics[args.confounds_subset]
-    meta_dict['confounds'] = list(args.confounds_subset)
-  else:
-    meta_dict['confounds'] = demographics.columns
+  if args.confound_subset is not None:
+    demographics = demographics[args.confound_subset]
   if args.movement_regressor is "None":
     confounds = demographics
 
 if args.movement_regressor is not "None":
   relative_RMS_means_collapsed = pd.read_csv(args.movement_regressor)
-  meta_dict['confounds'] = meta_dict['confounds'] + list(relative_RMS_means_collapsed).columns[2:]
   if args.confounds is "None":
     confounds = relative_RMS_means_collapsed
 
 if (args.movement_regressor is not "None") and (args.confounds is not "None"):
-  confounds = pd.merge(relative_RMS_means_collapsed, demographics_dummy, how='left', on='Subject')
+  confounds = pd.merge(relative_RMS_means_collapsed, demographics, how='left', on='Subject')
 
+meta_dict['confounds'] = list(confounds.columns)
 run_uid = generate_uid(meta_dict)
 outpath = args.output + run_uid + sep
 try:
@@ -492,20 +499,22 @@ except Exception as e:
 with open(outpath + run_uid + 'metadata.json', 'w') as outfile:
   json.dump(meta_dict, outfile)
 
-# Interupt request for password and username if none passed
-if args.uname == None:
-  args.uname = getpass.getpass(f'Username for {args.datahost}:')
-args.psswd = getpass.getpass(f'Password for {args.uname}@{args.datahost}:')
 
 # SCP data to temp location
 if args.source_path!=None:
+  # Interupt request for password and username if none passed
+  if args.uname == None:
+    args.uname = getpass.getpass(f'Username for {args.datahost}:')
+  args.psswd = getpass.getpass(f'Password for {args.uname}@{args.datahost}:')
   src_basepath = args.source_path
   download_start_time = dt.datetime.now()
   print('Starting Data Transfer: ', download_start_time)
   try:
-    ssh = createSSHClient(args.datahost, args.uname, args.psswd)
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(args.datahost, 22, args.uname, args.psswd)
     scp = SCPClient(ssh.get_transport())
-    scp.get(args.source_path, args.localpath, recursive=True)
+    scp.get(args.source_path, args.local_path, recursive=True)
   except Exception as e:
     print(f'Error transferring data from {args.uname}@{args.datahost} ')
     raise Exception(e)
@@ -523,18 +532,17 @@ total_start_time = dt.datetime.now()
 logging.basicConfig(filename=f'{run_uid}_DEBUG.log', level=logging.DEBUG) # Set level to DEBUG for detailed output
 
 try:
-  logging.debug(f'Architecture: ', platform.architecture()[0], ', ', platform.architecture()[1])
-  logging.debug(f'Processor: ', platform.machine())
-  logging.debug(f'Node Name: : ', platform.node())
+  arch = str(platform.architecture()[0])
+  logging.debug(f'Architecture: {arch}')
+  machine = platform.machine()
+  logging.debug(f'Processor: {machine}')
+  node = platform.node()
+  logging.debug(f'Node Name: {node}')
   logging.info(f'Started; {total_start_time}') #Adds a line to the logfile to be exported after analysis
   logging.debug('args: ')
   logging.debug(args)
   logging.debug('meta_dict: ')
   logging.debug(meta_dict)
-  '''
-  DO THINGS HERE 
-  '''
-
   numeric_task_ref = {
     "tfMRI_MOTOR":4,
     "tfMRI_WM":7,
@@ -546,9 +554,9 @@ try:
   }
   basepath = args.local_path
   npy_template_hcp = '{basepath}HCP{sep}HCP_1200{sep}{subject}{sep}MNINonLinear{sep}Results{sep}{session}_{run}{sep}{atlas_name}_{session}_{run}.npy'
-  HCP_1200 = f'{basepath}HCP_1200{sep}'
-  parcel_labels, network_labels = fetch_labels(meta_dict, HCP_1200)
-
+  HCP_1200 = f'{basepath}HCP_{args.atlas_name}{sep}HCP_{args.atlas_name}{sep}HCP{sep}HCP_1200{sep}'
+  #parcel_labels, network_labels = fetch_labels(meta_dict, f'{basepath}HCP_{args.atlas_name}{sep}') # remote version
+  parcel_labels, network_labels = fetch_labels(meta_dict, f'{basepath}HCP_{args.atlas_name}{sep}HCP_{args.atlas_name}{sep}') # r2 version
   subjects = []
   for f in os.listdir(HCP_1200):
     if len(f)==6:
@@ -556,7 +564,6 @@ try:
 
   # Subset Subjects here to test runtimes:
   # subects = subjects[:500]
-  
   sessions = [
     "tfMRI_MOTOR",
     "tfMRI_WM",
@@ -566,10 +573,8 @@ try:
     "tfMRI_RELATIONAL",
     "tfMRI_SOCIAL"
   ]
-
   outpath = f'{args.output}{run_uid}/'
   fs_outpath = outpath + 'FeatureSelection/'
-
   feature_set_dict = {
     'parcel_sum':{
     },
@@ -586,58 +591,57 @@ try:
   try:
     for k in feature_set_dict.keys():
       for target_df in ['train_x','test_x','train_y','test_y']:
-        feature_set_dict[k][target_df] = pd.DataFrame(np.load(f'{fs_outpath}{k}/{run_uid}_{target_df}_colnames.npy', allow_pickle=True).T, columns = np.load(f'{fs_outpath}{k}/{run_uid}_{target_df}_colnames.npy', allow_pickle=True))
+        feature_set_dict[k][target_df] = pd.DataFrame(np.load(f'{fs_outpath}{k}/{run_uid}_{target_df}.npy', allow_pickle=True), columns = np.load(f'{fs_outpath}{k}/{run_uid}_{target_df}_colnames.npy', allow_pickle=True))
     sub_end_time = dt.datetime.now()
     logging.info(f'Premade raw data successfully imported from {fs_outpath}: {sub_end_time}')
   except:
     sub_end_time = dt.datetime.now()
-    logging.info(f'Premaide data failed to load. Importing from data from parcellated timeseries: {sub_end_time}')
+    logging.info(f'Premade data failed to load. Importing from data from parcellated timeseries: {sub_end_time}')
     sub_start_time = dt.datetime.now()
     logging.info(f'Reading parcellated data Started: {sub_start_time}')
     parcellated_data = {}
     for session in sessions:
       #Read in parcellated data, or parcellate data if meta-data conditions not met by available data
-      parcellated_data[session] = load_parcellated_task_timeseries_v2(meta_dict, subjects, session, npy_template = npy_template_hcp)
+      parcellated_data[session] = load_parcellated_task_timeseries_v2(meta_dict, subjects, session, npy_template = npy_template_hcp, basepath = f'{basepath}HCP_{args.atlas_name}{sep}HCP_{args.atlas_name}{sep}') # remote version: f'{basepath}HCP_{args.atlas_name}{sep}'
+    
     sub_end_time = dt.datetime.now()
     logging.info(f'Reading parcellated data Done: {sub_end_time}')
-      
     sub_start_time = dt.datetime.now()
     logging.info(f'generate_parcel_input_features Started: {sub_start_time}')
     parcels_sums = generate_parcel_input_features(parcellated_data, parcel_labels)
     sub_end_time = dt.datetime.now()
     logging.info(f'generate_parcel_input_features Done: {sub_end_time}')
-
     sub_start_time = dt.datetime.now()
     logging.info(f'generate_network_input_features Started: {sub_start_time}')
     network_sums = generate_network_input_features(parcels_sums, network_labels)
     sub_end_time = dt.datetime.now()
     logging.info(f'generate_network_input_features Done: {sub_end_time}')
-
     sub_start_time = dt.datetime.now()
     logging.info(f'generate_parcel_connection_features Started: {sub_start_time}')
     parcel_connection_task_data = generate_parcel_connection_features(parcellated_data, parcel_labels)
     sub_end_time = dt.datetime.now()
     logging.info(f'generate_parcel_connection_features Done: {sub_end_time}')
-
     sub_start_time = dt.datetime.now()
     logging.info(f'generate_network_connection_features Started: {sub_start_time}')
     network_connection_features = generate_network_connection_features(parcellated_data, network_labels)
     sub_end_time = dt.datetime.now()
     logging.info(f'generate_network_connection_features Done: {sub_end_time}')
 
+    def str_combine(x, y):
+      return str(x) + str(y)
+
     sub_start_time = dt.datetime.now()
     logging.info(f'Confound merging Started: {sub_start_time}')
     # Merge in any confounds
     if (args.movement_regressor is not "None") or (args.confounds is not "None"):
-      def str_combine(x, y):
-        return str(x) + str(y)
+      confounds['Subject'] = confounds['Subject'].astype(str)
+      confounds['task'] = confounds['task'].astype(int)
       confounds['temp_index'] = confounds.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
       confounds.drop(columns=['Subject','task'], inplace=True)
       parcels_sums['temp_index'] = parcels_sums.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
       network_sums['temp_index'] = network_sums.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
       parcel_connection_task_data['temp_index'] = parcel_connection_task_data.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
       network_connection_features['temp_index'] = network_connection_features.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
-
       parcel_sum_input = pd.merge(confounds, parcels_sums, on='temp_index', how = 'right').dropna()
       network_sum_input = pd.merge(confounds, network_sums, on='temp_index', how = 'right').dropna()
       parcel_connection_input = pd.merge(confounds, parcel_connection_task_data, on='temp_index', how = 'right').dropna()
@@ -647,22 +651,21 @@ try:
       network_sum_input = network_sums
       parcel_connection_input = parcel_connection_task_data
       network_connection_input = network_connection_features
-    sub_end_time = dt.datetime.now()
-    logging.info(f'Confound merging Done: {sub_end_time}')
+      sub_end_time = dt.datetime.now()
+      logging.info(f'Confound merging Done: {sub_end_time}')
 
+    # XY Split
     sub_start_time = dt.datetime.now()
     logging.info(f'XY Split Started: {sub_start_time}')
-    # XY Split
     parcel_sum_x, parcel_sum_y = XY_split(parcel_sum_input, 'task')
     network_sum_x, network_sum_y = XY_split(network_sum_input, 'task')
     parcel_connection_x, parcel_connection_y = XY_split(parcel_connection_input, 'task')
     network_connection_x, network_connection_y = XY_split(network_connection_input, 'task')
     sub_end_time = dt.datetime.now()
     logging.info(f'XY Split Done: {sub_end_time}')
-
+    # Training Test Split
     sub_start_time = dt.datetime.now()
     logging.info(f'Training Test Split Started: {sub_start_time}')
-    # Training Test Split
     parcel_sum_x_train, parcel_sum_x_test, parcel_sum_y_train, parcel_sum_y_test = train_test_split(parcel_sum_x, parcel_sum_y, test_size = 0.2)
     network_sum_x_train, network_sum_x_test, network_sum_y_train, network_sum_y_test = train_test_split(network_sum_x, network_sum_y, test_size = 0.2)
     parcel_connection_x_train, parcel_connection_x_test, parcel_connection_y_train, parcel_connection_y_test = train_test_split(parcel_connection_x, parcel_connection_y, test_size = 0.2)
@@ -670,11 +673,12 @@ try:
     sub_end_time = dt.datetime.now()
     logging.info(f'Training Test Split Done: {sub_end_time}')
 
+    # Scaling non-categorical Variables
     sub_start_time = dt.datetime.now()
     logging.info(f'Scaling non-categorical Variables Started: {sub_start_time}')
-    # Scaling non-categorical Variables
     cols_to_exclude = list(confounds.columns)
-    cols_to_exclude.remove('task')
+    cols_to_exclude.append('Subject')
+    #cols_to_exclude.remove('task')
     parcel_sum_x_train = scale_subset(parcel_sum_x_train, cols_to_exclude)
     parcel_sum_x_test = scale_subset(parcel_sum_x_test, cols_to_exclude)
     network_sum_x_train = scale_subset(network_sum_x_train, cols_to_exclude)
@@ -685,7 +689,6 @@ try:
     network_connection_x_test = scale_subset(network_connection_x_test, cols_to_exclude)
     sub_end_time = dt.datetime.now()
     logging.info(f'Scaling non-categorical Variables Done: {sub_end_time}')
-
     feature_set_dict = {
       'parcel_sum':{
         'train_x': parcel_sum_x_train,
@@ -720,38 +723,48 @@ try:
       for target_df in ['train_x','test_x','train_y','test_y']:
         np.save(f'{fs_outpath}{k}/{run_uid}_{target_df}.npy', np.array(feature_set_dict[k][target_df]))
         np.save(f'{fs_outpath}{k}/{run_uid}_{target_df}_colnames.npy', np.array(feature_set_dict[k][target_df].columns))
+  ### MADE IT HERE!!!
   # Feature Selection
   try:
     os.makedirs(fs_outpath)
   except:
     pass
-  fs_start_time = dt.datetime.now()
-  logging.info(f'Feature Selection Started: {fs_start_time}')
-  for k in feature_set_dict.keys():
+fs_start_time = dt.datetime.now()
+logging.info(f'Feature Selection Started: {fs_start_time}')
+for k in feature_set_dict.keys():
+
     sub_start_time = dt.datetime.now()
-    try:
-      for h in feature_set_dict[k]['hieratchical_selected_features'].keys():
-        feature_set_dict[k]['hieratchical_selected_features'][h] = np.load(f'{fs_outpath}{k}/{run_uid}_hierarchical-{k}.npy')
-      sub_end_time = dt.datetime.now()
-      logging.info('Previous Hierarchical Feaure Selection Output imported: {sub_end_time}')
-    except:
-      sub_start_time = dt.datetime.now()
-      logging.info(f'\tHierarchical Feaure Selection ({k}) Started: {sub_start_time}')
-      feature_set_dict[k]['hieratchical_selected_features'] = {}
-      for n in range(1,7):
-        feature_set_dict[k]['hieratchical_selected_features'][n] = hierarchical_fs(feature_set_dict[k]['train_x'],n)
-        np.save(f'{fs_outpath}{k}/{run_uid}_hierarchical-{n}.npy',np.array(feature_set_dict[k]['hieratchical_selected_features'][n]))
-      sub_end_time = dt.datetime.now()
-      logging.info(f'\tHierarchical Feaure Selection ({k}) Done: {sub_end_time}')
-    
+    hierarchical_start = 1
+    hierarchical_end = 30
+    # try:
+    #   for n in range(hierarchical_start, hierarchical_end):
+    #     feature_set_dict[k]['hierarchical_selected_features'][h] = np.load(f'{fs_outpath}{k}/{run_uid}_hierarchical-{k}.npy')
+    #   sub_end_time = dt.datetime.now()
+    #   logging.info('Previous Hierarchical Feaure Selection Output imported: {sub_end_time}')
+    # except:
+    sub_start_time = dt.datetime.now()
+    logging.info(f'\tHierarchical Feaure Selection ({k}) Started: {sub_start_time}')
+    feature_set_dict[k]['hierarchical_selected_features'] = hierarchical_fs_v2(feature_set_dict[k]['train_x'],hierarchical_start, hierarchical_end)
+    for n in range(hierarchical_start, hierarchical_end):
+      #feature_set_dict[k]['hierarchical_selected_features'][n] = hierarchical_fs(feature_set_dict[k]['train_x'],n)
+      if len(feature_set_dict[k]['hierarchical_selected_features'][n])>1:
+        np.save(f'{fs_outpath}{k}/{run_uid}_hierarchical-{n}.npy',np.array(feature_set_dict[k]['hierarchical_selected_features'][n]))
+        print(n)
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\tHierarchical Feaure Selection ({k}) Done: {sub_end_time}')
     try:
       sub_start_time = dt.datetime.now()
       feature_set_dict[k]['train_pca_auto'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_pca-auto.npy')
       feature_set_dict[k]['test_pca_auto'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_pca-auto.npy')
       feature_set_dict[k]['pca_auto'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_pca-auto.pkl', 'rb'))
       feature_set_dict[k]['pca_auto'].transform(feature_set_dict[k]['train_x'])
+      for x in feature_set_dict[k]['hierarchical_selected_features'].keys():
+        feature_set_dict[k][f'train_pca_{x}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_pca-{x}.npy')
+        feature_set_dict[k][f'test_pca_{x}'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_pca-{x}.npy')
+        feature_set_dict[k][f'pca_{x}'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_pca-{x}.pkl', 'rb'))
+        feature_set_dict[k][f'pca_{x}'].transform(feature_set_dict[k]['train_x'])
       sub_end_time = dt.datetime.now()
-      logging.info('Previous PCA Output imported: {sub_end_time}')
+      logging.info('\tPrevious PCA Output imported: {sub_end_time}')
     except:
       sub_start_time = dt.datetime.now()
       logging.info(f'\tPCA Started: {sub_start_time}')
@@ -762,40 +775,267 @@ try:
       np.save(f'{fs_outpath}{k}/{run_uid}_train_pca-auto.npy',feature_set_dict[k]['train_pca_auto'])
       np.save(f'{fs_outpath}{k}/{run_uid}_test_pca-auto.npy',feature_set_dict[k]['test_pca_auto'])
       pk.dump(feature_set_dict[k]['pca_auto'], open(f'{fs_outpath}{k}/{run_uid}_pca-auto.pkl', "wb"))
+      for x in feature_set_dict[k]['hierarchical_selected_features'].keys():
+        if x>1:
+          print(x, len(feature_set_dict[k]['hierarchical_selected_features'][x]))
+          train_pca_auto, test_pca_auto, pca_auto = pca_fs(feature_set_dict[k]['train_x'], feature_set_dict[k]['test_x'], k_components=None)
+          feature_set_dict[k][f'train_pca_{x}'] = train_pca_auto
+          feature_set_dict[k][f'test_pca_{x}'] = test_pca_auto
+          feature_set_dict[k][f'pca_{x}'] = pca_auto
+          np.save(f'{fs_outpath}{k}/{run_uid}_train_pca-{x}.npy',feature_set_dict[k][f'train_pca_{x}'])
+          np.save(f'{fs_outpath}{k}/{run_uid}_test_pca-{x}.npy',feature_set_dict[k][f'test_pca_{x}'])
+          pk.dump(feature_set_dict[k][f'pca_{x}'], open(f'{fs_outpath}{k}/{run_uid}_pca-{x}.pkl', "wb"))
       sub_end_time = dt.datetime.now()
       logging.info(f'\tPCA Done: {sub_end_time}')
 
+# RFC feature selection
+for k in feature_set_dict.keys():
+  # Use select from model to pull features from a frc based on the numbers of features selected in the hierarchical clustering and components in the pca
+  sub_start_time_outer = dt.datetime.now()
+  logging.info(f'\tSelectFromModel on FRC on {k} started: {sub_start_time_outer}')
+  for x in feature_set_dict[k]['hierarchical_selected_features'].keys():
+    if x>1 and x<len(feature_set_dict[k]['train_x'].columns):
+      sub_start_time = dt.datetime.now()
+      try:
+        feature_set_dict[k][f'rf_selected_{x}'] = np.load(f'{fs_outpath}{k}/{run_uid}_rf_selected_{x}.npy')
+        sub_end_time = dt.datetime.now()
+        logging.info(f'\t\tSelectFromModel on FRC for {x} max features read from previous run')
+      except:
+        logging.info(f'\t\tSelectFromModel FRC FS V1 Started: {sub_start_time}')
+        feature_set_dict[k][f'rf_selected_{x}'] = list(compress(list(feature_set_dict[k]['train_x'].columns),random_forest_fs(feature_set_dict[k]['train_x'], np.array(feature_set_dict[k]['train_y']['task']), n_estimators = 500, n_repeats=10, n_jobs=4, max_features = x)))
+        np.save(f'{fs_outpath}{k}/{run_uid}_rf_selected_{x}.npy',feature_set_dict[k][f'rf_selected_{x}'])
+        sub_end_time = dt.datetime.now()
+        logging.info(f'\t\tSelectFromModel on FRC for {x} max features Done: {sub_end_time}')
+
+  sub_end_time_outer = dt.datetime.now()
+  logging.info(f'\tSelectFromModel on FRC on {k} Done: {sub_end_time_outer}')
+
+for k in feature_set_dict.keys():
+  sub_start_time_outer = dt.datetime.now()
+  n_estimators = 500
+  n_repeats = 50
+  try:
+    feature_set_dict[k][f'feature_importances_{n_estimators}'] = np.load(f'{fs_outpath}{k}/{run_uid}_feature_importances_est-{n_estimators}.npy')
+    logging.info('\tFRC Feature importance and permutation importance on {k} read in from prior run.')
+  except:
+    logging.info(f'\tFRC Feature importance and permutation importance on {k} started: {sub_start_time_outer}')
+    forest = RandomForestClassifier(random_state=42 ,n_estimators=n_estimators)
+    forest.fit(feature_set_dict[k]['train_x'],np.array(feature_set_dict[k]['train_y']['task']))
+    now = dt.datetime.now()
+    logging.info(f'\tInitial FRC on {n_estimators} estimators from {k} Done: {now}')
+    importances = forest.feature_importances_
+    np.save(f'{fs_outpath}{k}/{run_uid}_feature_importances_est-{n_estimators}.npy', importances)
+    feature_set_dict[k][f'feature_importances_est-{n_estimators}'] = importances
+    permutation_importances_result = permutation_importance(forest, feature_set_dict[k]['train_x'], np.array(feature_set_dict[k]['train_y']['task']), n_repeats=n_repeats, random_state=42, n_jobs=args.n_jobs)
+    permutation_importances = pd.Series(permutation_importances_result.importances_mean, index=feature_set_dict[k]['train_x'].columns)
+    feature_set_dict[k][f'permutation_importances_est-{n_estimators}_rep-{n_repeats}'] = permutation_importances
+    np.save(f'{fs_outpath}{k}/{run_uid}_permutation_importances_est-{n_estimators}_rep-{n_repeats}.npy', permutation_importances)
+    logging.info(f'\tPermutation Importance on {n_estimators} estimators and {n_repeats} repeats from {k} Done: {now}')
+
+
+
     try:
       sub_start_time = dt.datetime.now()
-      feature_set_dict[k]['fr_features_v1'] = np.load(f'{fs_outpath}{k}/{run_uid}_fr_features_v1.npy')
+      feature_set_dict[k]['rf_features_v1'] = np.load(f'{fs_outpath}{k}/{run_uid}_rf_features_v1.npy')
       sub_end_time = dt.datetime.now()
       logging.info('Previous Forest FS V1 Output imported: {sub_end_time}')
     except:
       sub_start_time = dt.datetime.now()
       logging.info(f'\tRandom Forest FS V1 Started: {sub_start_time}')
-      feature_set_dict[k]['fr_features_v1'] = random_forest_fs(feature_set_dict[k]['train_x'], feature_set_dict[k]['train_y'], n_estimators = 500, n_repeats=10, n_jobs=2)
-      np.save(f'{fs_outpath}{k}/{run_uid}_fr_features_v1.npy',feature_set_dict[k]['fr_features_v1'])
+      feature_set_dict[k]['rf_features_v1'] = list(compress(list(feature_set_dict[k]['train_x'].columns),random_forest_fs(feature_set_dict[k]['train_x'], np.array(feature_set_dict[k]['train_y']['task']), n_estimators = 500, n_repeats=10, n_jobs=4)))
+      np.save(f'{fs_outpath}{k}/{run_uid}_rf_features_v1.npy',feature_set_dict[k]['rf_features_v1'])
       sub_end_time = dt.datetime.now()
       logging.info(f'\tRandom Forest FS V1 Done: {sub_end_time}')
 
     try:
       sub_start_time = dt.datetime.now()
-      feature_set_dict[k]['fr_features_v2'] = np.load(f'{fs_outpath}{k}/{run_uid}_fr_features_v2.npy')
+      feature_set_dict[k]['rf_features_v2'] = np.load(f'{fs_outpath}{k}/{run_uid}_rf_features_v2.npy')
       sub_end_time = dt.datetime.now()
       logging.info('Previous Forest FS V2 Output imported: {sub_end_time}')
     except:
       sub_start_time = dt.datetime.now()
       logging.info(f'\tRandom Forest FS V2 Started: {sub_start_time}')
-      feature_set_dict[k]['fr_features_v2'] = random_forest_fs_v2(feature_set_dict[k]['train_x'], feature_set_dict[k]['train_y'], n_estimators = 500, n_repeats=10, n_jobs=2)
-      np.save(f'{fs_outpath}{k}/{run_uid}_fr_features_v2.npy',feature_set_dict[k]['fr_features_v2'])
+      feature_set_dict[k]['rf_features_v2'] = random_forest_fs_v2(feature_set_dict[k]['train_x'], np.array(feature_set_dict[k]['train_y']['task']), n_estimators = 500, n_repeats=10, n_jobs=4)
+      np.save(f'{fs_outpath}{k}/{run_uid}_rf_features_v2.npy',np.array(feature_set_dict[k]['rf_features_v2']))
       sub_end_time = dt.datetime.now()
       logging.info(f'\tRandom Forest FS V2 Done: {sub_end_time}')
 
+    try:
+      sub_start_time = dt.datetime.now()
+      feature_set_dict[k]['fr_features_v3'] = np.load(f'{fs_outpath}{k}/{run_uid}_fr_features_v3.npy')
+      sub_end_time = dt.datetime.now()
+      logging.info('Previous Forest FS V3 Output imported: {sub_end_time}')
+    except:
+      sub_start_time = dt.datetime.now()
+      logging.info(f'\tRandom Forest FS V3 Started: {sub_start_time}')
+      feature_set_dict[k]['fr_features_v3'] = random_forest_fs_v3(feature_set_dict[k]['train_x'], np.array(feature_set_dict[k]['train_y']['task']), n_estimators = 500, n_repeats=10, n_jobs=10)
 
   fs_end_time = dt.datetime.now()
   logging.info(f'Feature Selection Done: {fs_end_time}')
 
+  #Iterate through data sets
+  for dat_label in feature_set_dict.keys():
+    analysis_start_time = dt.datetime.now()
+    logging.info(f'{dat_label} Analysis Started: {analysis_start_time}')
+    n_folds=5
+    try:
+      try: # Random Forest Classifier
+        model_label='RFC'
+        n_estimators = [int(x) for x in np.linspace(start = 200, stop = 1000, num = 10)]
+        max_features = ['auto', 'sqrt']
+        max_depth = [int(x) for x in np.linspace(10, 110, num = 11)]
+        min_samples_split = [2, 5, 10]
+        min_samples_leaf = [1, 2, 4]
 
+        fs_label = 'full-data'
+        sub_start_time = dt.datetime.now()
+        logging.info(f'\t{dat_label} Ramdom Forest Classifier {fs_label} Started: {sub_start_time}')
+        frc_bs = BayesSearchCV(
+          RandomForestClassifier(),
+          {
+            'n_estimators':n_estimators,
+            'max_features': Categorical(max_features),
+            'max_depth': max_depth,
+            'min_samples_split': min_samples_split,
+            'min_samples_leaf': min_samples_leaf
+          },
+          n_iter = 30,
+          n_jobs = args.n_jobs,
+          refit=True,
+          cv=n_folds
+        )
+        frc_bs.fit(feature_set_dict[dat_label]['train_x'], feature_set_dict[dat_label]['train_y'])
+        predictions = frc_bs.predict(feature_set_dict[dat_label]['test_x'])
+        prediction_output = pd.DataFrame({
+          'Prediciton': predictions,
+          'Truth':feature_set_dict[dat_label]['test_y']
+        })
+        prediction_output.to_csv(f'{outpath}{dat_label}_{fs_label}_{model_label}_predictions.csv',index=False)
+        train_accuracy = frc_bs.score(feature_set_dict[dat_label]['train_x'], feature_set_dict[dat_label]['train_y'])
+        test_accuracy = frc_bs.score(feature_set_dict[dat_label]['test_x'], feature_set_dict[dat_label]['test_y'])
+        with open(f'{outpath}{dat_label}_{fs_label}_{model_label}_cv-results.json', 'w') as outfile:
+          json.dump(frc_bs.cv_results, outfile)
+        with open(f'{outpath}{dat_label}_{fs_label}_{model_label}_params.json', 'w') as outfile:
+          json.dump(frc_bs.get_params(), outfile)
+        pk.dump(frc_bs.best_estimator, open(f'{outfile}{dat_label}_{fs_label}_{model_label}_best-estimator.pkl','wb'))
+        feature_set_dict[dat_label][f'Random Forest Search {fs_label}'] = frc_bs
+        feature_set_dict[dat_label][f'Random Forest Search {fs_label} Training Accuracy'] = train_accuracy.copy()
+        feature_set_dict[dat_label][f'Random Forest Search {fs_label} Test Accuracy'] = test_accuracy.copy()
+        sub_end_time = dt.datetime.now()
+        logging.info(f'\t{dat_label} Random Forest Classifier {fs_label} Done: {sub_end_time}')
+        logging.info(f'\t{dat_label} Max Random Forest Training Accuracy with {fs_label}: {frc_bs.best_score}')
+
+        for h in feature_set_dict[dat_label]['hierarchical_selected_features'].keys():
+          fs_label = f'hierarchical_{h}'
+          sub_start_time = dt.datetime.now()
+          logging.info(f'\t{dat_label} Suppor Vector Classifier {fs_label} Started: {sub_start_time}')
+          train_x = feature_set_dict[dat_label]['train_x']
+          train_x_filtered = train_x[list(itemgetter(*feature_set_dict[dat_label]['hierarchical_selected_features'][h])(list(train_x.columns)))]
+          test_x = feature_set_dict[dat_label]['test_x']
+          test_x_filtered = test_x[list(itemgetter(*feature_set_dict[dat_label]['hierarchical_selected_features'][h])(list(test_x.columns)))]
+          frc_bs.fit(train_x_filtered, feature_set_dict[dat_label]['train_y'])
+          predictions = frc_bs.predict(test_x_filtered)
+          prediction_output = pd.DataFrame({
+            'Prediciton': predictions,
+            'Truth':feature_set_dict[dat_label]['test_y']
+          })
+          prediction_output.to_csv(f'{outpath}{dat_label}_{fs_label}_{model_label}_predictions.csv',index=False)
+          train_accuracy = frc_bs.score(train_x_filtered, feature_set_dict[dat_label]['train_y'])
+          test_accuracy = frc_bs.score(test_x_filtered, feature_set_dict[dat_label]['test_y'])
+          with open(f'{outpath}{dat_label}_{fs_label}_{model_label}_cv-results.json', 'w') as outfile:
+            json.dump(frc_bs.cv_results, outfile)
+          with open(f'{outpath}{dat_label}_{fs_label}_{model_label}_params.json', 'w') as outfile:
+            json.dump(frc_bs.get_params(), outfile)
+          pk.dump(frc_bs.best_estimator, open(f'{outfile}{dat_label}_{fs_label}_{model_label}_best-estimator.pkl','wb'))
+          feature_set_dict[dat_label][f'Support Vector Classifier {fs_label}'] = frc_bs
+          feature_set_dict[dat_label][f'Support Vector Classifier {fs_label} Training Accuracy'] = train_accuracy.copy()
+          feature_set_dict[dat_label][f'Support Vector Classifier {fs_label} Test Accuracy'] = test_accuracy.copy()
+          sub_end_time = dt.datetime.now()
+          logging.info(f'\t{dat_label} SVC {fs_label} Done: {sub_end_time}')
+          logging.info(f'\t{dat_label} Max SVC Training Accuracy with {fs_label}: {frc_bs.best_score}')
+      except Exception as e:
+        logging.info(f'Error running {dat_label} based RFC: {e}')
+      sub_end_time = dt.datetime.now()
+      logging.info(f'\t{dat_label} Random Forets Clasifier Done: {sub_end_time}')
+      try: # Suppor Vector Classifier
+        model_label = 'SVC'
+        parameters = {'kernel':['linear'], 'C':list(np.logspace(-10, 0, 10))}
+        n_folds=5
+        n_jobs = args.n_jobs
+        svc_bs = BayesSearchCV(
+          SVC(),
+          {
+            'kernel':Categorical(['linear']),
+            'C':list(np.logspace(-10, 0, 10))
+          },
+          n_iter = 30,
+          n_jobs = args.n_jobs,
+          refit=True,
+          cv=n_folds
+        )
+        fs_label = 'full-data'
+        sub_start_time = dt.datetime.now()
+        logging.info(f'\t{dat_label} Suppor Vector Classifier {fs_label} Started: {sub_start_time}')
+        svc_bs.fit(feature_set_dict[dat_label]['train_x'], feature_set_dict[dat_label]['train_y'])
+        predictions = svc_bs.predict(feature_set_dict[dat_label]['test_x'])
+        prediction_output = pd.DataFrame({
+          'Prediciton': predictions,
+          'Truth':feature_set_dict[dat_label]['test_y']
+        })
+        prediction_output.to_csv(f'{outpath}{dat_label}_{fs_label}_{model_label}_predictions.csv',index=False)
+        train_accuracy = svc_bs.score(feature_set_dict[dat_label]['train_x'], feature_set_dict[dat_label]['train_y'])
+        test_accuracy = svc_bs.score(feature_set_dict[dat_label]['test_x'], feature_set_dict[dat_label]['test_y'])
+        with open(f'{outpath}{dat_label}_{fs_label}_{model_label}_cv-results.json', 'w') as outfile:
+          json.dump(svc_bs.cv_results, outfile)
+        with open(f'{outpath}{dat_label}_{fs_label}_{model_label}_params.json', 'w') as outfile:
+          json.dump(svc_bs.get_params(), outfile)
+        pk.dump(svc_bs.best_estimator, open(f'{outfile}{dat_label}_{fs_label}_{model_label}_best-estimator.pkl','wb'))
+        feature_set_dict[dat_label][f'Support Vector Classifier {fs_label}'] = svc_bs
+        feature_set_dict[dat_label][f'Support Vector Classifier {fs_label} Training Accuracy'] = train_accuracy.copy()
+        feature_set_dict[dat_label][f'Support Vector Classifier {fs_label} Test Accuracy'] = test_accuracy.copy()
+        sub_end_time = dt.datetime.now()
+        logging.info(f'\t{dat_label} SVC {fs_label} Done: {sub_end_time}')
+        logging.info(f'\t{dat_label} Max SVC Training Accuracy with {fs_label}: {svc_bs.best_score}')
+
+        for h in feature_set_dict[dat_label]['hierarchical_selected_features'].keys():
+          fs_label = f'hierarchical_{h}'
+          sub_start_time = dt.datetime.now()
+          logging.info(f'\t{dat_label} Suppor Vector Classifier {fs_label} Started: {sub_start_time}')
+          train_x = feature_set_dict[dat_label]['train_x']
+          train_x_filtered = train_x[list(itemgetter(*feature_set_dict[dat_label]['hierarchical_selected_features'][h])(list(train_x.columns)))]
+          test_x = feature_set_dict[dat_label]['test_x']
+          test_x_filtered = test_x[list(itemgetter(*feature_set_dict[dat_label]['hierarchical_selected_features'][h])(list(test_x.columns)))]
+          svc_bs.fit(train_x_filtered, feature_set_dict[dat_label]['train_y'])
+          predictions = svc_bs.predict(test_x_filtered)
+          prediction_output = pd.DataFrame({
+            'Prediciton': predictions,
+            'Truth':feature_set_dict[dat_label]['test_y']
+          })
+          prediction_output.to_csv(f'{outpath}{dat_label}_{fs_label}_{model_label}_predictions.csv',index=False)
+          train_accuracy = svc_bs.score(train_x_filtered, feature_set_dict[dat_label]['train_y'])
+          test_accuracy = svc_bs.score(test_x_filtered, feature_set_dict[dat_label]['test_y'])
+          with open(f'{outpath}{dat_label}_{fs_label}_{model_label}_cv-results.json', 'w') as outfile:
+            json.dump(svc_bs.cv_results, outfile)
+          with open(f'{outpath}{dat_label}_{fs_label}_{model_label}_params.json', 'w') as outfile:
+            json.dump(svc_bs.get_params(), outfile)
+          pk.dump(svc_bs.best_estimator, open(f'{outfile}{dat_label}_{fs_label}_{model_label}_best-estimator.pkl','wb'))
+          feature_set_dict[dat_label][f'Support Vector Classifier {fs_label}'] = svc_bs
+          feature_set_dict[dat_label][f'Support Vector Classifier {fs_label} Training Accuracy'] = train_accuracy.copy()
+          feature_set_dict[dat_label][f'Support Vector Classifier {fs_label} Test Accuracy'] = test_accuracy.copy()
+          sub_end_time = dt.datetime.now()
+          logging.info(f'\t{dat_label} SVC {fs_label} Done: {sub_end_time}')
+          logging.info(f'\t{dat_label} Max SVC Training Accuracy with {fs_label}: {svc_bs.best_score}')
+      except Exception as e:
+        logging.info(f'Error running {dat_label} based SVC: {e}')
+      sub_end_time = dt.datetime.now()
+      logging.info(f'\t{dat_label} Suppor Vector Classifier Done: {sub_end_time}')
+      
+    except Exception as e:
+      logging.info(f'Error running {dat_label} based ananalysis: {e}')
+    analysis_end_time = dt.datetime.now()
+    logging.info(f'{dat_label} analysis Done: {analysis_end_time}')
+
+  
 
   
 
@@ -818,10 +1058,15 @@ files_to_transfer = [
   # ,''
 ]
 
+for f in files_to_transfer:
+  shutil.copy(f, outpath)
 
+shutil.make_archive(outpath, 'zip', outpath)
 
 # SCP any outputs to SSD location
 scp = SCPClient(ssh.get_transport())
 ssh = createSSHClient(args.datahost, args.uname, args.psswd)
-# rmtree temp files
+scp.put(f'{outpath}.zip', args.remote_output + run_uid + '.zip')
+# rmtree temp files if requested
+
 
