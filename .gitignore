@@ -3,3 +3,4 @@ Visuals/*
 *.zip
 nilearn_cache/
 links*.txt
+*.npy
