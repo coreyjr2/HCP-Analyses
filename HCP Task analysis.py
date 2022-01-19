@@ -281,7 +281,7 @@ def condition_frames(run_evs, skip=0):
   return frames_list
 
 
-def selective_average(timeseries_data, ev, sf'kip=0):
+def selective_average(timeseries_data, ev, skip=0):
   """Take the temporal mean across frames for a given condition.
 
   Args:
