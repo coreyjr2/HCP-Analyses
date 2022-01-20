@@ -4,3 +4,4 @@ Visuals/*
 nilearn_cache/
 links*.txt
 *.npy
+*.pkl
