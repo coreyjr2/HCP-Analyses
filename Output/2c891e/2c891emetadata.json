@@ -1,0 +1,1 @@
+{"atlas_name": "69354adf", "smoothed": false, "ICA-Aroma": false, "subtract parcel-wise mean": true, "concatenate": true, "confounds": ["Subject", "task", "Movement_RelativeRMS_mean", "Age__22-25", "Age__26-30", "Age__31-35", "Age__36+", "Gender__F", "Gender__M"]}

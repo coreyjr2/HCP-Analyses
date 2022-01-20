@@ -23,7 +23,7 @@ Info:
 
 '''
 Runs:
-1.
+1. (2c891e)
   *NOTE: Ran this on dx, 
   python3 HCP_analysis_vCluster_001.py \
     -source_path /mnt/usb1/HCP_1200/HCP_69354adf \
@@ -775,16 +775,16 @@ for k in feature_set_dict.keys():
       np.save(f'{fs_outpath}{k}/{run_uid}_train_pca-auto.npy',feature_set_dict[k]['train_pca_auto'])
       np.save(f'{fs_outpath}{k}/{run_uid}_test_pca-auto.npy',feature_set_dict[k]['test_pca_auto'])
       pk.dump(feature_set_dict[k]['pca_auto'], open(f'{fs_outpath}{k}/{run_uid}_pca-auto.pkl', "wb"))
-      for x in feature_set_dict[k]['hierarchical_selected_features'].keys():
-        if x>1:
-          print(x, len(feature_set_dict[k]['hierarchical_selected_features'][x]))
-          train_pca_auto, test_pca_auto, pca_auto = pca_fs(feature_set_dict[k]['train_x'], feature_set_dict[k]['test_x'], k_components=None)
-          feature_set_dict[k][f'train_pca_{x}'] = train_pca_auto
-          feature_set_dict[k][f'test_pca_{x}'] = test_pca_auto
-          feature_set_dict[k][f'pca_{x}'] = pca_auto
-          np.save(f'{fs_outpath}{k}/{run_uid}_train_pca-{x}.npy',feature_set_dict[k][f'train_pca_{x}'])
-          np.save(f'{fs_outpath}{k}/{run_uid}_test_pca-{x}.npy',feature_set_dict[k][f'test_pca_{x}'])
-          pk.dump(feature_set_dict[k][f'pca_{x}'], open(f'{fs_outpath}{k}/{run_uid}_pca-{x}.pkl', "wb"))
+      # for x in feature_set_dict[k]['hierarchical_selected_features'].keys():
+      #   if x>1:
+      #     print(x, len(feature_set_dict[k]['hierarchical_selected_features'][x]))
+      #     train_pca_auto, test_pca_auto, pca_auto = pca_fs(feature_set_dict[k]['train_x'], feature_set_dict[k]['test_x'], k_components=None)
+      #     feature_set_dict[k][f'train_pca_{x}'] = train_pca_auto
+      #     feature_set_dict[k][f'test_pca_{x}'] = test_pca_auto
+      #     feature_set_dict[k][f'pca_{x}'] = pca_auto
+      #     np.save(f'{fs_outpath}{k}/{run_uid}_train_pca-{x}.npy',feature_set_dict[k][f'train_pca_{x}'])
+      #     np.save(f'{fs_outpath}{k}/{run_uid}_test_pca-{x}.npy',feature_set_dict[k][f'test_pca_{x}'])
+      #     pk.dump(feature_set_dict[k][f'pca_{x}'], open(f'{fs_outpath}{k}/{run_uid}_pca-{x}.pkl', "wb"))
       sub_end_time = dt.datetime.now()
       logging.info(f'\tPCA Done: {sub_end_time}')
 
