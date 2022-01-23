@@ -1,0 +1,5 @@
+file:///C:/Users/kyle/Downloads/vandermaaten08a.pdf
+
+https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html
+
+https://distill.pub/2016/misread-tsne/
