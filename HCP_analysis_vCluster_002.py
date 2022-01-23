@@ -391,7 +391,7 @@ try:
     train_pca = pca.transform(train_x)
     test_pca = pca.transform(test_x)
     return train_pca, test_pca, pca
-  def random_forest_fs(x, y, n_estimators, n_repeats=10, n_jobs=1, max_features = 500):
+  def random_forest_fs(x, y, n_estimators, n_repeats=10, n_jobs=1, max_features = 500):# TODO: Optimize this
     #Returns a list of columns to use as features
     sel = SelectFromModel(RandomForestClassifier(n_estimators = n_estimators, n_jobs=n_jobs, random_state=42), max_features=max_features)
     sel.fit(x,y)
@@ -729,9 +729,9 @@ try:
     os.makedirs(fs_outpath)
   except:
     pass
-fs_start_time = dt.datetime.now()
-logging.info(f'Feature Selection Started: {fs_start_time}')
-for k in feature_set_dict.keys():
+  fs_start_time = dt.datetime.now()
+  logging.info(f'Feature Selection Started: {fs_start_time}')
+  for k in feature_set_dict.keys():
 
     sub_start_time = dt.datetime.now()
     hierarchical_start = 1
