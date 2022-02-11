@@ -127,14 +127,14 @@ args, leforvers = parse_args(v1_argslist)
 #   # Interupt request for password and username if none passed
 #   if args.uname == None:
 #     args.uname = getpass.getpass(f'Username for {args.datahost}:')
-#   args.psswd = getpass.getpass(f'Password for {args.uname}@{args.datahost}:')
+#   psswd = getpass.getpass(f'Password for {args.uname}@{args.datahost}:')
 #   src_basepath = args.source_path
 #   download_start_time = dt.datetime.now()
 #   print('Starting Data Transfer: ', download_start_time)
 #   try:
 #     ssh = paramiko.SSHClient()
 #     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-#     ssh.connect(args.datahost, 22, args.uname, args.psswd)
+#     ssh.connect(args.datahost, 22, args.uname, psswd)
 #     scp = SCPClient(ssh.get_transport())
 #     scp.get(args.source_path + args.run_uid, args.local_path + args.run_uid, recursive=True)
 #   except Exception as e:
