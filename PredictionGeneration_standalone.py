@@ -20,12 +20,12 @@ try:
   import getpass
   import nibabel as nib
   import numpy as np
-  from nilearn import datasets
-  from nilearn.input_data import NiftiLabelsMasker, NiftiMapsMasker
-  from sklearn.preprocessing import StandardScaler
+  # from nilearn import datasets
+  # from nilearn.input_data import NiftiLabelsMasker, NiftiMapsMasker
+  # from sklearn.preprocessing import StandardScaler
   from sklearn.ensemble import RandomForestClassifier
   from sklearn.metrics import confusion_matrix, classification_report
-  from sklearn.linear_model import LogisticRegression
+  # from sklearn.linear_model import LogisticRegression
   from sklearn.model_selection import cross_val_score, train_test_split, KFold, GridSearchCV
   from sklearn.feature_selection import SelectFromModel
   from sklearn.decomposition import PCA
@@ -115,26 +115,26 @@ v1_argslist = [ # for running from L2
   '-local_path','C:\\Users\\kyle\\temp\\',
   '--output','C:\\Users\\kyle\\output\\',
   '--remote_output','/mnt/usb1/hcp_analysis_output/',
-  '--n_jobs','4',
+  '--n_jobs','6',
   '-run_uid','8d2513'
 ]
 
 # Read args
 args, leforvers = parse_args(v1_argslist)
 
-# SCP data to temp location
+# # SCP data to temp location
 # if args.source_path!=None:
 #   # Interupt request for password and username if none passed
 #   if args.uname == None:
 #     args.uname = getpass.getpass(f'Username for {args.datahost}:')
-#   args.psswd = getpass.getpass(f'Password for {args.uname}@{args.datahost}:')
+#   psswd = getpass.getpass(f'Password for {args.uname}@{args.datahost}:')
 #   src_basepath = args.source_path
 #   download_start_time = dt.datetime.now()
 #   print('Starting Data Transfer: ', download_start_time)
 #   try:
 #     ssh = paramiko.SSHClient()
 #     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-#     ssh.connect(args.datahost, 22, args.uname, args.psswd)
+#     ssh.connect(args.datahost, 22, args.uname, psswd)
 #     scp = SCPClient(ssh.get_transport())
 #     scp.get(args.source_path + args.run_uid, args.local_path + args.run_uid, recursive=True)
 #   except Exception as e:
@@ -264,25 +264,46 @@ test_y = feature_set_dict[k]['test_y'].values.ravel()
 h_levels = list(feature_set_dict[k]['hierarchical_selected_features'].keys())
 h_levels.reverse()
 # subset h_levels
-h_levels = h_levels[:3]
-for level in h_levels:
+# h_levels = h_levels[:1]
+res_dict = {}
+
+for level in h_levels[:1]:
   feature_index = feature_set_dict[k]['hierarchical_selected_features'][level]
   sub_train_x = feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]]
   sub_test_x = feature_set_dict[k]['test_x'][feature_set_dict[k]['train_x'].columns[feature_index]]
   n_folds = 5
-  opt = BayesSearchCV(
-    SVC(),
+  opt_SVC = BayesSearchCV(
+    SVC(probability=True),
     {
-      'C': Real(1e-6, 1e+6, prior='log-uniform'),
-      'gamma': Real(1e-6, 1e+1, prior='log-uniform'),
-      'degree': Integer(1,8),
-      'kernel': Categorical(['linear', 'poly', 'rbf']),
+      'C': [0.001, 0.01, 0.1, 1., 10., 100.],
+      'kernel': Categorical(['linear', 'rbf']),
     },
-    n_iter=32,
+    n_iter=12,
     random_state=0,
     refit=True,
     cv=n_folds,
-    n_jobs = int(args.n_jobs)
+    n_jobs = int(args.n_jobs),
+    n_points = int(args.n_jobs),
+    return_train_score = True
   )
-  res = opt.fit(sub_train_x, train_y)
-  print(opt.score(sub_test_x, test_y))
+  res_SVC = opt_SVC.fit(sub_train_x, train_y)
+  res_dict[f'HFS_SVC_{level}'] = [res_SVC, opt_SVC]
+  print(opt_SVC.score(sub_test_x, test_y))
+
+  opt_RFC = BayesSearchCV(
+    RandomForestClassifier(),
+    {
+      'max_depth':[4,16,64,256,1024],
+      'n_estimators':[100, 200, 400, 800, 1600],
+    },
+    n_iter=12,
+    random_state=0,
+    refit=True,
+    cv=n_folds,
+    n_jobs = int(args.n_jobs),
+    n_points = int(args.n_jobs),
+    return_train_score = True
+  )
+  res_RFC = opt_RFC.fit(sub_train_x, train_y)
+  res_dict[f'HFS_RFC_{level}'] = [res_RFC, opt_RFC]
+  print(opt_RFC.score(sub_test_x, test_y))
