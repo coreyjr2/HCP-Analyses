@@ -60,11 +60,11 @@ try:
   source_path = os.path.dirname(os.path.abspath(__file__)) + sep
   sys_name = platform.system() 
   hostname = platform.node()
-  output_path = 'C:\\Users\\kyle\\output\\'
-  local_path = 'C:\\Users\\kyle\\temp\\'
+  output_path = 'C:\\Users\\Sarah Melissa\\Documents\\output\\'
+  local_path = 'C:\\Users\\Sarah Melissa\\Documents\\temp\\'
   run_uid = '8d2513'
   remote_outpath = '/mnt/usb1/hcp_analysis_output/'
-  uname = 'kbaacke'
+  uname = 'solshan2'
   datahost = 'r2.psych.uiuc.edu'
   source_path = '/mnt/usb1/hcp_analysis_output/'
 except:
@@ -88,7 +88,7 @@ outpath = output_path + run_uid + sep
 tsne_out = outpath + 't-SNE' + sep
 # Make folder specific to this run's output
 try:
-    os.mkdirs(tsne_out)
+    os.makedirs(tsne_out)
 except:
     pass
 
@@ -216,10 +216,31 @@ parcel_connection_features = feature_set_dict['parcel_connection']
 # start with raw data
 input_raw = np.array(parcel_connection_features['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'])
 
+input_pca = np.array(
+  parcel_connection_features['train_pca']
+)
+level = 9
+k = 'parcel_connection'
+feature_index = feature_set_dict[k]['hierarchical_selected_features'][level]
+input_hfs_9_input = np.array(feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]])
+
+
 embedded_raw = TSNE(
   n_components=2,
-  learning_rate='auto',
-  init='random'
+  perplexity=77,
+  learning_rate=50,
+  init='random',
+  verbose=1,
+  n_iter=2000,
   ).fit_transform(input_raw)
 
-plt.plot(embedded_raw)
+colormap = np.array(['black','red', 'green', 'blue', 'yellow', 'purple',
+                    'olive', 'saddlebrown'])
+plt.scatter(embedded_raw[:,0], embedded_raw[:,1],c = np.array(parcel_connection_features['train_y']), s=1)
+ploting_df = pd.DataFrame(embedded_raw, columns = ['x','y'])
+ploting_df['task'] = parcel_connection_features['train_y']['task']
+
+ploting_df['task'] = ploting_df['task'].astype(str)
+
+import seaborn as sb
+sb.scatterplot(embedded_raw[:,0], embedded_raw[:,1], hue = ploting_df['task'], s=3)
