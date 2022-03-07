@@ -1903,6 +1903,10 @@ if True:
   data_top_feat_corr_net_connections = X_parcel_connections.iloc[:, top_feat_corr_net_connections_indices]
 
 
+feat_corr_net_connections = pd.DataFrame(pd.concat([feature_correlation_with_outcome,  list_of_connections,  list_of_networks, vif_info], axis=1))
+#feat_corr_net_connections.columns = ['Correlation to outcome', 'Connections', 'Networks', "VIF"]
+feat_corr_net_connections.columns = ['Correlation to outcome', 'Connections', 'Networks']
+
 
   #Check for multicolinearity in the parcel connections top features
   vif_info_top = pd.DataFrame()
@@ -1963,6 +1967,38 @@ for x in range(10):
 
 
 
+# Parcel connections top features only SVC
+lin_clf_parcel_connections = svm.LinearSVC(C=.1)
+lin_clf_parcel_connections.fit(train_X_parcon_top, train_y_parcon_top)
+print('SVC Parcel Connection Training accuracy: ', lin_clf_parcel_connections.score(train_X_parcon_top, train_y_parcon_top))
+print('SVC Parcel Connection Test accuracy: ', lin_clf_parcel_connections.score(test_X_parcon_top, test_y_parcon_top))
+svm_coef_parcel_connections = pd.DataFrame(lin_clf_parcel_connections.coef_.T)
+  
+##### Parcel connections #####if True:
+   
+   
+#Tune RFC hyperparameters
+
+# Number of trees in random forest
+n_estimators = [int(x) for x in np.linspace(start = 200, stop = 1000, num = 10)]
+# Number of features to consider at every split
+max_features = ['auto', 'sqrt']
+# Maximum number of levels in tree
+max_depth = [int(x) for x in np.linspace(10, 110, num = 11)]
+max_depth.append(None)
+# Minimum number of samples required to split a node
+min_samples_split = [2, 5, 10]
+# Minimum number of samples required at each leaf node
+min_samples_leaf = [1, 2, 4]
+# Method of selecting samples for training each tree
+bootstrap = [True, False]
+# Create the random grid
+random_grid = {'n_estimators': n_estimators,
+               'max_features': max_features,
+               'max_depth': max_depth,
+               'min_samples_split': min_samples_split,
+               'min_samples_leaf': min_samples_leaf,
+               'bootstrap': bootstrap}
   # Parcel connections top features only SVC
   lin_clf_parcel_connections = svm.LinearSVC(C=.1)
   lin_clf_parcel_connections.fit(train_X_parcon_top, train_y_parcon_top)

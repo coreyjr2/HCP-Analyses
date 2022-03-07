@@ -498,7 +498,7 @@ feature_set_dict = {
   },
   'parcel_connection':{
   },
-  'network_conneciton':{
+  'network_connection':{
   }
 }
 
@@ -511,136 +511,135 @@ try:
   sub_end_time = dt.datetime.now()
   logging.info(f'Premade raw data successfully imported from {fs_outpath}: {sub_end_time}')
 except:
-
-
   sub_end_time = dt.datetime.now()
   logging.info(f'Premade data failed to load. Importing from data from parcellated timeseries: {sub_end_time}')
-  sub_start_time = dt.datetime.now()
-  logging.info(f'Reading parcellated data Started: {sub_start_time}')
-  parcellated_data = {}
-  for session in sessions:
-    #Read in parcellated data, or parcellate data if meta-data conditions not met by available data
-    parcellated_data[session] = load_parcellated_task_timeseries_v2(meta_dict, subjects, session, npy_template = npy_template_hcp, basepath = f'{basepath}{sep}') # remote version: f'{basepath}HCP_{args.atlas_name}{sep}'
 
-  sub_end_time = dt.datetime.now()
-  logging.info(f'Reading parcellated data Done: {sub_end_time}')
-  sub_start_time = dt.datetime.now()
-  logging.info(f'generate_parcel_input_features Started: {sub_start_time}')
-  parcels_sums = generate_parcel_input_features(parcellated_data, parcel_labels)
-  sub_end_time = dt.datetime.now()
-  logging.info(f'generate_parcel_input_features Done: {sub_end_time}')
-  sub_start_time = dt.datetime.now()
-  logging.info(f'generate_network_input_features Started: {sub_start_time}')
-  network_sums = generate_network_input_features(parcels_sums, network_labels)
-  sub_end_time = dt.datetime.now()
-  logging.info(f'generate_network_input_features Done: {sub_end_time}')
-  sub_start_time = dt.datetime.now()
-  logging.info(f'generate_parcel_connection_features Started: {sub_start_time}')
-  parcel_connection_task_data = generate_parcel_connection_features(parcellated_data, parcel_labels)
-  sub_end_time = dt.datetime.now()
-  logging.info(f'generate_parcel_connection_features Done: {sub_end_time}')
-  sub_start_time = dt.datetime.now()
-  logging.info(f'generate_network_connection_features Started: {sub_start_time}')
-  network_connection_features = generate_network_connection_features(parcellated_data, network_labels)
-  sub_end_time = dt.datetime.now()
-  logging.info(f'generate_network_connection_features Done: {sub_end_time}')
+sub_start_time = dt.datetime.now()
+logging.info(f'Reading parcellated data Started: {sub_start_time}')
+parcellated_data = {}
+for session in sessions:
+  #Read in parcellated data, or parcellate data if meta-data conditions not met by available data
+  parcellated_data[session] = load_parcellated_task_timeseries_v2(meta_dict, subjects, session, npy_template = npy_template_hcp, basepath = f'{basepath}{sep}') # remote version: f'{basepath}HCP_{args.atlas_name}{sep}'
+sub_end_time = dt.datetime.now()
+logging.info(f'Reading parcellated data Done: {sub_end_time}')
+sub_start_time = dt.datetime.now()
+logging.info(f'generate_parcel_input_features Started: {sub_start_time}')
+parcels_sums = generate_parcel_input_features(parcellated_data, parcel_labels)
+sub_end_time = dt.datetime.now()
+logging.info(f'generate_parcel_input_features Done: {sub_end_time}')
+sub_start_time = dt.datetime.now()
+logging.info(f'generate_network_input_features Started: {sub_start_time}')
+network_sums = generate_network_input_features(parcels_sums, network_labels)
+sub_end_time = dt.datetime.now()
+logging.info(f'generate_network_input_features Done: {sub_end_time}')
 
-  sub_start_time = dt.datetime.now()
-  logging.info(f'Confound merging Started: {sub_start_time}')
-  # Merge in any confounds
-  if (args.movement_regressor != "None") or (args.confounds != "None"):
-    confounds['Subject'] = confounds['Subject'].astype(str)
-    confounds['task'] = confounds['task'].astype(int)
-    confounds['temp_index'] = confounds.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
-    confounds.drop(columns=['Subject','task'], inplace=True)
-    parcels_sums['temp_index'] = parcels_sums.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
-    network_sums['temp_index'] = network_sums.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
-    parcel_connection_task_data['temp_index'] = parcel_connection_task_data.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
-    network_connection_features['temp_index'] = network_connection_features.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
-    parcel_sum_input = pd.merge(confounds, parcels_sums, on='temp_index', how = 'right').dropna()
-    network_sum_input = pd.merge(confounds, network_sums, on='temp_index', how = 'right').dropna()
-    parcel_connection_input = pd.merge(confounds, parcel_connection_task_data, on='temp_index', how = 'right').dropna()
-    network_connection_input = pd.merge(confounds, network_connection_features, on='temp_index', how = 'right').dropna()
-  else:
-    parcel_sum_input = parcels_sums
-    network_sum_input = network_sums
-    parcel_connection_input = parcel_connection_task_data
-    network_connection_input = network_connection_features
-    sub_end_time = dt.datetime.now()
-    logging.info(f'Confound merging Done: {sub_end_time}')
+sub_start_time = dt.datetime.now()
+logging.info(f'generate_parcel_connection_features Started: {sub_start_time}')
+parcel_connection_task_data = generate_parcel_connection_features(parcellated_data, parcel_labels)
+sub_end_time = dt.datetime.now()
+logging.info(f'generate_parcel_connection_features Done: {sub_end_time}')
 
-  # XY Split
-  sub_start_time = dt.datetime.now()
-  logging.info(f'XY Split Started: {sub_start_time}')
-  parcel_sum_x, parcel_sum_y = XY_split(parcel_sum_input, 'task')
-  network_sum_x, network_sum_y = XY_split(network_sum_input, 'task')
-  parcel_connection_x, parcel_connection_y = XY_split(parcel_connection_input, 'task')
-  network_connection_x, network_connection_y = XY_split(network_connection_input, 'task')
+sub_start_time = dt.datetime.now()
+logging.info(f'generate_network_connection_features Started: {sub_start_time}')
+network_connection_features = generate_network_connection_features(parcellated_data, network_labels)
+sub_end_time = dt.datetime.now()
+logging.info(f'generate_network_connection_features Done: {sub_end_time}')
+sub_start_time = dt.datetime.now()
+logging.info(f'Confound merging Started: {sub_start_time}')
+# Merge in any confounds
+if (args.movement_regressor != "None") or (args.confounds != "None"):
+  confounds['Subject'] = confounds['Subject'].astype(str)
+  confounds['task'] = confounds['task'].astype(int)
+  confounds['temp_index'] = confounds.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
+  confounds.drop(columns=['Subject','task'], inplace=True)
+  parcels_sums['temp_index'] = parcels_sums.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
+  network_sums['temp_index'] = network_sums.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
+  parcel_connection_task_data['temp_index'] = parcel_connection_task_data.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
+  network_connection_features['temp_index'] = network_connection_features.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
+  parcel_sum_input = pd.merge(confounds, parcels_sums, on='temp_index', how = 'right').dropna()
+  network_sum_input = pd.merge(confounds, network_sums, on='temp_index', how = 'right').dropna()
+  parcel_connection_input = pd.merge(confounds, parcel_connection_task_data, on='temp_index', how = 'right').dropna()
+  network_connection_input = pd.merge(confounds, network_connection_features, on='temp_index', how = 'right').dropna()
+else:
+  parcel_sum_input = parcels_sums
+  network_sum_input = network_sums
+  parcel_connection_input = parcel_connection_task_data
+  network_connection_input = network_connection_features
   sub_end_time = dt.datetime.now()
-  logging.info(f'XY Split Done: {sub_end_time}')
-  # Training Test Split
-  sub_start_time = dt.datetime.now()
-  logging.info(f'Training Test Split Started: {sub_start_time}')
-  parcel_sum_x_train, parcel_sum_x_test, parcel_sum_y_train, parcel_sum_y_test = train_test_split(parcel_sum_x, parcel_sum_y, test_size = 0.2)
-  network_sum_x_train, network_sum_x_test, network_sum_y_train, network_sum_y_test = train_test_split(network_sum_x, network_sum_y, test_size = 0.2)
-  parcel_connection_x_train, parcel_connection_x_test, parcel_connection_y_train, parcel_connection_y_test = train_test_split(parcel_connection_x, parcel_connection_y, test_size = 0.2)
-  network_connection_x_train, network_connection_x_test, network_connection_y_train, network_connection_y_test = train_test_split(network_connection_x, network_connection_y, test_size = 0.2)
-  sub_end_time = dt.datetime.now()
-  logging.info(f'Training Test Split Done: {sub_end_time}')
+  logging.info(f'Confound merging Done: {sub_end_time}')
+# XY Split
+sub_start_time = dt.datetime.now()
+logging.info(f'XY Split Started: {sub_start_time}')
+parcel_sum_x, parcel_sum_y = XY_split(parcel_sum_input, 'task')
+network_sum_x, network_sum_y = XY_split(network_sum_input, 'task')
+parcel_connection_x, parcel_connection_y = XY_split(parcel_connection_input, 'task')
+network_connection_x, network_connection_y = XY_split(network_connection_input, 'task')
+sub_end_time = dt.datetime.now()
+logging.info(f'XY Split Done: {sub_end_time}')
+# Training Test Split
+sub_start_time = dt.datetime.now()
+logging.info(f'Training Test Split Started: {sub_start_time}')
+parcel_sum_x_train, parcel_sum_x_test, parcel_sum_y_train, parcel_sum_y_test = train_test_split(parcel_sum_x, parcel_sum_y, test_size = 0.2)
+network_sum_x_train, network_sum_x_test, network_sum_y_train, network_sum_y_test = train_test_split(network_sum_x, network_sum_y, test_size = 0.2)
+parcel_connection_x_train, parcel_connection_x_test, parcel_connection_y_train, parcel_connection_y_test = train_test_split(parcel_connection_x, parcel_connection_y, test_size = 0.2)
+network_connection_x_train, network_connection_x_test, network_connection_y_train, network_connection_y_test = train_test_split(network_connection_x, network_connection_y, test_size = 0.2)
+sub_end_time = dt.datetime.now()
+logging.info(f'Training Test Split Done: {sub_end_time}')
 
-  # Scaling non-categorical Variables
-  sub_start_time = dt.datetime.now()
-  logging.info(f'Scaling non-categorical Variables Started: {sub_start_time}')
-  try:
-    cols_to_exclude = list(confounds.columns)
-    cols_to_exclude.append('Subject')
-    
-  except:
-    cols_to_exclude = ['Subject']
-  parcel_sum_x_train = scale_subset(parcel_sum_x_train, cols_to_exclude)
-  parcel_sum_x_test = scale_subset(parcel_sum_x_test, cols_to_exclude)
-  network_sum_x_train = scale_subset(network_sum_x_train, cols_to_exclude)
-  network_sum_x_test = scale_subset(network_sum_x_test, cols_to_exclude)
-  parcel_connection_x_train = scale_subset(parcel_connection_x_train, cols_to_exclude)
-  parcel_connection_x_test = scale_subset(parcel_connection_x_test, cols_to_exclude)
-  network_connection_x_train = scale_subset(network_connection_x_train, cols_to_exclude)
-  network_connection_x_test = scale_subset(network_connection_x_test, cols_to_exclude)
-  sub_end_time = dt.datetime.now()
-  logging.info(f'Scaling non-categorical Variables Done: {sub_end_time}')
-  feature_set_dict = {
-    'parcel_sum':{
-      'train_x': parcel_sum_x_train,
-      'test_x': parcel_sum_x_test,
-      'train_y': parcel_sum_y_train,
-      'test_y': parcel_sum_y_test
-    },
-    'network_sum':{
-      'train_x': network_sum_x_train,
-      'test_x': network_sum_x_test,
-      'train_y': network_sum_y_train,
-      'test_y': network_sum_y_test
-    },
-    'parcel_connection':{
-      'train_x': parcel_connection_x_train,
-      'test_x': parcel_connection_x_test,
-      'train_y': parcel_connection_y_train,
-      'test_y': parcel_connection_y_test
-    },
-    'network_conneciton':{
-      'train_x': network_connection_x_train,
-      'test_x': network_connection_x_test,
-      'train_y': network_connection_y_train,
-      'test_y': network_connection_y_test
-    }
+# Scaling non-categorical Variables
+sub_start_time = dt.datetime.now()
+logging.info(f'Scaling non-categorical Variables Started: {sub_start_time}')
+try:
+  cols_to_exclude = list(confounds.columns)
+  cols_to_exclude.append('Subject')
+except:
+  cols_to_exclude = ['Subject']
+parcel_sum_x_train = scale_subset(parcel_sum_x_train, cols_to_exclude)
+parcel_sum_x_test = scale_subset(parcel_sum_x_test, cols_to_exclude)
+network_sum_x_train = scale_subset(network_sum_x_train, cols_to_exclude)
+network_sum_x_test = scale_subset(network_sum_x_test, cols_to_exclude)
+parcel_connection_x_train = scale_subset(parcel_connection_x_train, cols_to_exclude)
+parcel_connection_x_test = scale_subset(parcel_connection_x_test, cols_to_exclude)
+network_connection_x_train = scale_subset(network_connection_x_train, cols_to_exclude)
+network_connection_x_test = scale_subset(network_connection_x_test, cols_to_exclude)
+sub_end_time = dt.datetime.now()
+logging.info(f'Scaling non-categorical Variables Done: {sub_end_time}')
+feature_set_dict = {
+  'parcel_sum':{
+    'train_x': parcel_sum_x_train,
+    'test_x': parcel_sum_x_test,
+    'train_y': parcel_sum_y_train,
+    'test_y': parcel_sum_y_test
+  },
+  'network_sum':{
+    'train_x': network_sum_x_train,
+    'test_x': network_sum_x_test,
+    'train_y': network_sum_y_train,
+    'test_y': network_sum_y_test
+  },
+  'parcel_connection':{
+    'train_x': parcel_connection_x_train,
+    'test_x': parcel_connection_x_test,
+    'train_y': parcel_connection_y_train,
+    'test_y': parcel_connection_y_test
+  },
+  'network_connection':{
+    'train_x': network_connection_x_train,
+    'test_x': network_connection_x_test,
+    'train_y': network_connection_y_train,
+    'test_y': network_connection_y_test
   }
-  for k in feature_set_dict.keys():
-    try:
-      os.makedirs(f'{fs_outpath}/{k}')
-    except:
-      pass
-    for target_df in ['train_x','test_x','train_y','test_y']:
-      np.save(f'{fs_outpath}{k}/{run_uid}_{target_df}.npy', np.array(feature_set_dict[k][target_df]))
-      np.save(f'{fs_outpath}{k}/{run_uid}_{target_df}_colnames.npy', np.array(feature_set_dict[k][target_df].columns))
+}
+for k in feature_set_dict.keys():
+  try:
+    os.makedirs(f'{fs_outpath}/{k}')
+  except:
+    pass
+  for target_df in ['train_x','test_x','train_y','test_y']:
+    np.save(f'{fs_outpath}{k}/{run_uid}_{target_df}.npy', np.array(feature_set_dict[k][target_df]))
+    np.save(f'{fs_outpath}{k}/{run_uid}_{target_df}_colnames.npy', np.array(feature_set_dict[k][target_df].columns))
+
+
 # Feature Selection
 try:
   os.makedirs(fs_outpath)
@@ -661,7 +660,7 @@ for k in feature_set_dict.keys():
   # except:
   sub_start_time = dt.datetime.now()
   logging.info(f'\tHierarchical Feaure Selection ({k}) Started: {sub_start_time}')
-  feature_set_dict[k]['hierarchical_selected_features'] = hierarchical_fs_v2(feature_set_dict[k]['train_x'],hierarchical_start, hierarchical_end)
+  feature_set_dict[k]['hierarchical_selected_features'] = hierarchical_fs_v2(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],hierarchical_start, hierarchical_end)
   for n in range(hierarchical_start, hierarchical_end):
     #feature_set_dict[k]['hierarchical_selected_features'][n] = hierarchical_fs(feature_set_dict[k]['train_x'],n)
     if len(feature_set_dict[k]['hierarchical_selected_features'][n])>1:
@@ -682,7 +681,7 @@ for k in feature_set_dict.keys():
   except:
     sub_start_time = dt.datetime.now()
     logging.info(f'\tPCA Started: {sub_start_time}')
-    train_pca, test_pca, pca = pca_fs(feature_set_dict[k]['train_x'], feature_set_dict[k]['test_x'], k_components=None)
+    train_pca, test_pca, pca = pca_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], k_components=None)
     feature_set_dict[k]['train_pca'] = train_pca
     feature_set_dict[k]['test_pca'] = test_pca
     feature_set_dict[k]['pca'] = pca
@@ -707,7 +706,17 @@ for k in feature_set_dict.keys():
         logging.info(f'\t\tSelectFromModel on FRC for {x} max features read from previous run')
       except:
         logging.info(f'\t\tSelectFromModel FRC FS V1 Started: {sub_start_time}')
-        feature_set_dict[k][f'rf_selected_{x}'] = list(compress(list(feature_set_dict[k]['train_x'].columns),random_forest_fs(feature_set_dict[k]['train_x'], np.array(feature_set_dict[k]['train_y']['task']), n_estimators = 500, n_repeats=10, n_jobs=4, max_features = x)))
+        feature_set_dict[k][f'rf_selected_{x}'] = list(
+          compress(
+            list(feature_set_dict[k]['train_x'].columns),
+            random_forest_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],
+            np.array(feature_set_dict[k]['train_y']['task']),
+            n_estimators = 500,
+            n_repeats=10,
+            n_jobs=4,
+            max_features = x)
+          )
+        )
         np.save(f'{fs_outpath}{k}/{run_uid}_rf_selected_{x}.npy',feature_set_dict[k][f'rf_selected_{x}'])
         sub_end_time = dt.datetime.now()
         logging.info(f'\t\tSelectFromModel on FRC for {x} max features Done: {sub_end_time}')
@@ -726,14 +735,26 @@ for k in feature_set_dict.keys():
   except:
     logging.info(f'\tFRC Feature importance and permutation importance on {k} started: {sub_start_time_outer}')
     forest = RandomForestClassifier(random_state=42 ,n_estimators=n_estimators)
-    forest.fit(feature_set_dict[k]['train_x'],np.array(feature_set_dict[k]['train_y']['task']))
+    forest.fit(
+      feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],
+      np.array(feature_set_dict[k]['train_y']['task'])
+    )
     now = dt.datetime.now()
     logging.info(f'\tInitial FRC on {n_estimators} estimators from {k} Done: {now}')
     importances = forest.feature_importances_
     np.save(f'{fs_outpath}{k}/{run_uid}_feature_importances_est-{n_estimators}.npy', importances)
     feature_set_dict[k][f'feature_importances_est-{n_estimators}'] = importances
-    permutation_importances_result = permutation_importance(forest, feature_set_dict[k]['train_x'], np.array(feature_set_dict[k]['train_y']['task']), n_repeats=n_repeats, random_state=42, n_jobs=int(args.n_jobs))
-    permutation_importances = pd.Series(permutation_importances_result.importances_mean, index=feature_set_dict[k]['train_x'].columns)
+    permutation_importances_result = permutation_importance(
+      forest, 
+      feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],
+      np.array(feature_set_dict[k]['train_y']['task']),
+      n_repeats=n_repeats,
+      random_state=42, 
+      n_jobs=int(args.n_jobs)
+    )
+    permutation_importances = pd.Series(
+      permutation_importances_result.importances_mean,
+      index=feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'].columns)
     feature_set_dict[k][f'permutation_importances_est-{n_estimators}_rep-{n_repeats}'] = permutation_importances
     np.save(f'{fs_outpath}{k}/{run_uid}_permutation_importances_est-{n_estimators}_rep-{n_repeats}.npy', permutation_importances)
     logging.info(f'\tPermutation Importance on {n_estimators} estimators and {n_repeats} repeats from {k} Done: {now}')
