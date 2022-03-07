@@ -253,6 +253,12 @@ def run_plt_tsne(data, label, perplexity = 77, learning_rate=50, init = 'random'
   except Exception as e:
     print(f'Error running tSNE for {label}: {e}')
 
+
+
+#### Run to here to set-up ####
+
+# The following sections will perform tSNE on the 4 different feature selection sets we have
+
 # 1) PCA
 run_plt_tsne(
   data = np.array(parcel_connection_features['train_pca']),
