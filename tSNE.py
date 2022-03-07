@@ -9,45 +9,19 @@
 # Imports
 try:
   import platform
-  # import argparse
   import logging
   import pandas as pd
   import os
   import datetime as dt
-  import json # Not on Cluster
-  # import hashlib # Not on Cluster
+  import json 
   import paramiko
-  # import sys
-  from scp import SCPClient ############################ Mising
-  # import shutil
+  from scp import SCPClient
   import getpass
-  # import nibabel as nib
   import numpy as np
-  # from nilearn import datasets
-  # from nilearn.input_data import NiftiLabelsMasker, NiftiMapsMasker
-  # from sklearn.preprocessing import StandardScaler
-  # from sklearn.ensemble import RandomForestClassifier
-  # from sklearn.metrics import confusion_matrix, classification_report
-  # from sklearn.linear_model import LogisticRegression
   from sklearn.manifold import TSNE
-  # from sklearn.model_selection import cross_val_score, train_test_split, KFold, GridSearchCV
-  # from sklearn.feature_selection import SelectFromModel
-  # from sklearn.decomposition import PCA
-  # from sklearn.inspection import permutation_importance
-  # from itertools import compress
-  # from sklearn import svm
-  # from sklearn.svm import SVC
-  # from pathlib import Path
-  # from statsmodels.stats.outliers_influence import variance_inflation_factor
   import matplotlib.pyplot as plt
-  # import seaborn as sns
-  # from scipy.stats import spearmanr
-  # from scipy.cluster import hierarchy
-  # from collections import defaultdict
   import pickle as pk
-  # from skopt import BayesSearchCV ############################ Mising
-  # from skopt.space import Real, Categorical, Integer ############################ Mising
-  # from operator import itemgetter
+  import seaborn as sb
 except Exception as e:
   print(f'Error loading libraries: ')
   raise Exception(e)
@@ -69,8 +43,6 @@ try:
   source_path = '/mnt/usb1/hcp_analysis_output/'
 except:
   pass
-
-
 
 # Template Functions
 try:
@@ -211,36 +183,160 @@ for k in feature_set_dict.keys():
     logging.info(f'\tError reading {k} permutation importance features: {e}')
 
 
-parcel_connection_features = feature_set_dict['parcel_connection']
-
-# start with raw data
-input_raw = np.array(parcel_connection_features['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'])
-
-input_pca = np.array(
-  parcel_connection_features['train_pca']
-)
-level = 9
 k = 'parcel_connection'
-feature_index = feature_set_dict[k]['hierarchical_selected_features'][level]
-input_hfs_9_input = np.array(feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]])
+parcel_connection_features = feature_set_dict[k]
+
+# Add data objects and their labels to the lists
+# You will want to only run one of the following at a time, likely subscripting the list to only run a subset.
+# To subset to include only the first subset, you can change the [:] portion to [0:1] for the first value or [1:2] for the second value (lines , 323, and )
+# After doing so, you can rerun the following lines to clear the data from your memory.
+# Create an empty list of arrays of data to use as feature sets to put through TSNE
+input_data = []
+# Make a list of labels to keep track of which one is being run
+data_labels = []
+
+# Use to keep track of length of feature sets
+length_list = [
+  19900,
+  19884,
+  18540,
+  13981,
+  10027,
+  7482,
+  5847,
+  4638,
+  3771,
+  3149,
+  2679,
+  2297,
+  1980,
+  1725,
+  1533,
+  1354,
+  1205,
+  1078,
+  960,
+  876,
+  807,
+  734,
+  676,
+  622,
+  569,
+  522,
+  480,
+  443,
+  414
+]
+
+# # full raw data
+# input_raw = np.array(parcel_connection_features['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'])
+# input_data.append(input_raw)
+# data_labels.append('Full Data')
+
+# 1) PCA
+input_pca = np.array(parcel_connection_features['train_pca'])
+input_data.append(input_pca)
+data_labels.append('PCA')
 
 
-embedded_raw = TSNE(
-  n_components=2,
-  perplexity=77,
-  learning_rate=50,
-  init='random',
-  verbose=1,
-  n_iter=2000,
-  ).fit_transform(input_raw)
+# # 2) Hierarchical selected features
+# for level in list(feature_set_dict[k]['hierarchical_selected_features'].keys())[1:]: # 98 options
+#   feature_index = feature_set_dict[k]['hierarchical_selected_features'][level]
+#   input_data.append(np.array(feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]]))
+#   feature_len = len(feature_index)
+#   data_labels.append(f'HFS level {level} {feature_len} features')
 
-colormap = np.array(['black','red', 'green', 'blue', 'yellow', 'purple',
-                    'olive', 'saddlebrown'])
-plt.scatter(embedded_raw[:,0], embedded_raw[:,1],c = np.array(parcel_connection_features['train_y']), s=1)
-ploting_df = pd.DataFrame(embedded_raw, columns = ['x','y'])
-ploting_df['task'] = parcel_connection_features['train_y']['task']
 
-ploting_df['task'] = ploting_df['task'].astype(str)
+# # 3) Random Forest Select from Model
+# for level in list(feature_set_dict[k]['hierarchical_selected_features'].keys())[1:]: # 29 options
+#   feature_index = feature_set_dict[k][f'rf_selected_{x}']
+#   input_data.append(np.array(feature_set_dict[k]['train_x'][feature_index]))
+#   feature_len = len(feature_index)
+#   data_labels.append(f'RF Selected from Model {feature_len} features')
 
-import seaborn as sb
-sb.scatterplot(embedded_raw[:,0], embedded_raw[:,1], hue = ploting_df['task'], s=3)
+# # 4) Permutation Importance features
+# n_estimators = 500
+# n_repeats = 50
+# perm_importances = feature_set_dict[k][f'feature_importances_{n_estimators}']
+# ranked_indices = np.argsort(perm_importances)[::-1]
+# for n in length_list[1:]: # Starting this at 1 so you don't run this on the full dataset (at position 1), 29 options
+#   feature_index = ranked_indices[:n]
+#   input_data.append(np.array(feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]]))
+#   data_labels.append(f'RF Permutation Importance {n} features')
+
+
+# Setup outcome label dataframe for plotting later
+plotting_df = pd.DataFrame()
+plotting_df['task'] = parcel_connection_features['train_y']['task']
+numeric_task_ref = pd.DataFrame(
+  {
+    'label':["MOTOR", "WM", "EMOTION", "GAMBLING", "LANGUAGE", "RELATIONAL", "SOCIAL"],
+    'task':[4, 7, 1, 2, 3, 5, 6]
+  }
+)
+plotting_df = pd.merge(plotting_df, numeric_task_ref, on='task')
+# Iterate through list of data and labels to run tSNE and generate plots
+for ind in range(len(input_data)):
+  start_time = dt.datetime.now()
+  data = input_data[ind]
+  label = data_labels[ind]
+  # Run tSNE
+  try:
+    tSNE_output = TSNE(
+      n_components=2,
+      perplexity=77,
+      learning_rate=50,
+      init='random',
+      verbose=1,
+      n_iter=2000,
+      ).fit_transform(data)
+    sb.scatterplot(tSNE_output[:,0], tSNE_output[:,1], hue = plotting_df['label'], s=3).set(title=label)
+    plt.savefig(f'{output_path}{label} tSNE.png', transparent=True)
+    end_time = dt.datetime.now()
+    runtime = end_time - start_time
+    print(f'tSNE on {label} complete. Runtime: {runtime}')
+  except Exception as e:
+    print(f'Error running tSNE for {label}: {e}')
+
+
+
+# Old
+
+if False:
+  # # start with raw data
+  # input_raw = np.array(parcel_connection_features['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'])
+
+  # input_pca = np.array(
+  #   parcel_connection_features['train_pca']
+  # )
+  # level = 9
+  # k = 'parcel_connection'
+  # feature_index = feature_set_dict[k]['hierarchical_selected_features'][level]
+  # input_hfs_9_input = np.array(feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]])
+
+
+  # embedded_raw = TSNE(
+  #   n_components=2,
+  #   perplexity=77,
+  #   learning_rate=50,
+  #   init='random',
+  #   verbose=1,
+  #   n_iter=2000,
+  #   ).fit_transform(input_raw)
+
+  # colormap = np.array(['black','red', 'green', 'blue', 'yellow', 'purple',
+  #                     'olive', 'saddlebrown'])
+  # plt.scatter(embedded_raw[:,0], embedded_raw[:,1],c = np.array(parcel_connection_features['train_y']), s=1)
+  # ploting_df = pd.DataFrame(embedded_raw, columns = ['x','y'])
+  # ploting_df['task'] = parcel_connection_features['train_y']['task']
+
+  # ploting_df['task'] = ploting_df['task'].astype(str)
+  # numeric_task_ref = pd.DataFrame(
+  #   {
+  #     'label':["MOTOR", "WM", "EMOTION", "GAMBLING", "LANGUAGE", "RELATIONAL", "SOCIAL"],
+  #     'task':[4, 7, 1, 2, 3, 5, 6]
+  #   }
+  # )
+
+  # import seaborn as sb
+  # sb.scatterplot(embedded_raw[:,0], embedded_raw[:,1], hue = ploting_df['task'], s=3)
