@@ -186,14 +186,6 @@ for k in feature_set_dict.keys():
 k = 'parcel_connection'
 parcel_connection_features = feature_set_dict[k]
 
-# Add data objects and their labels to the lists
-# You will want to only run one of the following at a time, likely subscripting the list to only run a subset.
-# To subset to include only the first subset, you can change the [:] portion to [0:1] for the first value or [1:2] for the second value (lines , 323, and )
-# After doing so, you can rerun the following lines to clear the data from your memory.
-# Create an empty list of arrays of data to use as feature sets to put through TSNE
-input_data = []
-# Make a list of labels to keep track of which one is being run
-data_labels = []
 
 # Use to keep track of length of feature sets
 length_list = [
@@ -228,42 +220,6 @@ length_list = [
   414
 ]
 
-# # full raw data
-# input_raw = np.array(parcel_connection_features['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'])
-# input_data.append(input_raw)
-# data_labels.append('Full Data')
-
-# 1) PCA
-input_pca = np.array(parcel_connection_features['train_pca'])
-input_data.append(input_pca)
-data_labels.append('PCA')
-
-
-# # 2) Hierarchical selected features
-# for level in list(feature_set_dict[k]['hierarchical_selected_features'].keys())[1:]: # 98 options
-#   feature_index = feature_set_dict[k]['hierarchical_selected_features'][level]
-#   input_data.append(np.array(feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]]))
-#   feature_len = len(feature_index)
-#   data_labels.append(f'HFS level {level} {feature_len} features')
-
-
-# # 3) Random Forest Select from Model
-# for level in list(feature_set_dict[k]['hierarchical_selected_features'].keys())[1:]: # 29 options
-#   feature_index = feature_set_dict[k][f'rf_selected_{x}']
-#   input_data.append(np.array(feature_set_dict[k]['train_x'][feature_index]))
-#   feature_len = len(feature_index)
-#   data_labels.append(f'RF Selected from Model {feature_len} features')
-
-# # 4) Permutation Importance features
-# n_estimators = 500
-# n_repeats = 50
-# perm_importances = feature_set_dict[k][f'feature_importances_{n_estimators}']
-# ranked_indices = np.argsort(perm_importances)[::-1]
-# for n in length_list[1:]: # Starting this at 1 so you don't run this on the full dataset (at position 1), 29 options
-#   feature_index = ranked_indices[:n]
-#   input_data.append(np.array(feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]]))
-#   data_labels.append(f'RF Permutation Importance {n} features')
-
 
 # Setup outcome label dataframe for plotting later
 plotting_df = pd.DataFrame()
@@ -275,20 +231,19 @@ numeric_task_ref = pd.DataFrame(
   }
 )
 plotting_df = pd.merge(plotting_df, numeric_task_ref, on='task')
-# Iterate through list of data and labels to run tSNE and generate plots
-for ind in range(len(input_data)):
+
+# Create function to run tSNE and save plots
+def run_plt_tsne(data, label, perplexity = 77, learning_rate=50, init = 'random', verbose=1, n_iter=2000):
   start_time = dt.datetime.now()
-  data = input_data[ind]
-  label = data_labels[ind]
   # Run tSNE
   try:
     tSNE_output = TSNE(
       n_components=2,
-      perplexity=77,
-      learning_rate=50,
-      init='random',
-      verbose=1,
-      n_iter=2000,
+      perplexity=perplexity,
+      learning_rate=learning_rate,
+      init=init,
+      verbose=verbose,
+      n_iter=n_iter,
       ).fit_transform(data)
     sb.scatterplot(tSNE_output[:,0], tSNE_output[:,1], hue = plotting_df['label'], s=3).set(title=label)
     plt.savefig(f'{output_path}{label} tSNE.png', transparent=True)
@@ -298,45 +253,39 @@ for ind in range(len(input_data)):
   except Exception as e:
     print(f'Error running tSNE for {label}: {e}')
 
+# 1) PCA
+run_plt_tsne(
+  data = np.array(parcel_connection_features['train_pca']),
+  label = 'PCA'
+)
 
+# # 2) Hierarchical selected features
+for level in list(feature_set_dict[k]['hierarchical_selected_features'].keys())[:]:
+  feature_index = feature_set_dict[k]['hierarchical_selected_features'][level]
+  feature_len = len(feature_index)
+  run_plt_tsne(
+    data = np.array(feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]]),
+    label = f'HFS level {level} {feature_len} features'
+  )
 
-# Old
+# 3) Random Forest Select from Model
+for level in list(feature_set_dict[k]['hierarchical_selected_features'].keys())[:]:
+  feature_index = feature_set_dict[k][f'rf_selected_{x}']
+  feature_len = len(feature_index)
+  run_plt_tsne(
+    data = np.array(feature_set_dict[k]['train_x'][feature_index]),
+    label = f'RF Selected from Model {feature_len} features'
+  )
 
-if False:
-  # # start with raw data
-  # input_raw = np.array(parcel_connection_features['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'])
+# 4) Permutation Importance features
+n_estimators = 500
+n_repeats = 50
+perm_importances = feature_set_dict[k][f'feature_importances_{n_estimators}']
+ranked_indices = np.argsort(perm_importances)[::-1]
+for n in length_list[1:]: # Starting this at 1 so you don't run this on the full dataset (at position 1), 29 options
+  feature_index = ranked_indices[:n]
+  run_plt_tsne(
+    data = np.array(feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]]),
+    label = f'RF Permutation Importance {n} features'
+  )
 
-  # input_pca = np.array(
-  #   parcel_connection_features['train_pca']
-  # )
-  # level = 9
-  # k = 'parcel_connection'
-  # feature_index = feature_set_dict[k]['hierarchical_selected_features'][level]
-  # input_hfs_9_input = np.array(feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]])
-
-
-  # embedded_raw = TSNE(
-  #   n_components=2,
-  #   perplexity=77,
-  #   learning_rate=50,
-  #   init='random',
-  #   verbose=1,
-  #   n_iter=2000,
-  #   ).fit_transform(input_raw)
-
-  # colormap = np.array(['black','red', 'green', 'blue', 'yellow', 'purple',
-  #                     'olive', 'saddlebrown'])
-  # plt.scatter(embedded_raw[:,0], embedded_raw[:,1],c = np.array(parcel_connection_features['train_y']), s=1)
-  # ploting_df = pd.DataFrame(embedded_raw, columns = ['x','y'])
-  # ploting_df['task'] = parcel_connection_features['train_y']['task']
-
-  # ploting_df['task'] = ploting_df['task'].astype(str)
-  # numeric_task_ref = pd.DataFrame(
-  #   {
-  #     'label':["MOTOR", "WM", "EMOTION", "GAMBLING", "LANGUAGE", "RELATIONAL", "SOCIAL"],
-  #     'task':[4, 7, 1, 2, 3, 5, 6]
-  #   }
-  # )
-
-  # import seaborn as sb
-  # sb.scatterplot(embedded_raw[:,0], embedded_raw[:,1], hue = ploting_df['task'], s=3)
