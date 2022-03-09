@@ -64,24 +64,24 @@ try:
 except:
     pass
 
-# SCP data to temp location
-if source_path!=None:
-  # Interupt request for password and username if none passed
-  if uname == None:
-    uname = getpass.getpass(f'Username for {datahost}:')
-  psswd = getpass.getpass(f'Password for {uname}@{datahost}:')
-  src_basepath = source_path
-  download_start_time = dt.datetime.now()
-  print('Starting Data Transfer: ', download_start_time)
-  try:
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(datahost, 22, uname, psswd)
-    scp = SCPClient(ssh.get_transport())
-    scp.get(source_path + run_uid, local_path + run_uid, recursive=True)
-  except Exception as e:
-    print(f'Error transferring data from {uname}@{datahost} ')
-    raise Exception(e)
+# # SCP data to temp location
+# #if source_path!=None:
+#   # Interupt request for password and username if none passed
+#   if uname == None:
+#     uname = getpass.getpass(f'Username for {datahost}:')
+#   psswd = getpass.getpass(f'Password for {uname}@{datahost}:')
+#   src_basepath = source_path
+#   download_start_time = dt.datetime.now()
+#   print('Starting Data Transfer: ', download_start_time)
+#   try:
+#     ssh = paramiko.SSHClient()
+#     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+#     ssh.connect(datahost, 22, uname, psswd)
+#     scp = SCPClient(ssh.get_transport())
+#     scp.get(source_path + run_uid, local_path + run_uid, recursive=True)
+#   except Exception as e:
+#     print(f'Error transferring data from {uname}@{datahost} ')
+#     raise Exception(e)
 
 # Start logging file
 total_start_time = dt.datetime.now()
