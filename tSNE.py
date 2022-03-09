@@ -22,6 +22,7 @@ try:
   import matplotlib.pyplot as plt
   import pickle as pk
   import seaborn as sb
+  import time
 except Exception as e:
   print(f'Error loading libraries: ')
   raise Exception(e)
@@ -34,8 +35,10 @@ try:
   source_path = os.path.dirname(os.path.abspath(__file__)) + sep
   sys_name = platform.system() 
   hostname = platform.node()
-  output_path = 'C:\\Users\\Sarah Melissa\\Documents\\output\\'
-  local_path = 'C:\\Users\\Sarah Melissa\\Documents\\temp\\'
+  output_path = '/mnt/usb1/hcp_analysis_output/'
+  local_path = '/mnt/usb1/hcp_analysis_output/'
+  # output_path = 'C:\\Users\\Sarah Melissa\\Documents\\output\\'
+  # local_path = 'C:\\Users\\Sarah Melissa\\Documents\\temp\\'
   run_uid = '8d2513'
   remote_outpath = '/mnt/usb1/hcp_analysis_output/'
   uname = 'solshan2'
@@ -246,52 +249,106 @@ def run_plt_tsne(data, label, perplexity = 77, learning_rate=50, init = 'random'
       n_iter=n_iter,
       ).fit_transform(data)
     sb.scatterplot(tSNE_output[:,0], tSNE_output[:,1], hue = plotting_df['label'], s=3).set(title=label)
-    plt.savefig(f'{output_path}{label} tSNE.png', transparent=True)
+    plt.savefig(f'{tsne_out}{label} tSNE.png', transparent=True)
     end_time = dt.datetime.now()
     runtime = end_time - start_time
     print(f'tSNE on {label} complete. Runtime: {runtime}')
   except Exception as e:
     print(f'Error running tSNE for {label}: {e}')
 
-
-
 #### Run to here to set-up ####
 
-# The following sections will perform tSNE on the 4 different feature selection sets we have
+perp_list = [50, 55, 60, 70, 75, 80, 85, 90]
 
-# 1) PCA
-run_plt_tsne(
-  data = np.array(parcel_connection_features['train_pca']),
+for perp in perp_list:
+  # The following sections will perform tSNE on the 4 different feature selection sets we have
+  # 1) PCA
+  run_plt_tsne(
+    data = np.array(parcel_connection_features['train_pca']),
+    label = 'PCA',
+    perplexity = perp
+  )
+  # # 2) Hierarchical selected features
+  for level in list(feature_set_dict[k]['hierarchical_selected_features'].keys())[:]:
+    feature_index = feature_set_dict[k]['hierarchical_selected_features'][level]
+    feature_len = len(feature_index)
+    run_plt_tsne(
+      data = np.array(feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]]),
+      label = f'HFS level {level} {feature_len} features'
+    )
+  # 3) Random Forest Select from Model
+  for level in list(feature_set_dict[k]['hierarchical_selected_features'].keys())[:]:
+    feature_index = feature_set_dict[k][f'rf_selected_{x}']
+    feature_len = len(feature_index)
+    run_plt_tsne(
+      data = np.array(feature_set_dict[k]['train_x'][feature_index]),
+      label = f'RF Selected from Model {feature_len} features'
+    )
+  # 4) Permutation Importance features
+  n_estimators = 500
+  n_repeats = 50
+  perm_importances = feature_set_dict[k][f'feature_importances_{n_estimators}']
+  ranked_indices = np.argsort(perm_importances)[::-1]
+  for n in length_list[1:]: # Starting this at 1 so you don't run this on the full dataset (at position 1), 29 options
+    feature_index = ranked_indices[:n]
+    run_plt_tsne(
+      data = np.array(feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]]),
+      label = f'RF Permutation Importance {n} features'
+    )
+
+# Script to periodically try to pull output image files from the cluster (run LOCAL)
+perp_list = [50, 55, 60, 70, 75, 80, 85, 90]
+transfer_list = []
+
+for perp in perp_list:
+  # 1) PCA
   label = 'PCA'
-)
-
-# # 2) Hierarchical selected features
-for level in list(feature_set_dict[k]['hierarchical_selected_features'].keys())[:]:
-  feature_index = feature_set_dict[k]['hierarchical_selected_features'][level]
-  feature_len = len(feature_index)
-  run_plt_tsne(
-    data = np.array(feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]]),
+  transfer_list.append(f'{label} tSNE.png')
+  # # 2) Hierarchical selected features
+  for level in list(feature_set_dict[k]['hierarchical_selected_features'].keys())[:]:
+    feature_index = feature_set_dict[k]['hierarchical_selected_features'][level]
+    feature_len = len(feature_index)
     label = f'HFS level {level} {feature_len} features'
-  )
-
-# 3) Random Forest Select from Model
-for level in list(feature_set_dict[k]['hierarchical_selected_features'].keys())[:]:
-  feature_index = feature_set_dict[k][f'rf_selected_{x}']
-  feature_len = len(feature_index)
-  run_plt_tsne(
-    data = np.array(feature_set_dict[k]['train_x'][feature_index]),
+    transfer_list.append(f'{label} tSNE.png')
+  # 3) Random Forest Select from Model
+  for level in list(feature_set_dict[k]['hierarchical_selected_features'].keys())[:]:
+    feature_index = feature_set_dict[k][f'rf_selected_{x}']
+    feature_len = len(feature_index)
     label = f'RF Selected from Model {feature_len} features'
-  )
-
-# 4) Permutation Importance features
-n_estimators = 500
-n_repeats = 50
-perm_importances = feature_set_dict[k][f'feature_importances_{n_estimators}']
-ranked_indices = np.argsort(perm_importances)[::-1]
-for n in length_list[1:]: # Starting this at 1 so you don't run this on the full dataset (at position 1), 29 options
-  feature_index = ranked_indices[:n]
-  run_plt_tsne(
-    data = np.array(feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]]),
+    transfer_list.append(f'{label} tSNE.png')
+  # 4) Permutation Importance features
+  n_estimators = 500
+  n_repeats = 50
+  perm_importances = feature_set_dict[k][f'feature_importances_{n_estimators}']
+  ranked_indices = np.argsort(perm_importances)[::-1]
+  for n in length_list[1:]: # Starting this at 1 so you don't run this on the full dataset (at position 1), 29 options
+    feature_index = ranked_indices[:n]
     label = f'RF Permutation Importance {n} features'
-  )
+    transfer_list.append(f'{label} tSNE.png')
 
+# SCP output from cluster to local directory
+
+if uname == None:
+  uname = getpass.getpass(f'Username for {datahost}:')
+psswd = getpass.getpass(f'Password for {uname}@{datahost}:')
+
+local_path = f'C:\\Users\\Sarah Melissa\\Documents\\output\\{run_uid}\\tSNE\\'
+source_path = f'/mnt/usb1/hcp_analysis_output/{run_uid}/tSNE/'
+
+for image in transfer_list:
+  tf = True
+  while tf:
+    download_start_time = dt.datetime.now()
+    print(f'Starting {image} transfer: ', download_start_time)
+    try:
+      ssh = paramiko.SSHClient()
+      ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+      ssh.connect(datahost, 22, uname, psswd)
+      scp = SCPClient(ssh.get_transport())
+      scp.get(source_path + run_uid, local_path + run_uid)
+      download_end_time = dt.datetime.now()
+      print(f'Starting {image} transfer complete: ', download_end_time)
+      tf = False
+    except Exception as e:
+      # print(f'Error transferring data from {uname}@{datahost} ')
+      time.sleep(20)
