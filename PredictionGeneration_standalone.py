@@ -694,7 +694,7 @@ results_rfc_list = Parallel(n_jobs = 10)(
     split_ind = split_ind
     ) for split_ind in data_dict.keys() for length in length_list
   )
-#################################
+
 df_concat_list = [accuracy_df]
 for res_dict in results_rfc_list:
   df_concat_list.append(pd.DataFrame(res_dict))
@@ -729,31 +729,35 @@ print(accuracy_df)
 datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
 accuracy_df.to_csv(f'{outpath}Prediction_Accuracies.csv', index=False)
 
-
 # SelectFromModel
 feature_set_dict[k][f'rf_selected_{n}']
 data_dict = {}
-for split_ind in cv_split_dict.keys():
-  data_dict[split_ind] = {}
-  for n in feature_set_dict[k]['hierarchical_selected_features'].keys():
-    data_dict[split_ind][n] = {
-      'train_x':full_data.iloc[cv_split_dict[split_ind][0]][np.array(datacols)[feature_set_dict[k][f'rf_selected_{n}']]],
-      'train_y':full_data_outcome.iloc[cv_split_dict[split_ind][0]]['task'].values.ravel().astype('int'),
-      'test_x':full_data.iloc[cv_split_dict[split_ind][1]][np.array(datacols)[feature_set_dict[k][f'rf_selected_{n}']]],
-      'test_y':full_data_outcome.iloc[cv_split_dict[split_ind][1]]['task'].values.ravel().astype('int')
-    }
+for n in feature_set_dict[k]['hierarchical_selected_features'].keys():
+  # data_dict[n] = {}
+  try:
+    print(len(feature_set_dict[k][f'rf_selected_{n}']))
+    # input_subset = full_data[feature_set_dict[k][f'rf_selected_{n}']]
+    # for split_ind in cv_split_dict.keys():
+    #   data_dict[n][split_ind] = {
+    #     'train_x':input_subset.iloc[cv_split_dict[split_ind][0]],
+    #     'train_y':full_data_outcome.iloc[cv_split_dict[split_ind][0]]['task'].values.ravel().astype('int'),
+    #     'test_x':input_subset.iloc[cv_split_dict[split_ind][1]],
+    #     'test_y':full_data_outcome.iloc[cv_split_dict[split_ind][1]]['task'].values.ravel().astype('int')
+    #   }
+  except Exception as e:
+    print(e)
 
 
 results_rfc_list = Parallel(n_jobs = 10)(
   delayed(run_rfc)(
-    train_x = data_dict[split_ind][n]['train_x'],
-    train_y = data_dict[split_ind][n]['train_y'],
-    test_x = data_dict[split_ind][n]['test_x'],
-    test_y = data_dict[split_ind][n]['test_y'],
+    train_x = data_dict[n][split_ind]['train_x'],
+    train_y = data_dict[n][split_ind]['train_y'],
+    test_x = data_dict[n][split_ind]['test_x'],
+    test_y = data_dict[n][split_ind]['test_y'],
     dataset = 'HCP_1200',
     subset = f'rf_selected_{n}',
     split_ind = split_ind
-    ) for split_ind in data_dict.keys() for n in feature_set_dict[k]['hierarchical_selected_features'].keys()
+    ) for split_ind in cv_split_dict.keys() for n in list(feature_set_dict[k]['hierarchical_selected_features'].keys())[1:]
   )
 
 df_concat_list = [accuracy_df]
@@ -771,21 +775,21 @@ accuracy_df.to_csv(f'{outpath}Prediction_Accuracies_{datetime_str}.csv', index=F
 
 results_svc_list = Parallel(n_jobs = 10)(
   delayed(run_svc)(
-    train_x = data_dict[split_ind][n]['train_x'],
-    train_y = data_dict[split_ind][n]['train_y'],
-    test_x = data_dict[split_ind][n]['test_x'],
-    test_y = data_dict[split_ind][n]['test_y'],
+    train_x = data_dict[n][split_ind]['train_x'],
+    train_y = data_dict[n][split_ind]['train_y'],
+    test_x = data_dict[n][split_ind]['test_x'],
+    test_y = data_dict[n][split_ind]['test_y'],
     dataset = 'HCP_1200',
     subset = f'rf_selected_{n}',
     split_ind = split_ind
-    ) for split_ind in data_dict.keys() for n in feature_set_dict[k]['hierarchical_selected_features'].keys()
+    ) for split_ind in cv_split_dict.keys() for n in list(feature_set_dict[k]['hierarchical_selected_features'].keys())[1:]
   )
 
 for res_dict in results_svc_list:
   df_concat_list.append(pd.DataFrame(res_dict))
 
 accuracy_df = pd.concat(df_concat_list)
-
+accuracy_df.drop_duplicates(keep='first', subset='metadata_ref', inplace=True)
 print(accuracy_df)
 datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
 accuracy_df.to_csv(f'{outpath}Prediction_Accuracies.csv', index=False)
@@ -822,34 +826,44 @@ length_list = [
   443, #28
   414 #29
 ]
+
 # Permutation Importance
 n_estimators = 500
 n_repeats = 50
 ranked_features = feature_set_dict[k][f'feature_importances_{n_estimators}']
-
+feature_names = full_data.columns
+rank_df = pd.DataFrame({
+  'feature':list(full_data.columns)[1:],
+  'importance':ranked_features
+})
+rank_df.sort_values(by='importance', ascending=False,inplace=True)
+ordered_features = list(rank_df['feature'])
 data_dict = {}
-for split_ind in cv_split_dict.keys():
-  data_dict[split_ind] = {}
-  for length in length_list:
-    data_dict[split_ind][length] = {
-      'train_x':full_data.iloc[cv_split_dict[split_ind][0]][list(ranked_features)[:length]],
+for length in length_list:
+  data_dict[length] = {}
+  input_subset = full_data[ordered_features[:length]]
+  for split_ind in cv_split_dict.keys():
+    data_dict[length][split_ind] = {
+      'train_x':input_subset.iloc[cv_split_dict[split_ind][0]],
       'train_y':full_data_outcome.iloc[cv_split_dict[split_ind][0]]['task'].values.ravel().astype('int'),
-      'test_x':full_data.iloc[cv_split_dict[split_ind][1]][list(ranked_features)[:length]],
+      'test_x':input_subset.iloc[cv_split_dict[split_ind][1]],
       'test_y':full_data_outcome.iloc[cv_split_dict[split_ind][1]]['task'].values.ravel().astype('int')
     }
 
 
 results_rfc_list = Parallel(n_jobs = 10)(
   delayed(run_rfc)(
-    train_x = data_dict[split_ind][length]['train_x'],
-    train_y = data_dict[split_ind][length]['train_y'],
-    test_x = data_dict[split_ind][length]['test_x'],
-    test_y = data_dict[split_ind][length]['test_y'],
+    train_x = data_dict[length][split_ind]['train_x'],
+    train_y = data_dict[length][split_ind]['train_y'],
+    test_x = data_dict[length][split_ind]['test_x'],
+    test_y = data_dict[length][split_ind]['test_y'],
     dataset = 'HCP_1200',
     subset = f'Permutation-Importance_{length}',
     split_ind = split_ind
-    ) for split_ind in data_dict.keys() for length in length_list
+    ) for split_ind in cv_split_dict.keys() for length in length_list
   )
+
+##############
 
 df_concat_list = [accuracy_df]
 for res_dict in results_rfc_list:
@@ -861,19 +875,20 @@ for res_dict in results_rfc_list:
 accuracy_df = pd.concat(df_concat_list)
 print(accuracy_df)
 datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+accuracy_df.drop_duplicates(keep='first', subset='metadata_ref', inplace=True)
 accuracy_df.to_csv(f'{outpath}Prediction_Accuracies.csv', index=False)
 accuracy_df.to_csv(f'{outpath}Prediction_Accuracies_{datetime_str}.csv', index=False)
 
 results_svc_list = Parallel(n_jobs = 10)(
   delayed(run_svc)(
-    train_x = data_dict[split_ind][length]['train_x'],
-    train_y = data_dict[split_ind][length]['train_y'],
-    test_x = data_dict[split_ind][length]['test_x'],
-    test_y = data_dict[split_ind][length]['test_y'],
+    train_x = data_dict[length][split_ind]['train_x'],
+    train_y = data_dict[length][split_ind]['train_y'],
+    test_x = data_dict[length][split_ind]['test_x'],
+    test_y = data_dict[length][split_ind]['test_y'],
     dataset = 'HCP_1200',
     subset = f'Permutation-Importance_{length}',
     split_ind = split_ind
-    ) for split_ind in data_dict.keys() for length in length_list
+    ) for split_ind in cv_split_dict.keys() for length in length_list
   )
 
 for res_dict in results_svc_list:
@@ -883,8 +898,9 @@ accuracy_df = pd.concat(df_concat_list)
 
 print(accuracy_df)
 datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+accuracy_df.drop_duplicates(keep='first', subset='metadata_ref', inplace=True)
 accuracy_df.to_csv(f'{outpath}Prediction_Accuracies.csv', index=False)
-
+accuracy_df.to_csv(f'{outpath}Prediction_Accuracies_{datetime_str}.csv', index=False)
 
 
 if False:
