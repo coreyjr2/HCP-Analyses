@@ -20,15 +20,21 @@ sep = os.path.sep
 remote_sep = '/'
 source_path = os.path.abspath(os.path.dirname(os.path.abspath(__file__))) + sep
 base = f'S:\\'
-remote_base = '/mnt/usb1'
+# remote_base = '/data/hx-hx1/kbaacke/datasets/'
+remote_base = '/mnt/usb1/'
+output_path = '{base}hcp_analysis_output{sep}8d2513{sep}'
 
-output_path = '{base}{sep}hcp_analysis_output{sep}'
+try:
+  os.makedir(output_path.format(base = base, sep=sep))
+except:
+  pass
 
 metapath = output_path + 'metadata{sep}'
 confpath =  output_path +  'confusion{sep}'
 classpath = output_path + 'classification{sep}'
 inputpath = output_path + 'inputs{sep}'
 weightpath = output_path + 'weights{sep}'
+tsnepath = output_path+ 't-SNE{sep}'
 accuracy_path = output_path + 'Prediction_Accuracies.csv'
 
 # psswd = getpass.getpass(f'Password for {username}@{hostname}:')
@@ -39,10 +45,10 @@ scp = SCPClient(ssh.get_transport())
 
 # scp.get(output_path.format(base = remote_base, sep=remote_sep), output_path.format(base = base, sep=sep), recursive=True)
 
-# scp.get(metapath.format(base = remote_base, sep=remote_sep), metapath.format(base = base, sep=sep), recursive=True)
-# scp.get(confpath.format(base = remote_base, sep=remote_sep), confpath.format(base = base, sep=sep), recursive=True)
-# scp.get(classpath.format(base = remote_base, sep=remote_sep), classpath.format(base = base, sep=sep), recursive=True)
-
+# scp.get(metapath.format(base = remote_base, sep=remote_sep), output_path.format(base = base, sep=sep), recursive=True)
+# scp.get(confpath.format(base = remote_base, sep=remote_sep), output_path.format(base = base, sep=sep), recursive=True)
+# scp.get(classpath.format(base = remote_base, sep=remote_sep), output_path.format(base = base, sep=sep), recursive=True)
+# scp.get(tsnepath.format(base = remote_base, sep=remote_sep), output_path.format(base = base, sep=sep), recursive=True)
 scp.get(accuracy_path.format(base = remote_base, sep=remote_sep), accuracy_path.format(base = base, sep=sep))
 
 
