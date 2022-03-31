@@ -105,7 +105,9 @@ length_list = [
   443,
   414
 ]
+
 labels = []
+
 perp_list = [
   50, 
   # 55, 
@@ -119,10 +121,12 @@ perp_list = [
 
 for perp in perp_list:
   labels.append(f'PCA_perp{perp}')
+  
   for n in length_list[6:]:
     labels.append(f'PCA_{n}_perp{perp}')
 
 for label in labels:
+  import seaborn as sb
   try:
     tSNE_output = np.load(f'{local_tsne}{label}_tSNE.npy')
     sb.scatterplot(tSNE_output[:,0], tSNE_output[:,1], hue = plotting_df['label'], s=3).set(title=label)
