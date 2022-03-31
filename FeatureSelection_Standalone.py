@@ -492,14 +492,14 @@ sessions = [
 outpath = f'{args.output}{run_uid}/'
 fs_outpath = outpath + 'FeatureSelection/'
 feature_set_dict = {
-  'parcel_sum':{
-  },
-  'network_sum':{
-  },
+  # 'parcel_sum':{
+  # },
+  # 'network_sum':{
+  # },
   'parcel_connection':{
-  },
-  'network_connection':{
   }
+  # 'network_connection':{
+  # }
 }
 
 sub_start_time = dt.datetime.now()
@@ -605,30 +605,30 @@ network_connection_x_test = scale_subset(network_connection_x_test, cols_to_excl
 sub_end_time = dt.datetime.now()
 logging.info(f'Scaling non-categorical Variables Done: {sub_end_time}')
 feature_set_dict = {
-  'parcel_sum':{
-    'train_x': parcel_sum_x_train,
-    'test_x': parcel_sum_x_test,
-    'train_y': parcel_sum_y_train,
-    'test_y': parcel_sum_y_test
-  },
-  'network_sum':{
-    'train_x': network_sum_x_train,
-    'test_x': network_sum_x_test,
-    'train_y': network_sum_y_train,
-    'test_y': network_sum_y_test
-  },
+  # 'parcel_sum':{
+  #   'train_x': parcel_sum_x_train,
+  #   'test_x': parcel_sum_x_test,
+  #   'train_y': parcel_sum_y_train,
+  #   'test_y': parcel_sum_y_test
+  # },
+  # 'network_sum':{
+  #   'train_x': network_sum_x_train,
+  #   'test_x': network_sum_x_test,
+  #   'train_y': network_sum_y_train,
+  #   'test_y': network_sum_y_test
+  # },
   'parcel_connection':{
     'train_x': parcel_connection_x_train,
     'test_x': parcel_connection_x_test,
     'train_y': parcel_connection_y_train,
     'test_y': parcel_connection_y_test
-  },
-  'network_connection':{
-    'train_x': network_connection_x_train,
-    'test_x': network_connection_x_test,
-    'train_y': network_connection_y_train,
-    'test_y': network_connection_y_test
-  }
+  }#,
+  # 'network_connection':{
+  #   'train_x': network_connection_x_train,
+  #   'test_x': network_connection_x_test,
+  #   'train_y': network_connection_y_train,
+  #   'test_y': network_connection_y_test
+  # }
 }
 for k in feature_set_dict.keys():
   try:
@@ -650,8 +650,8 @@ logging.info(f'Feature Selection Started: {fs_start_time}')
 for k in feature_set_dict.keys():
   # Hierarchical
   sub_start_time = dt.datetime.now()
-  hierarchical_start = 1
-  hierarchical_end = 30
+  hierarchical_start = 30
+  hierarchical_end = 100
   # try:
   #   for n in range(hierarchical_start, hierarchical_end):
   #     feature_set_dict[k]['hierarchical_selected_features'][h] = np.load(f'{fs_outpath}{k}/{run_uid}_hierarchical-{k}.npy')
@@ -667,29 +667,29 @@ for k in feature_set_dict.keys():
       np.save(f'{fs_outpath}{k}/{run_uid}_hierarchical-{n}.npy',np.array(feature_set_dict[k]['hierarchical_selected_features'][n]))
       print(n)
 
-for k in feature_set_dict.keys():
-  # PCA
-  sub_end_time = dt.datetime.now()
-  logging.info(f'\tHierarchical Feaure Selection ({k}) Done: {sub_end_time}')
-  try:
-    sub_start_time = dt.datetime.now()
-    feature_set_dict[k]['train_pca'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_pca.npy')
-    feature_set_dict[k]['test_pca'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_pca.npy')
-    feature_set_dict[k]['pca'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_pca.pkl', 'rb'))
-    sub_end_time = dt.datetime.now()
-    logging.info('\tPrevious PCA Output imported: {sub_end_time}')
-  except:
-    sub_start_time = dt.datetime.now()
-    logging.info(f'\tPCA Started: {sub_start_time}')
-    train_pca, test_pca, pca = pca_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], k_components=None)
-    feature_set_dict[k]['train_pca'] = train_pca
-    feature_set_dict[k]['test_pca'] = test_pca
-    feature_set_dict[k]['pca'] = pca
-    np.save(f'{fs_outpath}{k}/{run_uid}_train_pca.npy',feature_set_dict[k]['train_pca'])
-    np.save(f'{fs_outpath}{k}/{run_uid}_test_pca.npy',feature_set_dict[k]['test_pca'])
-    pk.dump(feature_set_dict[k]['pca'], open(f'{fs_outpath}{k}/{run_uid}_pca.pkl', "wb"))
-    sub_end_time = dt.datetime.now()
-    logging.info(f'\tPCA Done: {sub_end_time}')
+# for k in feature_set_dict.keys():
+#   # PCA
+#   sub_end_time = dt.datetime.now()
+#   logging.info(f'\tHierarchical Feaure Selection ({k}) Done: {sub_end_time}')
+#   try:
+#     sub_start_time = dt.datetime.now()
+#     feature_set_dict[k]['train_pca'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_pca.npy')
+#     feature_set_dict[k]['test_pca'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_pca.npy')
+#     feature_set_dict[k]['pca'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_pca.pkl', 'rb'))
+#     sub_end_time = dt.datetime.now()
+#     logging.info('\tPrevious PCA Output imported: {sub_end_time}')
+#   except:
+#     sub_start_time = dt.datetime.now()
+#     logging.info(f'\tPCA Started: {sub_start_time}')
+#     train_pca, test_pca, pca = pca_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], k_components=None)
+#     feature_set_dict[k]['train_pca'] = train_pca
+#     feature_set_dict[k]['test_pca'] = test_pca
+#     feature_set_dict[k]['pca'] = pca
+#     np.save(f'{fs_outpath}{k}/{run_uid}_train_pca.npy',feature_set_dict[k]['train_pca'])
+#     np.save(f'{fs_outpath}{k}/{run_uid}_test_pca.npy',feature_set_dict[k]['test_pca'])
+#     pk.dump(feature_set_dict[k]['pca'], open(f'{fs_outpath}{k}/{run_uid}_pca.pkl', "wb"))
+#     sub_end_time = dt.datetime.now()
+#     logging.info(f'\tPCA Done: {sub_end_time}')
 
 for k in feature_set_dict.keys():
   # RFC feature selection
@@ -700,61 +700,61 @@ for k in feature_set_dict.keys():
     if x>1 and x<len(feature_set_dict[k]['train_x'].columns):
       # This can be optimized, return to this later
       sub_start_time = dt.datetime.now()
-      try:
-        feature_set_dict[k][f'rf_selected_{x}'] = np.load(f'{fs_outpath}{k}/{run_uid}_rf_selected_{x}.npy')
-        sub_end_time = dt.datetime.now()
-        logging.info(f'\t\tSelectFromModel on FRC for {x} max features read from previous run')
-      except:
-        logging.info(f'\t\tSelectFromModel FRC FS V1 Started: {sub_start_time}')
-        feature_set_dict[k][f'rf_selected_{x}'] = list(
-          compress(
-            list(feature_set_dict[k]['train_x'].columns),
-            random_forest_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],
-            np.array(feature_set_dict[k]['train_y']['task']),
-            n_estimators = 500,
-            n_repeats=10,
-            n_jobs=4,
-            max_features = x)
-          )
+      # try:
+      #   feature_set_dict[k][f'rf_selected_{x}'] = np.load(f'{fs_outpath}{k}/{run_uid}_rf_selected_{x}.npy')
+      #   sub_end_time = dt.datetime.now()
+      #   logging.info(f'\t\tSelectFromModel on FRC for {x} max features read from previous run')
+      # except:
+      logging.info(f'\t\tSelectFromModel FRC FS V1 Started: {sub_start_time}')
+      feature_set_dict[k][f'rf_selected_{x}'] = list(
+        compress(
+          list(feature_set_dict[k]['train_x'].columns),
+          random_forest_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],
+          np.array(feature_set_dict[k]['train_y']['task']),
+          n_estimators = 500,
+          n_repeats=10,
+          n_jobs=4,
+          max_features = len(feature_set_dict[k]['hierarchical_selected_features'][x]))
         )
-        np.save(f'{fs_outpath}{k}/{run_uid}_rf_selected_{x}.npy',feature_set_dict[k][f'rf_selected_{x}'])
-        sub_end_time = dt.datetime.now()
-        logging.info(f'\t\tSelectFromModel on FRC for {x} max features Done: {sub_end_time}')
+      )
+      np.save(f'{fs_outpath}{k}/{run_uid}_rf_selected_{x}.npy',feature_set_dict[k][f'rf_selected_{x}'])
+      sub_end_time = dt.datetime.now()
+      logging.info(f'\t\tSelectFromModel on FRC for {x} max features Done: {sub_end_time}')
   sub_end_time_outer = dt.datetime.now()
   logging.info(f'\tSelectFromModel on FRC on {k} Done: {sub_end_time_outer}')
 
 
-for k in feature_set_dict.keys():
-  ## Permutation importance
-  sub_start_time_outer = dt.datetime.now()
-  n_estimators = 500
-  n_repeats = 50
-  try:
-    feature_set_dict[k][f'feature_importances_{n_estimators}'] = np.load(f'{fs_outpath}{k}/{run_uid}_feature_importances_est-{n_estimators}.npy')
-    logging.info('\tFRC Feature importance and permutation importance on {k} read in from prior run.')
-  except:
-    logging.info(f'\tFRC Feature importance and permutation importance on {k} started: {sub_start_time_outer}')
-    forest = RandomForestClassifier(random_state=42 ,n_estimators=n_estimators)
-    forest.fit(
-      feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],
-      np.array(feature_set_dict[k]['train_y']['task'])
-    )
-    now = dt.datetime.now()
-    logging.info(f'\tInitial FRC on {n_estimators} estimators from {k} Done: {now}')
-    importances = forest.feature_importances_
-    np.save(f'{fs_outpath}{k}/{run_uid}_feature_importances_est-{n_estimators}.npy', importances)
-    feature_set_dict[k][f'feature_importances_est-{n_estimators}'] = importances
-    permutation_importances_result = permutation_importance(
-      forest, 
-      feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],
-      np.array(feature_set_dict[k]['train_y']['task']),
-      n_repeats=n_repeats,
-      random_state=42, 
-      n_jobs=int(args.n_jobs)
-    )
-    permutation_importances = pd.Series(
-      permutation_importances_result.importances_mean,
-      index=feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'].columns)
-    feature_set_dict[k][f'permutation_importances_est-{n_estimators}_rep-{n_repeats}'] = permutation_importances
-    np.save(f'{fs_outpath}{k}/{run_uid}_permutation_importances_est-{n_estimators}_rep-{n_repeats}.npy', permutation_importances)
-    logging.info(f'\tPermutation Importance on {n_estimators} estimators and {n_repeats} repeats from {k} Done: {now}')
+# for k in feature_set_dict.keys():
+#   ## Permutation importance
+#   sub_start_time_outer = dt.datetime.now()
+#   n_estimators = 500
+#   n_repeats = 50
+#   try:
+#     feature_set_dict[k][f'feature_importances_{n_estimators}'] = np.load(f'{fs_outpath}{k}/{run_uid}_feature_importances_est-{n_estimators}.npy')
+#     logging.info('\tFRC Feature importance and permutation importance on {k} read in from prior run.')
+#   except:
+#     logging.info(f'\tFRC Feature importance and permutation importance on {k} started: {sub_start_time_outer}')
+#     forest = RandomForestClassifier(random_state=42 ,n_estimators=n_estimators)
+#     forest.fit(
+#       feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],
+#       np.array(feature_set_dict[k]['train_y']['task'])
+#     )
+#     now = dt.datetime.now()
+#     logging.info(f'\tInitial FRC on {n_estimators} estimators from {k} Done: {now}')
+#     importances = forest.feature_importances_
+#     np.save(f'{fs_outpath}{k}/{run_uid}_feature_importances_est-{n_estimators}.npy', importances)
+#     feature_set_dict[k][f'feature_importances_est-{n_estimators}'] = importances
+#     permutation_importances_result = permutation_importance(
+#       forest, 
+#       feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],
+#       np.array(feature_set_dict[k]['train_y']['task']),
+#       n_repeats=n_repeats,
+#       random_state=42, 
+#       n_jobs=int(args.n_jobs)
+#     )
+#     permutation_importances = pd.Series(
+#       permutation_importances_result.importances_mean,
+#       index=feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'].columns)
+#     feature_set_dict[k][f'permutation_importances_est-{n_estimators}_rep-{n_repeats}'] = permutation_importances
+#     np.save(f'{fs_outpath}{k}/{run_uid}_permutation_importances_est-{n_estimators}_rep-{n_repeats}.npy', permutation_importances)
+#     logging.info(f'\tPermutation Importance on {n_estimators} estimators and {n_repeats} repeats from {k} Done: {now}')
