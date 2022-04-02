@@ -1,8 +1,0 @@
-DEBUG:root:Architecture: 64bit
-DEBUG:root:Processor: AMD64
-DEBUG:root:Node Name: dt1
-INFO:root:Started; 2021-12-10 17:33:42.895829
-DEBUG:root:args: 
-DEBUG:root:{'source_path': 'C:/Users/kyle/repos/HCP-Analyses/', 'local_path': 'S:\\HCP\\HCP_69354adf\\', 'output': 'C:\\Users\\kyle\\repos\\GTM-FeatureReduction\\Output\\', 'n_jobs': 4, 'atlas_path': 'S:\\HCP\\HCP_69354adf\\69354adf_parcellation-metadata.json', 'confound_subset': [], 'confounds': None, 'movement_regressor': None, 'ica_aroma': False, 'smoothed': False, 'no_concatenate': False, 'atlas_name': '69354adf'}
-DEBUG:root:meta_dict: 
-DEBUG:root:{'atlas_name': '69354adf', 'smoothed': False, 'ICA-Aroma': False, 'Random Forest Estimators': 1000, 'Random State': 42, 'subtract parcel-wise mean': True, 'concatenate': True, 'confounds': None}
