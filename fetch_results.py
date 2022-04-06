@@ -20,8 +20,8 @@ sep = os.path.sep
 remote_sep = '/'
 source_path = os.path.abspath(os.path.dirname(os.path.abspath(__file__))) + sep
 base = f'S:\\'
-# remote_base = '/data/hx-hx1/kbaacke/datasets/'
-remote_base = '/mnt/usb1/'
+remote_base = '/data/hx-hx1/kbaacke/datasets/'
+# remote_base = '/mnt/usb1/'
 output_path = '{base}hcp_analysis_output{sep}8d2513{sep}'
 
 try:
