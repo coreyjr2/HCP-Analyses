@@ -1,0 +1,135 @@
+---
+title: "HCP_FeatureSelection_Visuals_01"
+author: "Kyle Baacke"
+date: "4/5/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(plotly)
+library(reticulate)
+knitr::opts_chunk$set(python = reticulate::eng_python)
+use_python('C:/Users/kyle/AppData/Local/Programs/Python/Python39/python.exe',required = TRUE)
+```
+
+
+```{python py_setup, echo=FALSE, warning=FALSE, message=FALSE, results='hide', eval=FALSE}
+# Path Management
+import sys
+sys.path.append('C:/Users/kyle/AppData/Local/Programs/Python/Python39/lib')
+sys.path.append('C:/Users/kyle/AppData/Local/Programs/Python/Python39')
+sys.path.append('C:/Users/kyle/AppData/Roaming/Python/Python39/site-packages')
+sys.path.append('C:/Users/kyle/AppData/Local/Programs/Python/Python39/lib/site-packages')
+sys.path.append('C:/Users/kyle/AppData/Local/Programs/Python/Python39/lib/site-packages/win32')
+sys.path.append('C:/Users/kyle/AppData/Local/Programs/Python/Python39/lib/site-packages/win32/lib')
+sys.path.append('C:/Users/kyle/AppData/Local/Programs/Python/Python39/lib/site-packages/Pythonwin')
+sys.path.append('C:/Users/kyle/AppData/Roaming/Python/Python39/site-packages/IPython/extensions')
+sys.path.append('C:/Users/kyle/.ipython')
+
+import os
+import shutil
+import datetime as dt
+import pandas as pd
+import paramiko
+from scp import SCPClient
+import zipfile
+import getpass
+
+```
+
+# Fetch Data 
+
+```{python, eval=FALSE}
+username = 'kbaacke'
+hostname = 'r2.psych.uiuc.edu'
+
+def createSSHClient(server, port, user, password):
+    client = paramiko.SSHClient()
+    client.load_system_host_keys()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(server, port, user, password)
+    return client
+
+sep = os.path.sep
+remote_sep = '/'
+source_path = os.path.abspath(os.path.dirname(os.path.abspath(__file__))) + sep
+base = f'S:/'
+remote_base = '/data/hx-hx1/kbaacke/datasets/'
+# remote_base = '/mnt/usb1/'
+output_path = '{base}hcp_analysis_output{sep}8d2513{sep}'
+
+try:
+  os.makedir(output_path.format(base = base, sep=sep))
+except:
+  pass
+
+metapath = output_path + 'metadata{sep}'
+confpath =  output_path +  'confusion{sep}'
+classpath = output_path + 'classification{sep}'
+inputpath = output_path + 'inputs{sep}'
+weightpath = output_path + 'weights{sep}'
+tsnepath = output_path+ 't-SNE{sep}'
+accuracy_path = output_path + 'Prediction_Accuracies.csv'
+
+# psswd = getpass.getpass(f'Password for {username}@{hostname}:')
+start_time = dt.datetime.now()
+ssh = createSSHClient(f'{hostname}', 22, f'{username}', getpass.getpass(f'Password for {username}@{hostname}:'))
+# ssh = createSSHClient(f'{hostname}', 22, f'{username}', f'{psswd}')
+scp = SCPClient(ssh.get_transport())
+
+# scp.get(output_path.format(base = remote_base, sep=remote_sep), output_path.format(base = base, sep=sep), recursive=True)
+
+# scp.get(metapath.format(base = remote_base, sep=remote_sep), output_path.format(base = base, sep=sep), recursive=True)
+# scp.get(confpath.format(base = remote_base, sep=remote_sep), output_path.format(base = base, sep=sep), recursive=True)
+# scp.get(classpath.format(base = remote_base, sep=remote_sep), output_path.format(base = base, sep=sep), recursive=True)
+# scp.get(tsnepath.format(base = remote_base, sep=remote_sep), output_path.format(base = base, sep=sep), recursive=True)
+scp.get(accuracy_path.format(base = remote_base, sep=remote_sep), accuracy_path.format(base = base, sep=sep))
+
+
+end_time = dt.datetime.now()
+print('Done. Runtime: ', end_time - start_time)
+```
+
+
+# Read in Data
+
+```{r}
+basepath = "S:/hcp_analysis_output/8d2513/"
+accuracy_df = read.csv(paste(basepath, "Prediction_Accuracies.csv", sep="")[1])
+feature_length_index = read.csv(paste(basepath, "feature_length_index.csv", sep="")[1])
+# Merge Data
+acc_df = merge(accuracy_df, feature_length_index, by='subset', all.x = TRUE)
+# Drop any rerun duplicates
+acc_df = acc_df[!duplicated(acc_df$metadata_ref),]
+```
+
+
+```{r}
+pred_accuracy = ggplot(acc_df, aes(x=N_features, y=test_accuracy, shape=Method, color=Classifier)) +
+  # geom_point(size=1, alpha=.1) + 
+  geom_smooth(method=loess) + 
+  scale_x_continuous(trans='log2') +
+  geom_jitter(width=.2, inherit.aes=TRUE, size=4, alpha=.7) +
+  scale_colour_brewer(palette = "Set1") +
+  theme_minimal() +
+  theme(
+    rect = element_rect(fill = "transparent"),
+    plot.background = element_rect(fill = "transparent"),
+    #plot.title= element_text(color="White", size=80),
+    axis.text.y= element_text(color="White", size=50),
+    axis.text.x= element_text(color="White", size=50),
+    axis.title.y= element_text(color="White", size=60),
+    axis.title.x= element_text(color="White", size=60),
+    legend.text = element_text(color="White", size=50),
+    axis.line = element_line(color="transparent"),
+    axis.ticks = element_line(color="transparent"),
+    legend.title = element_text(color="White", size=60)
+  )
+
+ggsave(pred_accuracy, filename = paste(basepath, "Prediction_Accuracie_Plot_04.png", sep="")[1],  bg = "transparent",  height = 60, width = 100, units='cm')
+
+ggplotly(pred_accuracy, tooltip='all')
+```
+
