@@ -660,7 +660,7 @@ logging.info(f'Feature Selection Started: {fs_start_time}')
 for k in feature_set_dict.keys():
   # Hierarchical
   sub_start_time = dt.datetime.now()
-  hierarchical_start = 1
+  hierarchical_start = 160
   hierarchical_end = 200
   # try:
   #   for n in range(hierarchical_start, hierarchical_end):
@@ -669,11 +669,11 @@ for k in feature_set_dict.keys():
   #   logging.info('Previous Hierarchical Feature Selection Output imported: {sub_end_time}')
   # except:
   sub_start_time = dt.datetime.now()
-  logging.info(f'\tHierarchical Feaure Selection ({k}) Started: {sub_start_time}')
+  logging.info(f'\tHierarchical Feature Selection ({k}) Started: {sub_start_time}')
   feature_set_dict[k]['hierarchical_selected_features'] = hierarchical_fs_v2(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],hierarchical_start, hierarchical_end)
   for n in range(hierarchical_start, hierarchical_end):
     #feature_set_dict[k]['hierarchical_selected_features'][n] = hierarchical_fs(feature_set_dict[k]['train_x'],n)
-    if len(feature_set_dict[k]['hierarchical_selected_features'][n])>1:
+    if n==160 or len(feature_set_dict[k]['hierarchical_selected_features'][n])!=len(feature_set_dict[k]['hierarchical_selected_features'][n-1]):
       np.save(f'{fs_outpath}{k}/{run_uid}_hierarchical-{n}.npy',np.array(feature_set_dict[k]['hierarchical_selected_features'][n]))
       print(n)
 
@@ -1096,8 +1096,16 @@ for k in feature_set_dict.keys():
 #     logging.info(f'\tPermutation Importance on {n_estimators} estimators and {n_repeats} repeats from {k} Done: {now}')
 
 # Select random features
+info_index = {
+  'subset':[],
+  'N_features':[],
+  'Method':[]
+}
 
 for x in length_list2:
   for y in range (10): # Make 10 random sets per feature set size
     target_columns = random.sample(sorted(feature_set_dict[k]['train_x'].columns[1:]), k=x)
-    np.save(f'{fs_outpath}{k}/{run_uid}_Random_{x}_v{y}.npy', np.array(target_columns))
+    info_index['subset'].append(f'Random_{x}_v{y}')
+    info_index['N_features'].append(len(target_columns))
+    info_index['Method'].append('Random')
+    # np.save(f'{fs_outpath}{k}/{run_uid}_Random_{x}_v{y}.npy', np.array(target_columns))
