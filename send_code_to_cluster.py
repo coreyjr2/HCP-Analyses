@@ -29,8 +29,12 @@ psswd = getpass.getpass(f'Password for {username}@{hostname}:')
 start_time = dt.datetime.now()
 ssh = createSSHClient(f'{hostname}', 22, f'{username}', f'{psswd}')
 scp = SCPClient(ssh.get_transport())
+job_pattern = '{base}HCP-Analyses{sep}hcp_predgen.sh'
+runtime_pattern = '{base}HCP-Analyses{sep}hcp_cluster_predGen.py'
 
-scp.put(archive_pattern.format(base = base, sep=sep), archive_pattern.format(base = dest_base, sep=dest_sep))
+# scp.put(archive_pattern.format(base = base, sep=sep), archive_pattern.format(base = dest_base, sep=dest_sep))
+# scp.put(job_pattern.format(base = base, sep=sep), job_pattern.format(base = dest_base, sep=dest_sep))
+scp.put(runtime_pattern.format(base = base, sep=sep), runtime_pattern.format(base = dest_base, sep=dest_sep))
 
 end_time = dt.datetime.now()
 print('Done. Runtime: ', end_time - start_time)
