@@ -127,7 +127,7 @@ pred_accuracy = ggplot(acc_df, aes(x=N_features, y=test_accuracy, shape=Method, 
     legend.title = element_text(color="White", size=60)
   )
 
-ggsave(pred_accuracy, filename = paste(basepath, "Prediction_Accuracie_Plot_05.png", sep="")[1],  bg = "transparent",  height = 60, width = 100, units='cm')
+# ggsave(pred_accuracy, filename = paste(basepath, "Prediction_Accuracie_Plot_05.png", sep="")[1],  bg = "transparent",  height = 6, width = 10, units='cm')
 
 ggplotly(pred_accuracy, tooltip='all')
 ```
