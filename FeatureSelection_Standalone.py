@@ -28,8 +28,9 @@ try:
   from sklearn.linear_model import LogisticRegression
   from sklearn.model_selection import cross_val_score, train_test_split, KFold, GridSearchCV
   from sklearn.feature_selection import SelectFromModel
-  from sklearn.decomposition import PCA
+  from sklearn.decomposition import PCA, KernelPCA, TruncatedSVD
   from sklearn.inspection import permutation_importance
+  from sklearn.manifold import TSNE
   from itertools import compress
   from sklearn import svm
   from pathlib import Path
@@ -45,6 +46,7 @@ try:
   from operator import itemgetter
   import random
   from sklearn.model_selection import GroupShuffleSplit
+  import brainconn.utils as bc
 except Exception as e:
   print(f'Error loading libraries: ')
   raise Exception(e)
@@ -301,6 +303,29 @@ try:
       out_df_dict[session].insert(0, 'task',numeric_task_ref[session])
     parcels_connections_full = pd.DataFrame(pd.concat(list(out_df_dict.values()), axis = 0))
     return parcels_connections_full
+  def generate_parcel_connection_features_v2(parcellated_data, labels, threshold = None): 
+    # threshold as proportion of values to keep
+    out_dict = {}
+    out_df_dict = {}
+    for session in parcellated_data.keys():
+      parcel_dict = parcellated_data[session]
+      out_dict[session] = {}
+      for subject in parcel_dict.keys():
+        ts = parcel_dict[subject]
+        cor_coef = np.corrcoef(ts.T)
+        if threshold != None:
+          cor_coef = bc.threshold_proportional(cor_coef, p = threshold)
+        out_dict[session][subject] = list(cor_coef[np.triu_indices_from(cor_coef, k=1)])
+        out_dict[session][subject].append(subject)
+        colnames = connection_names(cor_coef, labels)
+        colnames.append('Subject')
+      out_df_dict[session] = pd.DataFrame.from_dict(out_dict[session], orient='index', columns = colnames)
+      sub = out_df_dict[session]['Subject']
+      out_df_dict[session].drop(labels=['Subject'], axis=1, inplace=True)
+      out_df_dict[session].insert(0, 'Subject', sub)
+      out_df_dict[session].insert(0, 'task',numeric_task_ref[session])
+    parcels_connections_full = pd.DataFrame(pd.concat(list(out_df_dict.values()), axis = 0))
+    return parcels_connections_full
   def generate_network_connection_features(parcellated_data, networks): # Tested
     scaler = StandardScaler() 
     out_dict = {}
@@ -358,6 +383,34 @@ try:
     train_pca = pca.transform(train_x)
     test_pca = pca.transform(test_x)
     return train_pca, test_pca, pca
+  def kpca_fs(train_x, test_x, kernel='rbf', n_components = None, n_jobs = 1):
+    if n_components!=None:
+      kpca = KernelPCA(n_components = n_components, kernel = kernel, n_jobs = n_jobs).fit(train_x)
+    else:
+      kpca = KernelPCA(kernel = kernel, n_jobs = n_jobs).fit(train_x)
+    train_kpca = kpca.transform(train_x)
+    test_kpca = kpca.transform(test_x)
+    return train_kpca, test_kpca, kpca
+  def tSVD_fs(train_x, test_x, n_components, n_iter = 5, random_state = 812):
+    svd = TruncatedSVD(n_components=n_components, n_iter=n_iter, random_state=random_state)
+    svd.fit(train_x)
+    train_svd = svd.transform(train_x)
+    test_svd = svd.transform(test_x)
+    return train_svd, test_svd, svd
+  def TSNE_fs(train_x, test_x, n_components, perplexity = 30, learning_rate=200.0, init = 'random', verbose=0, n_iter=1000, n_jobs = 1):
+    tsne = TSNE(
+      n_components=n_components,
+      perplexity=perplexity,
+      learning_rate=learning_rate,
+      init=init,
+      verbose=verbose,
+      n_iter=n_iter,
+      n_jobs = n_jobs
+      )
+    tsne.fit(train_x)
+    train_tsne = tsne.transform(train_x)
+    test_tsne = tsne.transform(test_x)
+    return train_tsne, test_tsne, tsne
   def random_forest_fs(x, y, n_estimators, n_repeats=10, n_jobs=1, max_features = 500):
     #Returns a list of columns to use as features
     sel = SelectFromModel(RandomForestClassifier(n_estimators = n_estimators, n_jobs=n_jobs, random_state=42), max_features=max_features)
@@ -545,6 +598,12 @@ sub_end_time = dt.datetime.now()
 logging.info(f'generate_parcel_connection_features Done: {sub_end_time}')
 
 sub_start_time = dt.datetime.now()
+logging.info(f'generate_parcel_connection_features Started: {sub_start_time}')
+parcel_connection_task_data_thresh_2 = generate_parcel_connection_features_v2(parcellated_data, parcel_labels, threshold = .2)
+sub_end_time = dt.datetime.now()
+logging.info(f'generate_parcel_connection_features Done: {sub_end_time}')
+
+sub_start_time = dt.datetime.now()
 logging.info(f'generate_network_connection_features Started: {sub_start_time}')
 network_connection_features = generate_network_connection_features(parcellated_data, network_labels)
 sub_end_time = dt.datetime.now()
@@ -695,6 +754,8 @@ fs_start_time = dt.datetime.now()
 logging.info(f'Feature Selection Started: {fs_start_time}')
 len_list = []
 target_keys = ['parcel_connection']
+
+# Hierarchical
 for k in target_keys:
   # Hierarchical
   sub_start_time = dt.datetime.now()
@@ -716,7 +777,7 @@ for k in target_keys:
       np.save(f'{fs_outpath}{k}/{run_uid}_hierarchical-{n}.npy',np.array(feature_set_dict[k]['hierarchical_selected_features'][n]))
       print(n, n_len)
       len_list.append(n_len)
-
+# PCA
 for k in target_keys:
   # PCA
   sub_end_time = dt.datetime.now()
@@ -742,7 +803,8 @@ for k in target_keys:
     logging.info(f'\tPCA Done: {sub_end_time}')
 
 
-
+# RFC feature selection
+## Select from model
 for k in target_keys:
   # RFC feature selection
   ## Select from model
@@ -910,7 +972,7 @@ for x in len_list:
     info_index['Method'].append('Random')
     np.save(f'{fs_outpath}{k}/{run_uid}_Random_{x}_v{y}.npy', np.array(target_columns))
 
-
+# Permutation importance
 for k in feature_set_dict.keys():
   ## Permutation importance
   sub_start_time_outer = dt.datetime.now()
@@ -945,3 +1007,80 @@ for k in feature_set_dict.keys():
     feature_set_dict[k][f'permutation_importances_est-{n_estimators}_rep-{n_repeats}'] = permutation_importances
     np.save(f'{fs_outpath}{k}/{run_uid}_permutation_importances_est-{n_estimators}_rep-{n_repeats}.npy', permutation_importances)
     logging.info(f'\tPermutation Importance on {n_estimators} estimators and {n_repeats} repeats from {k} Done: {now}')
+
+# KPCA
+# https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.KernelPCA.html
+for k in target_keys:
+  for kernel in ['rbf', 'linear']:
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\tKernelPCA Feature Extraction ({k}) Done: {sub_end_time}')
+    try:
+      sub_start_time = dt.datetime.now()
+      feature_set_dict[k][f'train_kpca-{kernel}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_kpca-{kernel}.npy')
+      feature_set_dict[k][f'test_kpca-{kernel}'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_kpca-{kernel}.npy')
+      feature_set_dict[k][f'kpca-{kernel}'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_kpca-{kernel}.pkl', 'rb'))
+      sub_end_time = dt.datetime.now()
+      logging.info('\tPrevious KernelPCA-{kernel} Output imported: {sub_end_time}')
+    except:
+      sub_start_time = dt.datetime.now()
+      logging.info(f'\tKernelPCA-{kernel} Started: {sub_start_time}')
+      train_kpca, test_kpca, kpca = kpca_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_components=None, kernel = kernel, n_jobs=14)
+      feature_set_dict[k]['train_kpca-{kernel}'] = train_kpca
+      feature_set_dict[k]['test_kpca-{kernel}'] = test_kpca
+      feature_set_dict[k]['kpca-{kernel}'] = kpca
+      np.save(f'{fs_outpath}{k}/{run_uid}_train_kpca-{kernel}.npy',feature_set_dict[k]['train_kpca-{kernel}'])
+      np.save(f'{fs_outpath}{k}/{run_uid}_test_kpca-{kernel}.npy',feature_set_dict[k]['test_kpca-{kernel}'])
+      pk.dump(feature_set_dict[k]['kpca-{kernel}'], open(f'{fs_outpath}{k}/{run_uid}_kpca-{kernel}.pkl', "wb"))
+      sub_end_time = dt.datetime.now()
+      logging.info(f'\tKernelPCA-{kernel} Done: {sub_end_time}')
+
+# TruncatedSVD
+# https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.TruncatedSVD.html
+for k in target_keys:
+  for component_size in [50, 100, 150, 200, 300, 400, 500, 600, 700, 800, 900, 1000]:
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\tTruncatedSVD Feature Extraction ({k}) Done: {sub_end_time}')
+    try:
+      sub_start_time = dt.datetime.now()
+      feature_set_dict[k][f'train_tSVD-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_tSVD-{component_size}.npy')
+      feature_set_dict[k][f'test_tSVD-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_tSVD-{component_size}.npy')
+      feature_set_dict[k][f'tSVD-{component_size}'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_tSVD-{component_size}.pkl', 'rb'))
+      sub_end_time = dt.datetime.now()
+      logging.info('\tPrevious TruncatedSVD-{component_size} Output imported: {sub_end_time}')
+    except:
+      sub_start_time = dt.datetime.now()
+      logging.info(f'\tTruncatedSVD-{component_size} Started: {sub_start_time}')
+      train_tSVD, test_tSVD, tSVD = tSVD_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_components=component_size, )
+      feature_set_dict[k]['train_tSVD-{component_size}'] = train_tSVD
+      feature_set_dict[k]['test_tSVD-{component_size}'] = test_tSVD
+      feature_set_dict[k]['tSVD-{component_size}'] = tSVD
+      np.save(f'{fs_outpath}{k}/{run_uid}_train_tSVD-{component_size}.npy',feature_set_dict[k]['train_tSVD-{component_size}'])
+      np.save(f'{fs_outpath}{k}/{run_uid}_test_tSVD-{component_size}.npy',feature_set_dict[k]['test_tSVD-{component_size}'])
+      pk.dump(feature_set_dict[k]['tSVD-{component_size}'], open(f'{fs_outpath}{k}/{run_uid}_tSVD-{component_size}.pkl', "wb"))
+      sub_end_time = dt.datetime.now()
+      logging.info(f'\tTruncatedSVD-{component_size} Done: {sub_end_time}')
+
+# TSNE
+for k in target_keys:
+  for component_size in [2]:
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\TSNE Feature Extraction ({k}) Done: {sub_end_time}')
+    try:
+      sub_start_time = dt.datetime.now()
+      feature_set_dict[k][f'train_TSNE-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_TSNE-{component_size}.npy')
+      feature_set_dict[k][f'test_TSNE-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_TSNE-{component_size}.npy')
+      feature_set_dict[k][f'TSNE-{component_size}'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_TSNE-{component_size}.pkl', 'rb'))
+      sub_end_time = dt.datetime.now()
+      logging.info('\tPrevious TruncatedSVD-{component_size} Output imported: {sub_end_time}')
+    except:
+      sub_start_time = dt.datetime.now()
+      logging.info(f'\TSNE-{component_size} Started: {sub_start_time}')
+      train_TSNE, test_TSNE, TSNE = TSNE_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_components=component_size, n_jobs = 14)
+      feature_set_dict[k]['train_TSNE-{component_size}'] = train_TSNE
+      feature_set_dict[k]['test_TSNE-{component_size}'] = test_TSNE
+      feature_set_dict[k]['TSNE-{component_size}'] = TSNE
+      np.save(f'{fs_outpath}{k}/{run_uid}_train_TSNE-{component_size}.npy',feature_set_dict[k]['train_TSNE-{component_size}'])
+      np.save(f'{fs_outpath}{k}/{run_uid}_test_TSNE-{component_size}.npy',feature_set_dict[k]['test_TSNE-{component_size}'])
+      pk.dump(feature_set_dict[k]['TSNE-{component_size}'], open(f'{fs_outpath}{k}/{run_uid}_TSNE-{component_size}.pkl', "wb"))
+      sub_end_time = dt.datetime.now()
+      logging.info(f'\TSNE-{component_size} Done: {sub_end_time}')
