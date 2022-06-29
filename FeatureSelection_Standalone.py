@@ -28,9 +28,10 @@ try:
   from sklearn.linear_model import LogisticRegression
   from sklearn.model_selection import cross_val_score, train_test_split, KFold, GridSearchCV
   from sklearn.feature_selection import SelectFromModel
-  from sklearn.decomposition import PCA, KernelPCA, TruncatedSVD
+  from sklearn.decomposition import PCA, KernelPCA, TruncatedSVD, FastICA
   from sklearn.inspection import permutation_importance
-  from sklearn.manifold import TSNE
+  from sklearn.manifold import TSNE, SpectralEmbedding, MDS
+  from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
   from itertools import compress
   from sklearn import svm
   from pathlib import Path
@@ -46,7 +47,7 @@ try:
   from operator import itemgetter
   import random
   from sklearn.model_selection import GroupShuffleSplit
-  import brainconn.utils as bc
+  # import brainconn.utils as bc
 except Exception as e:
   print(f'Error loading libraries: ')
   raise Exception(e)
@@ -411,6 +412,34 @@ try:
     train_tsne = tsne.transform(train_x)
     test_tsne = tsne.transform(test_x)
     return train_tsne, test_tsne, tsne
+  def ICA_fs(train_x, test_x, n_components=None, max_iter=200, random_state=42):
+    ica = FastICA(n_components=None, max_iter=max_iter, random_state=random_state)
+    ica.fit(train_x)
+    train_ica = ica.transform(train_x)
+    test_ica = ica.transform(test_x)
+    return train_ica, test_ica, ica
+  def LE_fs(train_x, test_x, n_components=None, random_state=42, n_jobs=1,n_neighbors = None):
+    print()
+    if n_components is None:
+      LE = SpectralEmbedding(random_state=random_state, n_jobs=n_jobs, n_neighbors = n_neighbors)
+    else:
+      LE = SpectralEmbedding(n_components = n_components, random_state=random_state, n_jobs=n_jobs, n_neighbors = n_neighbors)
+    LE.fit(train_x)
+    train_LE = LE.transform(train_x)
+    test_LE = LE.transform(test_x)
+    return train_LE, test_LE, LE
+  def MDS_fs(train_x, test_x, n_components=2, max_iter=300, random_state=42, n_jobs = 1):
+    MDS = MDS(n_components=n_components, random_state=random_state, n_jobs=n_jobs)
+    MDS.fit(train_x)
+    train_MDS = MDS.transform(train_x)
+    test_MDS = MDS.transform(test_x)
+    return train_MDS, test_MDS, MDS
+  def LDA_fs(train_x, test_x, train_y):
+    LDA = LinearDiscriminantAnalysis()
+    LDA.fit(train_x, train_y)
+    train_LDA = LDA.transform(train_x)
+    test_LDA = LDA.transform(test_x)
+    return train_LDA, test_LDA, LDA
   def random_forest_fs(x, y, n_estimators, n_repeats=10, n_jobs=1, max_features = 500):
     #Returns a list of columns to use as features
     sel = SelectFromModel(RandomForestClassifier(n_estimators = n_estimators, n_jobs=n_jobs, random_state=42), max_features=max_features)
@@ -705,6 +734,8 @@ parcel_connection_x_test = scale_subset(parcel_connection_x_test, cols_to_exclud
 # network_connection_x_test = scale_subset(network_connection_x_test, cols_to_exclude)
 sub_end_time = dt.datetime.now()
 logging.info(f'Scaling non-categorical Variables Done: {sub_end_time}')
+
+##### TO SAVE #####
 feature_set_dict = {
   # 'parcel_sum':{
   #   'train_x': parcel_sum_x_train,
@@ -740,6 +771,23 @@ for k in feature_set_dict.keys():
     np.save(f'{fs_outpath}{k}/{run_uid}_{target_df}.npy', np.array(feature_set_dict[k][target_df]))
     np.save(f'{fs_outpath}{k}/{run_uid}_{target_df}_colnames.npy', np.array(feature_set_dict[k][target_df].columns))
 
+
+##### TO READ #####
+fs_outpath = outpath + 'FeatureSelection/'
+feature_set_dict = {
+  'parcel_connection':{
+  }
+}
+
+try:
+  for k in feature_set_dict.keys():
+    for target_df in ['train_x','test_x','train_y','test_y']:
+      feature_set_dict[k][target_df] = pd.DataFrame(np.load(f'{fs_outpath}{k}{sep}{run_uid}_{target_df}.npy', allow_pickle=True), columns = np.load(f'{fs_outpath}{k}{sep}{run_uid}_{target_df}_colnames.npy', allow_pickle=True))
+  sub_end_time = dt.datetime.now()
+  logging.info(f'Premade raw data successfully imported from {fs_outpath}: {sub_end_time}')
+except Exception as e:
+  print(f'Error reading in raw data: {e}')
+  logging.info(f'Error reading in raw data: {e}')
 
 #####################################################################
 
@@ -1034,12 +1082,24 @@ for k in target_keys:
       sub_end_time = dt.datetime.now()
       logging.info(f'\tKernelPCA-{kernel} Done: {sub_end_time}')
 
+##### Visualizing Eigenvector to select N vars
+import pickle as pk
+import plotly.express as px
+run_uid = '89952a'
+fs_outpath = 'S:\\hcp_analysis_output\\89952a\\FeatureSelection\\parcel_connection\\'
+k = 'parcel_connection'
+for kernel in ['rbf', 'linear']:
+  kpca = pk.load(open(f'{fs_outpath}{k}\\{run_uid}_kpca-{kernel}.pkl', 'rb'))
+  print(kpca.lambdas_[:60])
+  fig = px.line(kpca.lambdas_[:60])
+  fig.show()
+
 # TruncatedSVD
 # https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.TruncatedSVD.html
 for k in target_keys:
   for component_size in [50, 100, 150, 200, 300, 400, 500, 600, 700, 800, 900, 1000]:
     sub_end_time = dt.datetime.now()
-    logging.info(f'\tTruncatedSVD Feature Extraction ({k}) Done: {sub_end_time}')
+    logging.info(f'\tTruncatedSVD Feature Extraction ({k}) Started: {sub_end_time}')
     try:
       sub_start_time = dt.datetime.now()
       feature_set_dict[k][f'train_tSVD-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_tSVD-{component_size}.npy')
@@ -1060,7 +1120,9 @@ for k in target_keys:
       sub_end_time = dt.datetime.now()
       logging.info(f'\tTruncatedSVD-{component_size} Done: {sub_end_time}')
 
-# TSNE
+# TSNE 
+# (https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html)
+# BAD; no transform function, only fit_transform
 for k in target_keys:
   for component_size in [2]:
     sub_end_time = dt.datetime.now()
@@ -1084,3 +1146,107 @@ for k in target_keys:
       pk.dump(feature_set_dict[k]['TSNE-{component_size}'], open(f'{fs_outpath}{k}/{run_uid}_TSNE-{component_size}.pkl', "wb"))
       sub_end_time = dt.datetime.now()
       logging.info(f'\TSNE-{component_size} Done: {sub_end_time}')
+
+# ICA 
+# (https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.FastICA.html)
+for k in target_keys:
+  sub_end_time = dt.datetime.now()
+  logging.info(f'\ICA Feature Extraction ({k}) Done: {sub_end_time}')
+  try:
+    sub_start_time = dt.datetime.now()
+    feature_set_dict[k][f'train_ICA'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_ICA.npy')
+    feature_set_dict[k][f'test_ICA'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_ICA.npy')
+    feature_set_dict[k][f'ICA'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_ICA.pkl', 'rb'))
+    sub_end_time = dt.datetime.now()
+    logging.info('\tPrevious ICA Output imported: {sub_end_time}')
+  except:
+    sub_start_time = dt.datetime.now()
+    logging.info(f'\ICA Started: {sub_start_time}')
+    train_ICA, test_ICA, ICA = ICA_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'])
+    feature_set_dict[k]['train_ICA'] = train_ICA
+    feature_set_dict[k]['test_ICA'] = test_ICA
+    feature_set_dict[k]['ICA'] = ICA
+    np.save(f'{fs_outpath}{k}/{run_uid}_train_ICA.npy',feature_set_dict[k]['train_ICA'])
+    np.save(f'{fs_outpath}{k}/{run_uid}_test_ICA.npy',feature_set_dict[k]['test_ICA'])
+    pk.dump(feature_set_dict[k]['ICA'], open(f'{fs_outpath}{k}/{run_uid}_ICA.pkl', "wb"))
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\ICA Done: {sub_end_time}')
+
+# LE 
+# (SpectralEmbedding: https://scikit-learn.org/stable/modules/generated/sklearn.manifold.SpectralEmbedding.html)
+# Did not work, no transform function, only fit_transform
+for k in target_keys:
+  sub_end_time = dt.datetime.now()
+  logging.info(f'\LE Feature Extraction ({k}) Done: {sub_end_time}')
+  try:
+    sub_start_time = dt.datetime.now()
+    feature_set_dict[k][f'train_LE'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_LE.npy')
+    feature_set_dict[k][f'test_LE'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_LE.npy')
+    feature_set_dict[k][f'LE'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_LE.pkl', 'rb'))
+    sub_end_time = dt.datetime.now()
+    logging.info('\tPrevious LE Output imported: {sub_end_time}')
+  except:
+    sub_start_time = dt.datetime.now()
+    logging.info(f'\LE Started: {sub_start_time}')
+    train_LE, test_LE, LE = LE_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_jobs = 14)
+    feature_set_dict[k]['train_LE'] = train_LE
+    feature_set_dict[k]['test_LE'] = test_LE
+    feature_set_dict[k]['LE'] = LE
+    np.save(f'{fs_outpath}{k}/{run_uid}_train_LE.npy',feature_set_dict[k]['train_LE'])
+    np.save(f'{fs_outpath}{k}/{run_uid}_test_LE.npy',feature_set_dict[k]['test_LE'])
+    pk.dump(feature_set_dict[k]['LE'], open(f'{fs_outpath}{k}/{run_uid}_LE.pkl', "wb"))
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\LE Done: {sub_end_time}')
+
+
+# MDS 
+# (https://scikit-learn.org/stable/modules/generated/sklearn.manifold.MDS.html)
+# Did not work, no transform function, only fit_transform
+for k in target_keys:
+  sub_end_time = dt.datetime.now()
+  logging.info(f'\MDS Feature Extraction ({k}) Done: {sub_end_time}')
+  try:
+    sub_start_time = dt.datetime.now()
+    feature_set_dict[k][f'train_MDS'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_MDS.npy')
+    feature_set_dict[k][f'test_MDS'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_MDS.npy')
+    feature_set_dict[k][f'MDS'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_MDS.pkl', 'rb'))
+    sub_end_time = dt.datetime.now()
+    logging.info('\tPrevious MDS Output imported: {sub_end_time}')
+  except:
+    sub_start_time = dt.datetime.now()
+    logging.info(f'\MDS Started: {sub_start_time}')
+    train_MDS, test_MDS, MDS = MDS_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_jobs = 14)
+    feature_set_dict[k]['train_MDS'] = train_MDS
+    feature_set_dict[k]['test_MDS'] = test_MDS
+    feature_set_dict[k]['MDS'] = MDS
+    np.save(f'{fs_outpath}{k}/{run_uid}_train_MDS.npy',feature_set_dict[k]['train_MDS'])
+    np.save(f'{fs_outpath}{k}/{run_uid}_test_MDS.npy',feature_set_dict[k]['test_MDS'])
+    pk.dump(feature_set_dict[k]['MDS'], open(f'{fs_outpath}{k}/{run_uid}_MDS.pkl', "wb"))
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\MDS Done: {sub_end_time}')
+
+
+# LDA 
+# (https://scikit-learn.org/stable/modules/generated/sklearn.discriminant_analysis.LinearDiscriminantAnalysis.html)
+for k in target_keys:
+  sub_end_time = dt.datetime.now()
+  logging.info(f'\LDA Feature Extraction ({k}) Started: {sub_end_time}')
+  try:
+    sub_start_time = dt.datetime.now()
+    feature_set_dict[k][f'train_LDA'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_LDA.npy')
+    feature_set_dict[k][f'test_LDA'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_LDA.npy')
+    feature_set_dict[k][f'LDA'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_LDA.pkl', 'rb'))
+    sub_end_time = dt.datetime.now()
+    logging.info('\tPrevious LDA Output imported: {sub_end_time}')
+  except:
+    sub_start_time = dt.datetime.now()
+    logging.info(f'\LDA Started: {sub_start_time}')
+    train_LDA, test_LDA, LDA = LDA_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns!='Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns!='Subject'], feature_set_dict[k]['train_y'].values.ravel())
+    feature_set_dict[k]['train_LDA'] = train_LDA
+    feature_set_dict[k]['test_LDA'] = test_LDA
+    feature_set_dict[k]['LDA'] = LDA
+    np.save(f'{fs_outpath}{k}/{run_uid}_train_LDA.npy',feature_set_dict[k]['train_LDA'])
+    np.save(f'{fs_outpath}{k}/{run_uid}_test_LDA.npy',feature_set_dict[k]['test_LDA'])
+    pk.dump(feature_set_dict[k]['LDA'], open(f'{fs_outpath}{k}/{run_uid}_LDA.pkl', "wb"))
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\LDA Done: {sub_end_time}')
