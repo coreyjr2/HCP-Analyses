@@ -165,10 +165,6 @@ metadata = meta_dict
 metadata['random_state'] = random_state
 node = platform.node()
 
-#### Change Here ####
-n_jobs = 14
-runtime_ind = 3 # Change this each time 2 3 4 5 6 7 8 9 10
-########
 
 data = pd.DataFrame(np.load(f'{fs_outpath}{k}{sep}{run_uid}_train_x.npy', allow_pickle=True), columns = np.load(f'{fs_outpath}{k}{sep}{run_uid}_train_x_colnames.npy', allow_pickle=True))
 outcome = pd.DataFrame(np.load(f'{fs_outpath}{k}{sep}{run_uid}_train_y.npy', allow_pickle=True), columns = np.load(f'{fs_outpath}{k}{sep}{run_uid}_train_y_colnames.npy', allow_pickle=True))
@@ -183,70 +179,72 @@ for fname in file_names:
 
 target_file_names.sort()
 
-key_inds = [
-  0, 117, 234, 351, 468,
-  585, 702, 819, 936, 1053, 1170
-]
-start_ind = key_inds[runtime_ind-1]#0
-end_ind = key_inds[runtime_ind]#117
-subset_file_list = target_file_names[start_ind:end_ind]
 
-fs_dict = {}
-for fname in subset_file_list:
-  sval = re.search(("[.]*_Random_(.+?)_v(.+?).npy"), fname)
-  n_features = sval[1]
-  version = sval[2]
-  if n_features not in fs_dict.keys():
-    fs_dict[n_features] = {}
-  fs_dict[n_features][version] = np.load(f'{fs_outpath}{k}{sep}{fname}', allow_pickle=True)
-
-
-cv_split_dict = {}
-for ind in range(10):
-  train_ind = np.load(f'{fs_outpath}{k}{sep}{run_uid}_split_{ind}_train.npy', allow_pickle=True)
-  test_ind = np.load(f'{fs_outpath}{k}{sep}{run_uid}_split_{ind}_test.npy', allow_pickle=True)
-  cv_split_dict[ind] = (train_ind, test_ind)
-
-
-for n_features in list(fs_dict.keys())[7:8]:
-  n_dict = fs_dict[n_features]
-  for version in n_dict.keys():
-    print(n_features, version)
-    data_dict = {}
-    # try:
-    accuracy_df_node = pd.read_csv(f'{outpath}Prediction_Accuracies_{node}.csv')
-    df_concat_list = [accuracy_df_node]
-    # except:
-    #   df_concat_list = []
-    #   pass
-    input_subset = data[list(n_dict[version])]
-    for split_ind in cv_split_dict.keys():
-      data_dict[split_ind] = {
-        'train_x':input_subset.iloc[cv_split_dict[split_ind][0]],
-        'train_y':outcome.iloc[cv_split_dict[split_ind][0]]['task'].values.ravel().astype('int'),
-        'test_x':input_subset.iloc[cv_split_dict[split_ind][1]],
-        'test_y':outcome.iloc[cv_split_dict[split_ind][1]]['task'].values.ravel().astype('int')
-      }
-    classifiers = ['SVC', 'Random Forest']
-    results_list = Parallel(n_jobs = n_jobs)(
-      delayed(run_model)(
-        classifier=classifier,
-        train_x = data_dict[split_ind]['train_x'],
-        train_y = data_dict[split_ind]['train_y'],
-        test_x = data_dict[split_ind]['test_x'],
-        test_y = data_dict[split_ind]['test_y'],
-        dataset = 'HCP_1200',
-        subset = f'Random_{n_features}_v{version}',
-        split_ind = split_ind,
-        method='Random'
-        ) for split_ind in cv_split_dict.keys() for classifier in classifiers
-      )
-    for res_dict in results_list:
-      df_concat_list.append(pd.DataFrame(res_dict))
-    accuracy_df_node = pd.concat(df_concat_list)
-    print(accuracy_df_node)
-    datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
-    # accuracy_df_node.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
-    accuracy_df_node.to_csv(f'{outpath}Prediction_Accuracies_{node}.csv', index=False)
-    # accuracy_df_node.to_csv(f'{outpath}Prediction_Accuracies_{node}_{datetime_str}.csv', index=False)
+#### Change Here ####
+n_jobs = 14
+for runtime_ind in [1,2,3,4,5,6,7,8,9,10]:
+  # runtime_ind = 1 # Change this each time 1 2 3 4 5 6 7 8 9 10
+  ########
+  print(runtime_ind)
+  key_inds = [
+    0, 117, 234, 351, 468,
+    585, 702, 819, 936, 1053, 1170
+  ]
+  start_ind = key_inds[runtime_ind-1]#0
+  end_ind = key_inds[runtime_ind]#117
+  subset_file_list = target_file_names[start_ind:end_ind]
+  fs_dict = {}
+  for fname in subset_file_list:
+    sval = re.search(("[.]*_Random_(.+?)_v(.+?).npy"), fname)
+    n_features = sval[1]
+    version = sval[2]
+    if n_features not in fs_dict.keys():
+      fs_dict[n_features] = {}
+    fs_dict[n_features][version] = np.load(f'{fs_outpath}{k}{sep}{fname}', allow_pickle=True)
+  cv_split_dict = {}
+  for ind in range(10):
+    train_ind = np.load(f'{fs_outpath}{k}{sep}{run_uid}_split_{ind}_train.npy', allow_pickle=True)
+    test_ind = np.load(f'{fs_outpath}{k}{sep}{run_uid}_split_{ind}_test.npy', allow_pickle=True)
+    cv_split_dict[ind] = (train_ind, test_ind)
+  for n_features in list(fs_dict.keys()):
+    n_dict = fs_dict[n_features]
+    for version in n_dict.keys():
+      print(n_features, version)
+      data_dict = {}
+      # try:
+      accuracy_df_node = pd.read_csv(f'{outpath}Prediction_Accuracies.csv')
+      df_concat_list = [accuracy_df_node]
+      # except:
+      #   df_concat_list = []
+      #   pass
+      input_subset = data[list(n_dict[version])]
+      for split_ind in cv_split_dict.keys():
+        data_dict[split_ind] = {
+          'train_x':input_subset.iloc[cv_split_dict[split_ind][0]],
+          'train_y':outcome.iloc[cv_split_dict[split_ind][0]]['task'].values.ravel().astype('int'),
+          'test_x':input_subset.iloc[cv_split_dict[split_ind][1]],
+          'test_y':outcome.iloc[cv_split_dict[split_ind][1]]['task'].values.ravel().astype('int')
+        }
+      classifiers = ['SVC', 'Random Forest']
+      results_list = Parallel(n_jobs = n_jobs)(
+        delayed(run_model)(
+          classifier=classifier,
+          train_x = data_dict[split_ind]['train_x'],
+          train_y = data_dict[split_ind]['train_y'],
+          test_x = data_dict[split_ind]['test_x'],
+          test_y = data_dict[split_ind]['test_y'],
+          dataset = 'HCP_1200',
+          subset = f'Random_{n_features}_v{version}',
+          split_ind = split_ind,
+          method='Random'
+          ) for split_ind in cv_split_dict.keys() for classifier in classifiers
+        )
+      for res_dict in results_list:
+        df_concat_list.append(pd.DataFrame(res_dict))
+      accuracy_df_node = pd.concat(df_concat_list)
+      print(accuracy_df_node)
+      datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+      # accuracy_df_node.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
+      accuracy_df_node.to_csv(f'{outpath}Prediction_Accuracies.csv', index=False)
+      # accuracy_df_node.to_csv(f'{outpath}Prediction_Accuracies_{node}_{datetime_str}.csv', index=False)
 
