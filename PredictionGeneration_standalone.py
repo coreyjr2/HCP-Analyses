@@ -20,12 +20,12 @@ try:
   import getpass
   import nibabel as nib
   import numpy as np
-  from nilearn import datasets
-  from nilearn.input_data import NiftiLabelsMasker, NiftiMapsMasker
-  from sklearn.preprocessing import StandardScaler
+  # from nilearn import datasets
+  # from nilearn.input_data import NiftiLabelsMasker, NiftiMapsMasker
+  # from sklearn.preprocessing import StandardScaler
   from sklearn.ensemble import RandomForestClassifier
   from sklearn.metrics import confusion_matrix, classification_report
-  from sklearn.linear_model import LogisticRegression
+  # from sklearn.linear_model import LogisticRegression
   from sklearn.model_selection import cross_val_score, train_test_split, KFold, GridSearchCV
   from sklearn.feature_selection import SelectFromModel
   from sklearn.decomposition import PCA
@@ -114,17 +114,25 @@ v1_argslist = [ # for running from L2
   '-source_path','/data/hx-hx1/kbaacke/datasets/hcp_analysis_output/',#'/mnt/usb1/hcp_analysis_output/'
   '-uname','kbaacke',
   '-datahost','r2.psych.uiuc.edu',
+<<<<<<< HEAD
   '-local_path','/data/hx-hx1/kbaacke/datasets/hcp_analysis_output/',#'C:\\Users\\kyle\\temp\\',#
   '--output','/data/hx-hx1/kbaacke/datasets/hcp_analysis_output/',#'C:\\Users\\kyle\\output\\',#
   '--remote_output','/data/hx-hx1/kbaacke/datasets/hcp_analysis_output/',#'/mnt/usb1/hcp_analysis_output/'
   '--n_jobs','4',
   '-run_uid','89952a'
+=======
+  '-local_path','C:\\Users\\kyle\\temp\\',
+  '--output','C:\\Users\\kyle\\output\\',
+  '--remote_output','/mnt/usb1/hcp_analysis_output/',
+  '--n_jobs','6',
+  '-run_uid','8d2513'
+>>>>>>> origin/kyle_L2
 ]
 
 # Read args
 args, leforvers = parse_args(v1_argslist)
 
-# SCP data to temp location
+# # SCP data to temp location
 # if args.source_path!=None:
 #   # Interupt request for password and username if none passed
 #   if args.uname == None:
@@ -1513,3 +1521,55 @@ if False:
   #   )
   #   res = opt.fit(sub_train_x, train_y)
   #   print(opt.score(sub_test_x, test_y))
+train_x = feature_set_dict[k]['train_x']
+train_y = feature_set_dict[k]['train_y'].values.ravel()
+test_x = feature_set_dict[k]['test_x']
+test_y = feature_set_dict[k]['test_y'].values.ravel()
+# Iterate through feature sets with same sizes 
+# Levels of hierarchical selection:
+h_levels = list(feature_set_dict[k]['hierarchical_selected_features'].keys())
+h_levels.reverse()
+# subset h_levels
+# h_levels = h_levels[:1]
+res_dict = {}
+
+for level in h_levels[:1]:
+  feature_index = feature_set_dict[k]['hierarchical_selected_features'][level]
+  sub_train_x = feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]]
+  sub_test_x = feature_set_dict[k]['test_x'][feature_set_dict[k]['train_x'].columns[feature_index]]
+  n_folds = 5
+  opt_SVC = BayesSearchCV(
+    SVC(probability=True),
+    {
+      'C': [0.001, 0.01, 0.1, 1., 10., 100.],
+      'kernel': Categorical(['linear', 'rbf']),
+    },
+    n_iter=12,
+    random_state=0,
+    refit=True,
+    cv=n_folds,
+    n_jobs = int(args.n_jobs),
+    n_points = int(args.n_jobs),
+    return_train_score = True
+  )
+  res_SVC = opt_SVC.fit(sub_train_x, train_y)
+  res_dict[f'HFS_SVC_{level}'] = [res_SVC, opt_SVC]
+  print(opt_SVC.score(sub_test_x, test_y))
+
+  opt_RFC = BayesSearchCV(
+    RandomForestClassifier(),
+    {
+      'max_depth':[4,16,64,256,1024],
+      'n_estimators':[100, 200, 400, 800, 1600],
+    },
+    n_iter=12,
+    random_state=0,
+    refit=True,
+    cv=n_folds,
+    n_jobs = int(args.n_jobs),
+    n_points = int(args.n_jobs),
+    return_train_score = True
+  )
+  res_RFC = opt_RFC.fit(sub_train_x, train_y)
+  res_dict[f'HFS_RFC_{level}'] = [res_RFC, opt_RFC]
+  print(opt_RFC.score(sub_test_x, test_y))
