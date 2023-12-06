@@ -5,67 +5,68 @@
 
 # Imports
 try:
-  import platform
-  import argparse
-  import logging
-  import pandas as pd
-  import os
-  import datetime as dt
-  import json # Not on Cluster
-  import hashlib # Not on Cluster
-  import paramiko
-  import sys
-  from scp import SCPClient ############################ Mising
-  import shutil
-  import getpass
-  import nibabel as nib
-  import numpy as np
-  from nilearn import datasets
-  from nilearn.input_data import NiftiLabelsMasker, NiftiMapsMasker
-  from sklearn.preprocessing import StandardScaler
-  from sklearn.ensemble import RandomForestClassifier
-  from sklearn.metrics import confusion_matrix, classification_report
-  from sklearn.linear_model import LogisticRegression
-  from sklearn.model_selection import cross_val_score, train_test_split, KFold, GridSearchCV
-  from sklearn.feature_selection import SelectFromModel
-  from sklearn.decomposition import PCA, KernelPCA, TruncatedSVD, FastICA
-  from sklearn.inspection import permutation_importance
-  from sklearn.manifold import TSNE, SpectralEmbedding, MDS
-  from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-  from itertools import compress
-  from sklearn import svm
-  from pathlib import Path
-  from statsmodels.stats.outliers_influence import variance_inflation_factor
-  import matplotlib.pyplot as plt
-  import seaborn as sns
-  from scipy.stats import spearmanr
-  from scipy.cluster import hierarchy
-  from collections import defaultdict
-  import pickle as pk
-  from skopt import BayesSearchCV ############################ Mising
-  from skopt.space import Real, Categorical, Integer ############################ Mising
-  from operator import itemgetter
-  import random
-  from sklearn.model_selection import GroupShuffleSplit
-  # import brainconn.utils as bc
+    
+    import platform
+    import argparse
+    import logging
+    import pandas as pd
+    import os
+    import datetime as dt
+    import json # Not on Cluster
+    import hashlib # Not on Cluster
+    # import paramiko
+    import sys
+    # from scp import SCPClient ############################ Mising
+    import shutil
+    import getpass
+    # import nibabel as nib
+    import numpy as np
+    # from nilearn import datasets
+    # from nilearn.input_data import NiftiLabelsMasker, NiftiMapsMasker
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.metrics import confusion_matrix, classification_report
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import cross_val_score, train_test_split, KFold, GridSearchCV
+    from sklearn.feature_selection import SelectFromModel
+    from sklearn.decomposition import PCA, KernelPCA, TruncatedSVD, FastICA
+    from sklearn.inspection import permutation_importance
+    from sklearn.manifold import TSNE, SpectralEmbedding, MDS
+    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+    from itertools import compress
+    from sklearn import svm
+    from pathlib import Path
+    # from statsmodels.stats.outliers_influence import variance_inflation_factor
+    # import matplotlib.pyplot as plt
+    # import seaborn as sns
+    # from scipy.stats import spearmanr
+    # from scipy.cluster import hierarchy
+    # from collections import defaultdict
+    import pickle as pk
+    # from skopt import BayesSearchCV ############################ Mising
+    # from skopt.space import Real, Categorical, Integer ############################ Mising
+    from operator import itemgetter
+    import random
+    from sklearn.model_selection import GroupShuffleSplit
+    # import brainconn.utils as bc
 except Exception as e:
-  print(f'Error loading libraries: ')
-  raise Exception(e)
+    print('Error loading libraries: ')
+    raise Exception(e)
 
 
 
 v3_argslist = [ # Used on dx and ran out of RAM on the parcell connection hierarchical clustering step
-  # '-source_path', '/mnt/usb1/HCP_69354adf',
-  # '-uname', 'kbaacke',
-  # '-datahost', 'r2.psych.uiuc.edu', # not needed
-  '-local_path', '/data/hx-hx1/kbaacke/datasets',# '/mnt/usb1/HCP_69354adf/HCP_69354adf', #
-  '--output', '/data/hx-hx1/kbaacke/datasets/ucla_analysis_output/',
-  # '--remote_output','/mnt/usb1/Code/' # not needed
-  '--n_jobs', '8',
-  '-atlas_path', '/data/hx-hx1/kbaacke/datasets/parcellation_metadata/69354adf_parcellation-metadata.json',
-  '--movement_regressor','None',
-  '--confounds', 'None',
-  # '--confound_subset','None'
+    # '-source_path', '/mnt/usb1/HCP_69354adf',
+    # '-uname', 'kbaacke',
+    # '-datahost', 'r2.psych.uiuc.edu', # not needed
+    '-local_path', '/data/richiercj/DR_FS/data/',# '/mnt/usb1/HCP_69354adf/HCP_69354adf', #
+    '--output', '/data/richiercj/DR_FS/data/ucla_analysis_output/',
+    # '--remote_output','/mnt/usb1/Code/' # not needed
+    '--n_jobs', '8',
+    '-atlas_path', '/data/richiercj/metadata/parcel_metadata/69354adf_parcellation-metadata.json',
+    '--movement_regressor','None',
+    '--confounds', 'None',
+    # '--confound_subset','None'
 ]
 
 # Global Variables
@@ -85,14 +86,14 @@ hostname = platform.node()
 # }
 
 numeric_task_ref = {
-  'scap':1,
-  'bart':2,
-  'pamret':3,
-  'pamenc':4,
-  'taskswitch':5,
-  'stopsignal':6,
-  'rest':7,
-  'bht':8
+    'scap':1,
+    'bart':2,
+    'pamret':3,
+    'pamenc':4,
+    'taskswitch':5,
+    'stopsignal':6,
+    'rest':7,
+    'bht':8
 }
 
 try:
@@ -295,14 +296,14 @@ try:
     X_network.insert(0, 'task',parcels_full['task'])
     X_network['task'] = parcels_full['task']
     return X_network
-def mean_norm(df_input):
-  return df_input.apply(lambda x: (x-x.mean())/ x.std(), axis=0)
-def scale_subset(df, cols_to_exclude):
-  df_excluded = df[cols_to_exclude]
-  df_temp = df.drop(cols_to_exclude, axis=1, inplace=False)
-  df_temp = mean_norm(df_temp)
-  df_ret = pd.concat([df_excluded, df_temp], axis=1, join='inner')
-  return df_ret
+  def mean_norm(df_input):
+    return df_input.apply(lambda x: (x-x.mean())/ x.std(), axis=0)
+  def scale_subset(df, cols_to_exclude):
+    df_excluded = df[cols_to_exclude]
+    df_temp = df.drop(cols_to_exclude, axis=1, inplace=False)
+    df_temp = mean_norm(df_temp)
+    df_ret = pd.concat([df_excluded, df_temp], axis=1, join='inner')
+    return df_ret
   def connection_names(corr_matrix, labels): # Tested
     name_idx = np.triu_indices_from(corr_matrix, k=1)
     out_list = []
@@ -519,72 +520,72 @@ except Exception as e:
 
 args, leforvers = parse_args(v3_argslist)
 
-args.atlas_name = os.path.basename(args.atlas_path)[:8]
+# args.atlas_name = os.path.basename(args.atlas_path)[:8]
 
-parcellation_dict = json.load(open(args.atlas_path))
+# parcellation_dict = json.load(open(args.atlas_path))
 
-meta_dict = {
-  'atlas_name' : args.atlas_name,
-  'smoothed' : args.smoothed,
-  'ICA-Aroma' : args.ica_aroma,
-  # 'confounds': args.,
-  'subtract parcel-wise mean': True, # Fixing this at true, no cli arg
-  'concatenate':args.concatenate
-}
+# meta_dict = {
+#   'atlas_name' : args.atlas_name,
+#   'smoothed' : args.smoothed,
+#   'ICA-Aroma' : args.ica_aroma,
+#   # 'confounds': args.,
+#   'subtract parcel-wise mean': True, # Fixing this at true, no cli arg
+#   'concatenate':args.concatenate
+# }
 
-if args.confounds != "None":
-  demographics = pd.read_csv(args.confounds)
-  if args.confound_subset[0] != 'None':
-    demographics = demographics[args.confound_subset]
-  if args.movement_regressor == "None":
-    confounds = demographics
+# if args.confounds != "None":
+#   demographics = pd.read_csv(args.confounds)
+#   if args.confound_subset[0] != 'None':
+#     demographics = demographics[args.confound_subset]
+#   if args.movement_regressor == "None":
+#     confounds = demographics
 
-if args.movement_regressor is not "None":
-  relative_RMS_means_collapsed = pd.read_csv(args.movement_regressor)
-  if args.confounds is "None":
-    confounds = relative_RMS_means_collapsed
+# if args.movement_regressor is not "None":
+#   relative_RMS_means_collapsed = pd.read_csv(args.movement_regressor)
+#   if args.confounds is "None":
+#     confounds = relative_RMS_means_collapsed
 
-if (args.movement_regressor is not "None") and (args.confounds is not "None"):
-  confounds = pd.merge(relative_RMS_means_collapsed, demographics, how='left', on='Subject')
+# if (args.movement_regressor is not "None") and (args.confounds is not "None"):
+#   confounds = pd.merge(relative_RMS_means_collapsed, demographics, how='left', on='Subject')
 
-try:
-  meta_dict['confounds'] = list(confounds.columns)
-except:
-  meta_dict['confounds'] = None
+# try:
+#   meta_dict['confounds'] = list(confounds.columns)
+# except:
+#   meta_dict['confounds'] = None
 
-meta_dict['Split_version'] = 'GroupShuffleSplit_42'
+# meta_dict['Split_version'] = 'GroupShuffleSplit_42'
 
-run_uid = generate_uid(meta_dict)
+run_uid = '89952a'#generate_uid(meta_dict)
 outpath = args.output + run_uid + sep
-try:
-  os.makedirs(outpath)
-except Exception as e:
-  print(e, 'Output directory already created.')
+# try:
+#   os.makedirs(outpath)
+# except Exception as e:
+#   print(e, 'Output directory already created.')
 
-with open(outpath + run_uid + 'metadata.json', 'w') as outfile:
-  json.dump(meta_dict, outfile)
+# with open(outpath + run_uid + 'metadata.json', 'w') as outfile:
+#   json.dump(meta_dict, outfile)
 
-total_start_time = dt.datetime.now()
-logging.basicConfig(filename=f'{outpath}{run_uid}_DEBUG.log', level=logging.DEBUG)
+# total_start_time = dt.datetime.now()
+# logging.basicConfig(filename=f'{outpath}{run_uid}_DEBUG.log', level=logging.DEBUG)
 
-arch = str(platform.architecture()[0])
-logging.debug(f'Architecture: {arch}')
-machine = platform.machine()
-logging.debug(f'Processor: {machine}')
-node = platform.node()
-logging.debug(f'Node Name: {node}')
-logging.info(f'Started; {total_start_time}') #Adds a line to the logfile to be exported after analysis
-logging.debug('args: ')
-logging.debug(args)
-logging.debug('meta_dict: ')
-logging.debug(meta_dict)
+# arch = str(platform.architecture()[0])
+# logging.debug(f'Architecture: {arch}')
+# machine = platform.machine()
+# logging.debug(f'Processor: {machine}')
+# node = platform.node()
+# logging.debug(f'Node Name: {node}')
+# logging.info(f'Started; {total_start_time}') #Adds a line to the logfile to be exported after analysis
+# logging.debug('args: ')
+# logging.debug(args)
+# logging.debug('meta_dict: ')
+# logging.debug(meta_dict)
 
-basepath = args.local_path
-npy_template_ucla = '{basepath}/UCLA-ds000030_out/sub-{subject}/func/{atlas_name}_sub-{subject}_task-{session}_space-MNI152NLin2009cAsym_desc-preproc_bold.npy'
+# basepath = args.local_path
+# npy_template_ucla = '{basepath}/UCLA-ds000030_out/sub-{subject}/func/{atlas_name}_sub-{subject}_task-{session}_space-MNI152NLin2009cAsym_desc-preproc_bold.npy'
 
 
-#parcel_labels, network_labels = fetch_labels(meta_dict, f'{basepath}HCP_{args.atlas_name}{sep}') # remote version
-parcel_labels, network_labels = fetch_labels(meta_dict, f'{basepath}{sep}parcellation_metadata{sep}') # r2 version
+# #parcel_labels, network_labels = fetch_labels(meta_dict, f'{basepath}HCP_{args.atlas_name}{sep}') # remote version
+# parcel_labels, network_labels = fetch_labels(meta_dict, f'{basepath}{sep}parcellation_metadata{sep}') # r2 version
 subjects = [
   '10159','10171','10189','10193','10206','10217','10225','10227','10228',
   '10235','10249','10269','10271','10273','10274','10280','10290','10292',
@@ -636,105 +637,105 @@ feature_set_dict = {
   }
 }
 
-sub_start_time = dt.datetime.now()
-logging.info(f'Attempting to read data from {fs_outpath}: {sub_start_time}')
-try:
-  for k in feature_set_dict.keys():
-    for target_df in ['train_x','test_x','train_y','test_y']:
-      feature_set_dict[k][target_df] = pd.DataFrame(np.load(f'{fs_outpath}{k}/{run_uid}_{target_df}.npy', allow_pickle=True), columns = np.load(f'{fs_outpath}{k}/{run_uid}_{target_df}_colnames.npy', allow_pickle=True))
-  sub_end_time = dt.datetime.now()
-  logging.info(f'Premade raw data successfully imported from {fs_outpath}: {sub_end_time}')
-except:
-  sub_end_time = dt.datetime.now()
-  logging.info(f'Premade data failed to load. Importing from data from parcellated timeseries: {sub_end_time}')
-  print(f'Premade data failed to load. Importing from data from parcellated timeseries: {sub_end_time}')
+# sub_start_time = dt.datetime.now()
+# logging.info(f'Attempting to read data from {fs_outpath}: {sub_start_time}')
+# try:
+#   for k in feature_set_dict.keys():
+#     for target_df in ['train_x','test_x','train_y','test_y']:
+#       feature_set_dict[k][target_df] = pd.DataFrame(np.load(f'{fs_outpath}{k}/{run_uid}_{target_df}.npy', allow_pickle=True), columns = np.load(f'{fs_outpath}{k}/{run_uid}_{target_df}_colnames.npy', allow_pickle=True))
+#   sub_end_time = dt.datetime.now()
+#   logging.info(f'Premade raw data successfully imported from {fs_outpath}: {sub_end_time}')
+# except:
+#   sub_end_time = dt.datetime.now()
+#   logging.info(f'Premade data failed to load. Importing from data from parcellated timeseries: {sub_end_time}')
+#   print(f'Premade data failed to load. Importing from data from parcellated timeseries: {sub_end_time}')
 
-sub_start_time = dt.datetime.now()
-logging.info(f'Reading parcellated data Started: {sub_start_time}')
-parcellated_data = {}
-for session in sessions:
-  #Read in parcellated data, or parcellate data if meta-data conditions not met by available data
-  parcellated_data[session] = load_parcellated_task_timeseries_v3(meta_dict, subjects, session, npy_template = npy_template_ucla, basepath = f'/data/hx-hx1/kbaacke/datasets/UCLA') 
+# sub_start_time = dt.datetime.now()
+# logging.info(f'Reading parcellated data Started: {sub_start_time}')
+# parcellated_data = {}
+# for session in sessions:
+#   #Read in parcellated data, or parcellate data if meta-data conditions not met by available data
+#   parcellated_data[session] = load_parcellated_task_timeseries_v3(meta_dict, subjects, session, npy_template = npy_template_ucla, basepath = f'/data/hx-hx1/kbaacke/datasets/UCLA') 
 
-sub_end_time = dt.datetime.now()
-logging.info(f'Reading parcellated data Done: {sub_end_time}')
+# sub_end_time = dt.datetime.now()
+# logging.info(f'Reading parcellated data Done: {sub_end_time}')
 
-sub_start_time = dt.datetime.now()
-logging.info(f'generate_parcel_connection_features Started: {sub_start_time}')
-parcel_connection_task_data = generate_parcel_connection_features(parcellated_data, parcel_labels)
-sub_end_time = dt.datetime.now()
-logging.info(f'generate_parcel_connection_features Done: {sub_end_time}')
+# sub_start_time = dt.datetime.now()
+# logging.info(f'generate_parcel_connection_features Started: {sub_start_time}')
+# parcel_connection_task_data = generate_parcel_connection_features(parcellated_data, parcel_labels)
+# sub_end_time = dt.datetime.now()
+# logging.info(f'generate_parcel_connection_features Done: {sub_end_time}')
 
-# Merge in any confounds
-if (args.movement_regressor != "None") or (args.confounds != "None"):
-  confounds['Subject'] = confounds['Subject'].astype(str)
-  confounds['task'] = confounds['task'].astype(int)
-  confounds['temp_index'] = confounds.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
-  confounds.drop(columns=['Subject','task'], inplace=True)
-  parcel_connection_task_data['temp_index'] = parcel_connection_task_data.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
-  parcel_connection_input = pd.merge(confounds, parcel_connection_task_data, on='temp_index', how = 'right').dropna()
-else:
-  parcel_connection_input = parcel_connection_task_data
-  sub_end_time = dt.datetime.now()
-  logging.info(f'Confound merging Done: {sub_end_time}')
+# # Merge in any confounds
+# if (args.movement_regressor != "None") or (args.confounds != "None"):
+#   confounds['Subject'] = confounds['Subject'].astype(str)
+#   confounds['task'] = confounds['task'].astype(int)
+#   confounds['temp_index'] = confounds.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
+#   confounds.drop(columns=['Subject','task'], inplace=True)
+#   parcel_connection_task_data['temp_index'] = parcel_connection_task_data.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
+#   parcel_connection_input = pd.merge(confounds, parcel_connection_task_data, on='temp_index', how = 'right').dropna()
+# else:
+#   parcel_connection_input = parcel_connection_task_data
+#   sub_end_time = dt.datetime.now()
+#   logging.info(f'Confound merging Done: {sub_end_time}')
 
-# Training Test Split
-sub_start_time = dt.datetime.now()
-logging.info(f'Training Test Split Started: {sub_start_time}')
-random_state=42
-gss_holdout = GroupShuffleSplit(n_splits=1, train_size = .9, random_state = random_state)
-idx_1 = gss_holdout.split(
-    X = parcel_connection_input[parcel_connection_input.columns[6:]],
-    y = parcel_connection_input['task'],
-    groups = parcel_connection_input['Subject']
-  )
+# # Training Test Split
+# sub_start_time = dt.datetime.now()
+# logging.info(f'Training Test Split Started: {sub_start_time}')
+# random_state=42
+# gss_holdout = GroupShuffleSplit(n_splits=1, train_size = .9, random_state = random_state)
+# idx_1 = gss_holdout.split(
+#     X = parcel_connection_input[parcel_connection_input.columns[6:]],
+#     y = parcel_connection_input['task'],
+#     groups = parcel_connection_input['Subject']
+#   )
 
-idx_dict = {}
-for train, test in idx_1:
-  idx_dict['train'] = train
-  idx_dict['test'] = test
+# idx_dict = {}
+# for train, test in idx_1:
+#   idx_dict['train'] = train
+#   idx_dict['test'] = test
 
-parcel_connection_x_train = parcel_connection_input.iloc[idx_dict['train']][parcel_connection_input.columns[1:]]
-parcel_connection_x_test = parcel_connection_input.iloc[idx_dict['test']][parcel_connection_input.columns[1:]]
-parcel_connection_y_train = parcel_connection_input.iloc[idx_dict['train']][['task']]
-parcel_connection_y_test = parcel_connection_input.iloc[idx_dict['test']][['task']]
+# parcel_connection_x_train = parcel_connection_input.iloc[idx_dict['train']][parcel_connection_input.columns[1:]]
+# parcel_connection_x_test = parcel_connection_input.iloc[idx_dict['test']][parcel_connection_input.columns[1:]]
+# parcel_connection_y_train = parcel_connection_input.iloc[idx_dict['train']][['task']]
+# parcel_connection_y_test = parcel_connection_input.iloc[idx_dict['test']][['task']]
 
-sub_end_time = dt.datetime.now()
-logging.info(f'Training Test Split Done: {sub_end_time}')
+# sub_end_time = dt.datetime.now()
+# logging.info(f'Training Test Split Done: {sub_end_time}')
 
-# Scaling non-categorical Variables
-sub_start_time = dt.datetime.now()
-logging.info(f'Scaling non-categorical Variables Started: {sub_start_time}')
-try:
-  cols_to_exclude = list(confounds.columns)
-  cols_to_exclude.append('Subject')
-except:
-  cols_to_exclude = ['Subject']
+# # Scaling non-categorical Variables
+# sub_start_time = dt.datetime.now()
+# logging.info(f'Scaling non-categorical Variables Started: {sub_start_time}')
+# try:
+#   cols_to_exclude = list(confounds.columns)
+#   cols_to_exclude.append('Subject')
+# except:
+#   cols_to_exclude = ['Subject']
 
-parcel_connection_x_train = scale_subset(parcel_connection_x_train, cols_to_exclude)
-parcel_connection_x_test = scale_subset(parcel_connection_x_test, cols_to_exclude)
-# network_connection_x_train = scale_subset(network_connection_x_train, cols_to_exclude)
-# network_connection_x_test = scale_subset(network_connection_x_test, cols_to_exclude)
-sub_end_time = dt.datetime.now()
-logging.info(f'Scaling non-categorical Variables Done: {sub_end_time}')
+# parcel_connection_x_train = scale_subset(parcel_connection_x_train, cols_to_exclude)
+# parcel_connection_x_test = scale_subset(parcel_connection_x_test, cols_to_exclude)
+# # network_connection_x_train = scale_subset(network_connection_x_train, cols_to_exclude)
+# # network_connection_x_test = scale_subset(network_connection_x_test, cols_to_exclude)
+# sub_end_time = dt.datetime.now()
+# logging.info(f'Scaling non-categorical Variables Done: {sub_end_time}')
 
-##### TO SAVE #####
-feature_set_dict = {
-  'parcel_connection':{
-    'train_x': parcel_connection_x_train,
-    'test_x': parcel_connection_x_test,
-    'train_y': parcel_connection_y_train,
-    'test_y': parcel_connection_y_test
-  }
-}
-for k in feature_set_dict.keys():
-  try:
-    os.makedirs(f'{fs_outpath}/{k}')
-  except:
-    pass
-  for target_df in ['train_x','test_x','train_y','test_y']:
-    np.save(f'{fs_outpath}{k}/{run_uid}_{target_df}.npy', np.array(feature_set_dict[k][target_df]))
-    np.save(f'{fs_outpath}{k}/{run_uid}_{target_df}_colnames.npy', np.array(feature_set_dict[k][target_df].columns))
+# ##### TO SAVE #####
+# feature_set_dict = {
+#   'parcel_connection':{
+#     'train_x': parcel_connection_x_train,
+#     'test_x': parcel_connection_x_test,
+#     'train_y': parcel_connection_y_train,
+#     'test_y': parcel_connection_y_test
+#   }
+# }
+# for k in feature_set_dict.keys():
+#   try:
+#     os.makedirs(f'{fs_outpath}/{k}')
+#   except:
+#     pass
+#   for target_df in ['train_x','test_x','train_y','test_y']:
+#     np.save(f'{fs_outpath}{k}/{run_uid}_{target_df}.npy', np.array(feature_set_dict[k][target_df]))
+#     np.save(f'{fs_outpath}{k}/{run_uid}_{target_df}_colnames.npy', np.array(feature_set_dict[k][target_df].columns))
 
 
 ##### TO READ #####
@@ -768,28 +769,28 @@ logging.info(f'Feature Selection Started: {fs_start_time}')
 len_list = []
 target_keys = ['parcel_connection']
 
-# Hierarchical
-for k in target_keys:
-  # Hierarchical
-  sub_start_time = dt.datetime.now()
-  hierarchical_start = 1
-  hierarchical_end = 250
-  # try:
-  #   for n in range(hierarchical_start, hierarchical_end):
-  #     feature_set_dict[k]['hierarchical_selected_features'][h] = np.load(f'{fs_outpath}{k}/{run_uid}_hierarchical-{k}.npy')
-  #   sub_end_time = dt.datetime.now()
-  #   logging.info('Previous Hierarchical Feature Selection Output imported: {sub_end_time}')
-  # except:
-  sub_start_time = dt.datetime.now()
-  logging.info(f'\tHierarchical Feature Selection ({k}) Started: {sub_start_time}')
-  feature_set_dict[k]['hierarchical_selected_features'] = hierarchical_fs_v2(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],hierarchical_start, hierarchical_end)
-  # for n in range(hierarchical_start, hierarchical_end):
-  #   #feature_set_dict[k]['hierarchical_selected_features'][n] = hierarchical_fs(feature_set_dict[k]['train_x'],n)
-  #   n_len = len(feature_set_dict[k]['hierarchical_selected_features'][n])
-  #   if n==1 or n_len!=len(feature_set_dict[k]['hierarchical_selected_features'][n-1]):
-  #     np.save(f'{fs_outpath}{k}/{run_uid}_hierarchical-{n}.npy',np.array(feature_set_dict[k]['hierarchical_selected_features'][n]))
-  #     print(n, n_len)
-  #     len_list.append(n_len)
+# # Hierarchical
+# for k in target_keys:
+#   # Hierarchical
+#   sub_start_time = dt.datetime.now()
+#   hierarchical_start = 1
+#   hierarchical_end = 250
+#   # try:
+#   #   for n in range(hierarchical_start, hierarchical_end):
+#   #     feature_set_dict[k]['hierarchical_selected_features'][h] = np.load(f'{fs_outpath}{k}/{run_uid}_hierarchical-{k}.npy')
+#   #   sub_end_time = dt.datetime.now()
+#   #   logging.info('Previous Hierarchical Feature Selection Output imported: {sub_end_time}')
+#   # except:
+#   sub_start_time = dt.datetime.now()
+#   logging.info(f'\tHierarchical Feature Selection ({k}) Started: {sub_start_time}')
+#   feature_set_dict[k]['hierarchical_selected_features'] = hierarchical_fs_v2(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],hierarchical_start, hierarchical_end)
+#   for n in range(hierarchical_start, hierarchical_end):
+#     #feature_set_dict[k]['hierarchical_selected_features'][n] = hierarchical_fs(feature_set_dict[k]['train_x'],n)
+#     n_len = len(feature_set_dict[k]['hierarchical_selected_features'][n])
+#     if n==1 or n_len!=len(feature_set_dict[k]['hierarchical_selected_features'][n-1]):
+#       np.save(f'{fs_outpath}{k}/{run_uid}_hierarchical-{n}.npy',np.array(feature_set_dict[k]['hierarchical_selected_features'][n]))
+#       print(n, n_len)
+#       len_list.append(n_len)
 
 # # PCA
 # for k in target_keys:
@@ -816,123 +817,123 @@ for k in target_keys:
 #     sub_end_time = dt.datetime.now()
 #     logging.info(f'\tPCA Done: {sub_end_time}')
 
-# length_list3 = [
-#   19900,
-#   19877,
-#   18386,
-#   13745,
-#   9857,
-#   7402,
-#   5773,
-#   4586,
-#   3754,
-#   3125,
-#   2656,
-#   2271,
-#   1958,
-#   1727,
-#   1522,
-#   1331,
-#   1184,
-#   1064,
-#   947,
-#   857,
-#   780,
-#   709,
-#   667,
-#   616,
-#   560,
-#   513,
-#   479,
-#   450,
-#   418,
-#   390,
-#   361,
-#   342,
-#   316,
-#   294,
-#   282,
-#   271,
-#   251,
-#   242,
-#   229,
-#   214,
-#   201,
-#   191,
-#   181,
-#   172,
-#   167,
-#   162,
-#   157,
-#   152,
-#   146,
-#   142,
-#   136,
-#   132,
-#   126,
-#   124,
-#   121,
-#   116,
-#   109,
-#   105,
-#   101,
-#   96,
-#   93,
-#   90,
-#   85,
-#   79,
-#   78,
-#   76,
-#   75,
-#   74,
-#   71,
-#   70,
-#   66,
-#   65,
-#   63,
-#   61,
-#   60,
-#   57,
-#   55,
-#   54,
-#   53,
-#   50,
-#   49,
-#   47,
-#   46,
-#   45,
-#   44,
-#   42,
-#   41,
-#   39,
-#   38,
-#   36,
-#   35,
-#   34,
-#   32,
-#   31,
-#   30,
-#   29,
-#   27,
-#   26,
-#   24,
-#   23,
-#   22,
-#   21,
-#   20,
-#   19,
-#   18,
-#   17,
-#   16,
-#   15,
-#   14,
-#   13,
-#   12,
-#   10,
-#   9,
-#   8,
-#   7,6,5,4,3,2,1
-# ]
+length_list3 = [
+  19900,
+  19877,
+  18386,
+  13745,
+  9857,
+  7402,
+  5773,
+  4586,
+  3754,
+  3125,
+  2656,
+  2271,
+  1958,
+  1727,
+  1522,
+  1331,
+  1184,
+  1064,
+  947,
+  857,
+  780,
+  709,
+  667,
+  616,
+  560,
+  513,
+  479,
+  450,
+  418,
+  390,
+  361,
+  342,
+  316,
+  294,
+  282,
+  271,
+  251,
+  242,
+  229,
+  214,
+  201,
+  191,
+  181,
+  172,
+  167,
+  162,
+  157,
+  152,
+  146,
+  142,
+  136,
+  132,
+  126,
+  124,
+  121,
+  116,
+  109,
+  105,
+  101,
+  96,
+  93,
+  90,
+  85,
+  79,
+  78,
+  76,
+  75,
+  74,
+  71,
+  70,
+  66,
+  65,
+  63,
+  61,
+  60,
+  57,
+  55,
+  54,
+  53,
+  50,
+  49,
+  47,
+  46,
+  45,
+  44,
+  42,
+  41,
+  39,
+  38,
+  36,
+  35,
+  34,
+  32,
+  31,
+  30,
+  29,
+  27,
+  26,
+  24,
+  23,
+  22,
+  21,
+  20,
+  19,
+  18,
+  17,
+  16,
+  15,
+  14,
+  13,
+  12,
+  10,
+  9,
+  8,
+  7,6,5,4,3,2,1
+]
 
 # # RFC feature selection
 # ## Select from model
@@ -1088,7 +1089,7 @@ len_list = [
   7,6,5,4,3,2,1
 ]
 
-# # Select random features
+# Select random features
 # info_index = {
 #   'subset':[],
 #   'N_features':[],
@@ -1105,7 +1106,7 @@ len_list = [
 
 
 
-# # Permutation importance
+# Permutation importance
 # for k in feature_set_dict.keys():
 #   ## Permutation importance
 #   sub_start_time_outer = dt.datetime.now()
@@ -1141,8 +1142,8 @@ len_list = [
 #     np.save(f'{fs_outpath}{k}/{run_uid}_permutation_importances_est-{n_estimators}_rep-{n_repeats}.npy', permutation_importances)
 #     logging.info(f'\tPermutation Importance on {n_estimators} estimators and {n_repeats} repeats from {k} Done: {now}')
 
-# # KPCA
-# # https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.KernelPCA.html
+# KPCA # No need to rerun the FS here, but will need to rerun prediction generation script section
+# https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.KernelPCA.html
 # for k in target_keys:
 #   for kernel in ['rbf', 'linear']:
 #     sub_end_time = dt.datetime.now()
@@ -1182,29 +1183,28 @@ len_list = [
 # TruncatedSVD
 # https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.TruncatedSVD.html
 for k in target_keys:
-  for component_size in len_list:
-    if component_size <19900:
+  for component_size in length_list3:
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\tTruncatedSVD Feature Extraction ({k}) Started: {sub_end_time}')
+    try:
+      sub_start_time = dt.datetime.now()
+      feature_set_dict[k][f'train_tSVD-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_tSVD-{component_size}.npy')
+      feature_set_dict[k][f'test_tSVD-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_tSVD-{component_size}.npy')
+      feature_set_dict[k][f'tSVD-{component_size}'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_tSVD-{component_size}.pkl', 'rb'))
       sub_end_time = dt.datetime.now()
-      logging.info(f'\tTruncatedSVD Feature Extraction ({k}) Started: {sub_end_time}')
-      try:
-        sub_start_time = dt.datetime.now()
-        feature_set_dict[k][f'train_tSVD-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_tSVD-{component_size}.npy')
-        feature_set_dict[k][f'test_tSVD-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_tSVD-{component_size}.npy')
-        feature_set_dict[k][f'tSVD-{component_size}'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_tSVD-{component_size}.pkl', 'rb'))
-        sub_end_time = dt.datetime.now()
-        logging.info('\tPrevious TruncatedSVD-{component_size} Output imported: {sub_end_time}')
-      except:
-        sub_start_time = dt.datetime.now()
-        logging.info(f'\tTruncatedSVD-{component_size} Started: {sub_start_time}')
-        train_tSVD, test_tSVD, tSVD = tSVD_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_components=component_size, )
-        feature_set_dict[k][f'train_tSVD-{component_size}'] = train_tSVD
-        feature_set_dict[k][f'test_tSVD-{component_size}'] = test_tSVD
-        feature_set_dict[k][f'tSVD-{component_size}'] = tSVD
-        np.save(f'{fs_outpath}{k}/{run_uid}_train_tSVD-{component_size}.npy',feature_set_dict[k][f'train_tSVD-{component_size}'])
-        np.save(f'{fs_outpath}{k}/{run_uid}_test_tSVD-{component_size}.npy',feature_set_dict[k][f'test_tSVD-{component_size}'])
-        pk.dump(feature_set_dict[k][f'tSVD-{component_size}'], open(f'{fs_outpath}{k}/{run_uid}_tSVD-{component_size}.pkl', "wb"))
-        sub_end_time = dt.datetime.now()
-        logging.info(f'\tTruncatedSVD-{component_size} Done: {sub_end_time}')
+      logging.info('\tPrevious TruncatedSVD-{component_size} Output imported: {sub_end_time}')
+    except:
+      sub_start_time = dt.datetime.now()
+      logging.info(f'\tTruncatedSVD-{component_size} Started: {sub_start_time}')
+      train_tSVD, test_tSVD, tSVD = tSVD_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_components=component_size, )
+      feature_set_dict[k][f'train_tSVD-{component_size}'] = train_tSVD
+      feature_set_dict[k][f'test_tSVD-{component_size}'] = test_tSVD
+      feature_set_dict[k][f'tSVD-{component_size}'] = tSVD
+      np.save(f'{fs_outpath}{k}/{run_uid}_train_tSVD-{component_size}.npy',feature_set_dict[k]['train_tSVD-{component_size}'])
+      np.save(f'{fs_outpath}{k}/{run_uid}_test_tSVD-{component_size}.npy',feature_set_dict[k]['test_tSVD-{component_size}'])
+      pk.dump(feature_set_dict[k][f'tSVD-{component_size}'], open(f'{fs_outpath}{k}/{run_uid}_tSVD-{component_size}.pkl', "wb"))
+      sub_end_time = dt.datetime.now()
+      logging.info(f'\tTruncatedSVD-{component_size} Done: {sub_end_time}')
 
 # # TSNE 
 # # (https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html)
@@ -1233,32 +1233,32 @@ for k in target_keys:
 #       sub_end_time = dt.datetime.now()
 #       logging.info(f'\TSNE-{component_size} Done: {sub_end_time}')
 
-# # ICA 
-# # (https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.FastICA.html)
-# tolerance = 1
-# iterations = 1000
-# for k in target_keys:
-#   sub_end_time = dt.datetime.now()
-#   logging.info(f'\ICA Feature Extraction ({k}) Done: {sub_end_time}')
-#   # try:
-#   #   sub_start_time = dt.datetime.now()
-#   #   feature_set_dict[k][f'train_ICA'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_ICA.npy')
-#   #   feature_set_dict[k][f'test_ICA'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_ICA.npy')
-#   #   feature_set_dict[k][f'ICA'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_ICA.pkl', 'rb'))
-#   #   sub_end_time = dt.datetime.now()
-#   #   logging.info('\tPrevious ICA Output imported: {sub_end_time}')
-#   # except:
-#   sub_start_time = dt.datetime.now()
-#   logging.info(f'\ICA Started: {sub_start_time}')
-#   train_ICA, test_ICA, ICA = ICA_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'],max_iter=iterations, tol=tolerance)
-#   feature_set_dict[k][f'train_ICA_{iterations}iter_{tolerance}tol'] = train_ICA
-#   feature_set_dict[k][f'test_ICA_{iterations}iter_{tolerance}tol'] = test_ICA
-#   feature_set_dict[k][f'ICA_{iterations}iter_{tolerance}tol'] = ICA
-#   np.save(f'{fs_outpath}{k}/{run_uid}_train_ICA_{iterations}iter_{tolerance}tol.npy',feature_set_dict[k][f'train_ICA_{iterations}iter_{tolerance}tol'])
-#   np.save(f'{fs_outpath}{k}/{run_uid}_test_ICA_{iterations}iter_{tolerance}tol.npy',feature_set_dict[k][f'test_ICA_{iterations}iter_{tolerance}tol'])
-#   pk.dump(feature_set_dict[k][f'ICA_{iterations}iter_{tolerance}tol'], open(f'{fs_outpath}{k}/{run_uid}_ICA_{iterations}iter_{tolerance}tol.pkl', "wb"))
-#   sub_end_time = dt.datetime.now()
-#   logging.info(f'\ICA Done: {sub_end_time}')
+# ICA 
+# (https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.FastICA.html)
+tolerance = 1
+iterations = 1000
+for k in target_keys:
+  sub_end_time = dt.datetime.now()
+  logging.info(f'\ICA Feature Extraction ({k}) Done: {sub_end_time}')
+  # try:
+  #   sub_start_time = dt.datetime.now()
+  #   feature_set_dict[k][f'train_ICA'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_ICA.npy')
+  #   feature_set_dict[k][f'test_ICA'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_ICA.npy')
+  #   feature_set_dict[k][f'ICA'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_ICA.pkl', 'rb'))
+  #   sub_end_time = dt.datetime.now()
+  #   logging.info('\tPrevious ICA Output imported: {sub_end_time}')
+  # except:
+  sub_start_time = dt.datetime.now()
+  logging.info(f'\ICA Started: {sub_start_time}')
+  train_ICA, test_ICA, ICA = ICA_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'],max_iter=iterations, tol=tolerance)
+  feature_set_dict[k][f'train_ICA_{iterations}iter_{tolerance}tol'] = train_ICA
+  feature_set_dict[k][f'test_ICA_{iterations}iter_{tolerance}tol'] = test_ICA
+  feature_set_dict[k][f'ICA_{iterations}iter_{tolerance}tol'] = ICA
+  np.save(f'{fs_outpath}{k}/{run_uid}_train_ICA_{iterations}iter_{tolerance}tol.npy',feature_set_dict[k][f'train_ICA_{iterations}iter_{tolerance}tol'])
+  np.save(f'{fs_outpath}{k}/{run_uid}_test_ICA_{iterations}iter_{tolerance}tol.npy',feature_set_dict[k][f'test_ICA_{iterations}iter_{tolerance}tol'])
+  pk.dump(feature_set_dict[k][f'ICA_{iterations}iter_{tolerance}tol'], open(f'{fs_outpath}{k}/{run_uid}_ICA_{iterations}iter_{tolerance}tol.pkl', "wb"))
+  sub_end_time = dt.datetime.now()
+  logging.info(f'\ICA Done: {sub_end_time}')
 
 # # LE 
 # # (SpectralEmbedding: https://scikit-learn.org/stable/modules/generated/sklearn.manifold.SpectralEmbedding.html)
@@ -1287,9 +1287,9 @@ for k in target_keys:
 #     logging.info(f'\LE Done: {sub_end_time}')
 
 
-# # MDS 
-# # (https://scikit-learn.org/stable/modules/generated/sklearn.manifold.MDS.html)
-# # Did not work, no transform function, only fit_transform
+# MDS 
+# (https://scikit-learn.org/stable/modules/generated/sklearn.manifold.MDS.html)
+# Did not work, no transform function, only fit_transform
 # for k in target_keys:
 #   sub_end_time = dt.datetime.now()
 #   logging.info(f'\MDS Feature Extraction ({k}) Done: {sub_end_time}')
@@ -1314,8 +1314,8 @@ for k in target_keys:
 #     logging.info(f'\MDS Done: {sub_end_time}')
 
 
-# # LDA 
-# # (https://scikit-learn.org/stable/modules/generated/sklearn.discriminant_analysis.LinearDiscriminantAnalysis.html)
+# LDA 
+# (https://scikit-learn.org/stable/modules/generated/sklearn.discriminant_analysis.LinearDiscriminantAnalysis.html)
 # for k in target_keys:
 #   sub_end_time = dt.datetime.now()
 #   logging.info(f'\LDA Feature Extraction ({k}) Started: {sub_end_time}')

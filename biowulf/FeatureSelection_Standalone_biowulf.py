@@ -59,7 +59,7 @@ v3_argslist = [ # Used on dx and ran out of RAM on the parcell connection hierar
   # '-uname', 'kbaacke',
   # '-datahost', 'r2.psych.uiuc.edu', # not needed
   '-local_path', '/data/hx-hx1/kbaacke/datasets',# '/mnt/usb1/HCP_69354adf/HCP_69354adf', #
-  '--output', '/data/hx-hx1/kbaacke/datasets/ucla_analysis_output/',
+  '--output', '/data/hx-hx1/kbaacke/datasets/hcp_analysis_output/',
   # '--remote_output','/mnt/usb1/Code/' # not needed
   '--n_jobs', '8',
   '-atlas_path', '/data/hx-hx1/kbaacke/datasets/parcellation_metadata/69354adf_parcellation-metadata.json',
@@ -74,25 +74,14 @@ source_path = '/data/hx-hx1/kbaacke/Code/HCP-Analyses/'
 # source_path = os.path.dirname(os.path.abspath(__file__)) + sep
 sys_name = platform.system() 
 hostname = platform.node()
-# numeric_task_ref = {
-#   "tfMRI_MOTOR":4,
-#   "tfMRI_WM":7,
-#   "tfMRI_EMOTION":1,
-#   "tfMRI_GAMBLING":2,
-#   "tfMRI_LANGUAGE":3,
-#   "tfMRI_RELATIONAL":5,
-#   "tfMRI_SOCIAL":6
-# }
-
 numeric_task_ref = {
-  'scap':1,
-  'bart':2,
-  'pamret':3,
-  'pamenc':4,
-  'taskswitch':5,
-  'stopsignal':6,
-  'rest':7,
-  'bht':8
+  "tfMRI_MOTOR":4,
+  "tfMRI_WM":7,
+  "tfMRI_EMOTION":1,
+  "tfMRI_GAMBLING":2,
+  "tfMRI_LANGUAGE":3,
+  "tfMRI_RELATIONAL":5,
+  "tfMRI_SOCIAL":6
 }
 
 try:
@@ -215,26 +204,12 @@ except Exception as e:
 
 # Custom Functions
 try:
-  def load_parcellated_task_timeseries_v3(meta_dict,subjects, session, npy_template, basepath, confounds_path = None): # un-Tested
-    # New version that only takes parcellated data
-    remove_mean = meta_dict['subtract parcel-wise mean']
-    atlas_name = meta_dict['atlas_name']
-    concatenate = meta_dict['concatenate']
-    parcellated_dict = {}
-    concat_dict = {}
-    print('Loading in parcellated data for task: ', session)
-    for subject in subjects:
-      try:
-        #print('\t',subject)
-        # First try to load in numpy file
-        masked_timeseries = np.load(npy_template.format(subject=subject, session=session, atlas_name=atlas_name, basepath = basepath, sep = sep))
-        if remove_mean:
-          masked_timeseries -= masked_timeseries.mean(axis=1, keepdims=True)
-        parcellated_dict[subject] = masked_timeseries
-      except Exception as e:
-        print(f'Subject {subject} is not available: {e}')
-        pass
-    return parcellated_dict
+  def create_ordered_network_labels():
+    gregions = pd.DataFrame(np.load(source_path + "glasser_regions.npy"), columns=['Label','network','unkown'])
+    gregions = gregions[['Label','network']]
+    glabels = pd.read_csv(source_path + 'Glasser_labels.csv')
+    full_label_file = pd.merge(glabels, gregions, how='left',on='Label')
+    full_label_file.to_csv(source_path + 'mni_glasser_info.csv', index=False)
   def load_parcellated_task_timeseries_v2(meta_dict,subjects, session, npy_template, basepath, run_names = ['RL','LR'], confounds_path = None): # un-Tested
     # New version that only takes parcellated data
     remove_mean = meta_dict['subtract parcel-wise mean']
@@ -295,14 +270,14 @@ try:
     X_network.insert(0, 'task',parcels_full['task'])
     X_network['task'] = parcels_full['task']
     return X_network
-def mean_norm(df_input):
-  return df_input.apply(lambda x: (x-x.mean())/ x.std(), axis=0)
-def scale_subset(df, cols_to_exclude):
-  df_excluded = df[cols_to_exclude]
-  df_temp = df.drop(cols_to_exclude, axis=1, inplace=False)
-  df_temp = mean_norm(df_temp)
-  df_ret = pd.concat([df_excluded, df_temp], axis=1, join='inner')
-  return df_ret
+  def mean_norm(df_input):
+    return df_input.apply(lambda x: (x-x.mean())/ x.std(), axis=0)
+  def scale_subset(df, cols_to_exclude):
+    df_excluded = df[cols_to_exclude]
+    df_temp = df.drop(cols_to_exclude, axis=1, inplace=False)
+    df_temp = mean_norm(df_temp)
+    df_ret = pd.concat([df_excluded, df_temp], axis=1, join='inner')
+    return df_ret
   def connection_names(corr_matrix, labels): # Tested
     name_idx = np.triu_indices_from(corr_matrix, k=1)
     out_list = []
@@ -329,29 +304,29 @@ def scale_subset(df, cols_to_exclude):
       out_df_dict[session].insert(0, 'task',numeric_task_ref[session])
     parcels_connections_full = pd.DataFrame(pd.concat(list(out_df_dict.values()), axis = 0))
     return parcels_connections_full
-  # def generate_parcel_connection_features_v2(parcellated_data, labels, threshold = None): 
-  #   # threshold as proportion of values to keep
-  #   out_dict = {}
-  #   out_df_dict = {}
-  #   for session in parcellated_data.keys():
-  #     parcel_dict = parcellated_data[session]
-  #     out_dict[session] = {}
-  #     for subject in parcel_dict.keys():
-  #       ts = parcel_dict[subject]
-  #       cor_coef = np.corrcoef(ts.T)
-  #       if threshold != None:
-  #         cor_coef = bc.threshold_proportional(cor_coef, p = threshold)
-  #       out_dict[session][subject] = list(cor_coef[np.triu_indices_from(cor_coef, k=1)])
-  #       out_dict[session][subject].append(subject)
-  #       colnames = connection_names(cor_coef, labels)
-  #       colnames.append('Subject')
-  #     out_df_dict[session] = pd.DataFrame.from_dict(out_dict[session], orient='index', columns = colnames)
-  #     sub = out_df_dict[session]['Subject']
-  #     out_df_dict[session].drop(labels=['Subject'], axis=1, inplace=True)
-  #     out_df_dict[session].insert(0, 'Subject', sub)
-  #     out_df_dict[session].insert(0, 'task',numeric_task_ref[session])
-  #   parcels_connections_full = pd.DataFrame(pd.concat(list(out_df_dict.values()), axis = 0))
-  #   return parcels_connections_full
+  def generate_parcel_connection_features_v2(parcellated_data, labels, threshold = None): 
+    # threshold as proportion of values to keep
+    out_dict = {}
+    out_df_dict = {}
+    for session in parcellated_data.keys():
+      parcel_dict = parcellated_data[session]
+      out_dict[session] = {}
+      for subject in parcel_dict.keys():
+        ts = parcel_dict[subject]
+        cor_coef = np.corrcoef(ts.T)
+        if threshold != None:
+          cor_coef = bc.threshold_proportional(cor_coef, p = threshold)
+        out_dict[session][subject] = list(cor_coef[np.triu_indices_from(cor_coef, k=1)])
+        out_dict[session][subject].append(subject)
+        colnames = connection_names(cor_coef, labels)
+        colnames.append('Subject')
+      out_df_dict[session] = pd.DataFrame.from_dict(out_dict[session], orient='index', columns = colnames)
+      sub = out_df_dict[session]['Subject']
+      out_df_dict[session].drop(labels=['Subject'], axis=1, inplace=True)
+      out_df_dict[session].insert(0, 'Subject', sub)
+      out_df_dict[session].insert(0, 'task',numeric_task_ref[session])
+    parcels_connections_full = pd.DataFrame(pd.concat(list(out_df_dict.values()), axis = 0))
+    return parcels_connections_full
   def generate_network_connection_features(parcellated_data, networks): # Tested
     scaler = StandardScaler() 
     out_dict = {}
@@ -437,8 +412,8 @@ def scale_subset(df, cols_to_exclude):
     train_tsne = tsne.transform(train_x)
     test_tsne = tsne.transform(test_x)
     return train_tsne, test_tsne, tsne
-  def ICA_fs(train_x, test_x, n_components=None, max_iter=200, random_state=42, tol=0.0001):
-    ica = FastICA(n_components=None, max_iter=max_iter, random_state=random_state, tol=0.0001)
+  def ICA_fs(train_x, test_x, n_components=None, max_iter=200, random_state=42):
+    ica = FastICA(n_components=None, max_iter=max_iter, random_state=random_state)
     ica.fit(train_x)
     train_ica = ica.transform(train_x)
     test_ica = ica.transform(test_x)
@@ -580,60 +555,37 @@ logging.debug('meta_dict: ')
 logging.debug(meta_dict)
 
 basepath = args.local_path
-npy_template_ucla = '{basepath}/UCLA-ds000030_out/sub-{subject}/func/{atlas_name}_sub-{subject}_task-{session}_space-MNI152NLin2009cAsym_desc-preproc_bold.npy'
-
-
+npy_template_hcp = '{basepath}HCP{sep}HCP_1200{sep}{subject}{sep}MNINonLinear{sep}Results{sep}{session}_{run}{sep}{atlas_name}_{session}_{run}.npy'
+HCP_1200 = f'{basepath}{sep}HCP{sep}HCP_1200{sep}'
 #parcel_labels, network_labels = fetch_labels(meta_dict, f'{basepath}HCP_{args.atlas_name}{sep}') # remote version
 parcel_labels, network_labels = fetch_labels(meta_dict, f'{basepath}{sep}parcellation_metadata{sep}') # r2 version
-subjects = [
-  '10159','10171','10189','10193','10206','10217','10225','10227','10228',
-  '10235','10249','10269','10271','10273','10274','10280','10290','10292',
-  '10304','10316','10321','10325','10329','10339','10340','10345','10347',
-  '10356','10361','10365','10376','10377','10388','10429','10438','10440',
-  '10448','10455','10460','10471','10478','10487','10492','10506','10517',
-  '10523','10524','10525','10527','10530','10557','10565','10570','10575',
-  '10624','10629','10631','10638','10668','10672','10674','10678','10680',
-  '10686','10692','10696','10697','10704','10707','10708','10719','10724',
-  '10746','10762','10779','10785','10788','10844','10855','10871','10877',
-  '10882','10891','10893','10912','10934','10940','10948','10949','10958',
-  '10963','10968','10975','10977','10987','10998','11019','11030','11044',
-  '11050','11052','11059','11061','11062','11066','11067','11068','11077',
-  '11082','11088','11090','11097','11098','11104','11105','11106','11108',
-  '11112','11122','11128','11131','11142','11143','11149','11156','50004',
-  '50005','50006','50007','50008','50010','50013','50014','50015','50016',
-  '50020','50021','50022','50023','50025','50027','50029','50032','50033',
-  '50034','50035','50036','50038','50043','50047','50048','50049','50050',
-  '50051','50052','50053','50056','50058','50059','50060','50061','50064',
-  '50066','50067','50069','50073','50075','50076','50077','50080','50081',
-  '50083','50085','60001','60005','60006','60008','60010','60011','60012',
-  '60014','60015','60017','60020','60021','60022','60028','60030','60033',
-  '60036','60037','60038','60042','60043','60045','60046','60048','60049',
-  '60051','60052','60053','60055','60056','60057','60060','60062','60065',
-  '60066','60068','60070','60072','60073','60074','60076','60077','60078',
-  '60079','60080','60084','60087','60089','70001','70002','70004','70007',
-  '70010','70015','70017','70020','70021','70022','70026','70029','70034',
-  '70037','70040','70046','70048','70049','70051','70052','70055','70057',
-  '70058','70060','70074','70075','70076','70077','70079','70080','70081',
-  '70083','70086'
-  ]
+subjects = []
+for f in os.listdir(HCP_1200):
+  if len(f)==6:
+    subjects.append(f)
 
 # Subset Subjects here to test runtimes:
 # subects = subjects[:500]
 sessions = [
-  'scap',
-  'bart',
-  'pamret',
-  'pamenc',
-  'taskswitch',
-  'stopsignal',
-  'rest',
-  'bht'
-  ]
+  "tfMRI_MOTOR",
+  "tfMRI_WM",
+  "tfMRI_EMOTION",
+  "tfMRI_GAMBLING",
+  "tfMRI_LANGUAGE",
+  "tfMRI_RELATIONAL",
+  "tfMRI_SOCIAL"
+]
 outpath = f'{args.output}{run_uid}/'
 fs_outpath = outpath + 'FeatureSelection/'
 feature_set_dict = {
+  # 'parcel_sum':{
+  # },
+  # 'network_sum':{
+  # },
   'parcel_connection':{
   }
+  # 'network_connection':{
+  # }
 }
 
 sub_start_time = dt.datetime.now()
@@ -647,17 +599,26 @@ try:
 except:
   sub_end_time = dt.datetime.now()
   logging.info(f'Premade data failed to load. Importing from data from parcellated timeseries: {sub_end_time}')
-  print(f'Premade data failed to load. Importing from data from parcellated timeseries: {sub_end_time}')
 
 sub_start_time = dt.datetime.now()
 logging.info(f'Reading parcellated data Started: {sub_start_time}')
 parcellated_data = {}
 for session in sessions:
   #Read in parcellated data, or parcellate data if meta-data conditions not met by available data
-  parcellated_data[session] = load_parcellated_task_timeseries_v3(meta_dict, subjects, session, npy_template = npy_template_ucla, basepath = f'/data/hx-hx1/kbaacke/datasets/UCLA') 
+  parcellated_data[session] = load_parcellated_task_timeseries_v2(meta_dict, subjects, session, npy_template = npy_template_hcp, basepath = f'{basepath}{sep}') # remote version: f'{basepath}HCP_{args.atlas_name}{sep}'
 
 sub_end_time = dt.datetime.now()
 logging.info(f'Reading parcellated data Done: {sub_end_time}')
+sub_start_time = dt.datetime.now()
+logging.info(f'generate_parcel_input_features Started: {sub_start_time}')
+parcels_sums = generate_parcel_input_features(parcellated_data, parcel_labels)
+sub_end_time = dt.datetime.now()
+logging.info(f'generate_parcel_input_features Done: {sub_end_time}')
+sub_start_time = dt.datetime.now()
+logging.info(f'generate_network_input_features Started: {sub_start_time}')
+network_sums = generate_network_input_features(parcels_sums, network_labels)
+sub_end_time = dt.datetime.now()
+logging.info(f'generate_network_input_features Done: {sub_end_time}')
 
 sub_start_time = dt.datetime.now()
 logging.info(f'generate_parcel_connection_features Started: {sub_start_time}')
@@ -665,18 +626,51 @@ parcel_connection_task_data = generate_parcel_connection_features(parcellated_da
 sub_end_time = dt.datetime.now()
 logging.info(f'generate_parcel_connection_features Done: {sub_end_time}')
 
+sub_start_time = dt.datetime.now()
+logging.info(f'generate_parcel_connection_features Started: {sub_start_time}')
+parcel_connection_task_data_thresh_2 = generate_parcel_connection_features_v2(parcellated_data, parcel_labels, threshold = .2)
+sub_end_time = dt.datetime.now()
+logging.info(f'generate_parcel_connection_features Done: {sub_end_time}')
+
+sub_start_time = dt.datetime.now()
+logging.info(f'generate_network_connection_features Started: {sub_start_time}')
+network_connection_features = generate_network_connection_features(parcellated_data, network_labels)
+sub_end_time = dt.datetime.now()
+logging.info(f'generate_network_connection_features Done: {sub_end_time}')
+sub_start_time = dt.datetime.now()
+logging.info(f'Confound merging Started: {sub_start_time}')
+
 # Merge in any confounds
 if (args.movement_regressor != "None") or (args.confounds != "None"):
   confounds['Subject'] = confounds['Subject'].astype(str)
   confounds['task'] = confounds['task'].astype(int)
   confounds['temp_index'] = confounds.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
   confounds.drop(columns=['Subject','task'], inplace=True)
+  parcels_sums['temp_index'] = parcels_sums.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
+  network_sums['temp_index'] = network_sums.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
   parcel_connection_task_data['temp_index'] = parcel_connection_task_data.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
+  network_connection_features['temp_index'] = network_connection_features.apply(lambda row: str_combine(row['Subject'], row['task']), axis=1)
+  parcel_sum_input = pd.merge(confounds, parcels_sums, on='temp_index', how = 'right').dropna()
+  network_sum_input = pd.merge(confounds, network_sums, on='temp_index', how = 'right').dropna()
   parcel_connection_input = pd.merge(confounds, parcel_connection_task_data, on='temp_index', how = 'right').dropna()
+  network_connection_input = pd.merge(confounds, network_connection_features, on='temp_index', how = 'right').dropna()
 else:
+  parcel_sum_input = parcels_sums
+  network_sum_input = network_sums
   parcel_connection_input = parcel_connection_task_data
+  network_connection_input = network_connection_features
   sub_end_time = dt.datetime.now()
   logging.info(f'Confound merging Done: {sub_end_time}')
+
+# XY Split
+# sub_start_time = dt.datetime.now()
+# logging.info(f'XY Split Started: {sub_start_time}')
+# parcel_sum_x, parcel_sum_y = XY_split(parcel_sum_input, 'task')
+# network_sum_x, network_sum_y = XY_split(network_sum_input, 'task')
+# parcel_connection_x, parcel_connection_y = XY_split(parcel_connection_input, 'task')
+# network_connection_x, network_connection_y = XY_split(network_connection_input, 'task')
+# sub_end_time = dt.datetime.now()
+# logging.info(f'XY Split Done: {sub_end_time}')
 
 # Training Test Split
 sub_start_time = dt.datetime.now()
@@ -684,9 +678,9 @@ logging.info(f'Training Test Split Started: {sub_start_time}')
 random_state=42
 gss_holdout = GroupShuffleSplit(n_splits=1, train_size = .9, random_state = random_state)
 idx_1 = gss_holdout.split(
-    X = parcel_connection_input[parcel_connection_input.columns[6:]],
-    y = parcel_connection_input['task'],
-    groups = parcel_connection_input['Subject']
+    X = parcel_sum_input[parcel_sum_input.columns[6:]],
+    y = parcel_sum_input['task'],
+    groups = parcel_sum_input['Subject']
   )
 
 idx_dict = {}
@@ -694,11 +688,30 @@ for train, test in idx_1:
   idx_dict['train'] = train
   idx_dict['test'] = test
 
+# parcel_sum_x_train = parcel_sum_input.iloc[idx_dict['train']][parcel_sum_input.columns[1:]]
+# parcel_sum_x_test = parcel_sum_input.iloc[idx_dict['test']][parcel_sum_input.columns[1:]]
+# parcel_sum_y_train = parcel_sum_input.iloc[idx_dict['train']][['task']]
+# parcel_sum_y_test = parcel_sum_input.iloc[idx_dict['test']][['task']]
+
+# network_sum_x_train = network_sum_input.iloc[idx_dict['train']][network_sum_input.columns[1:]]
+# network_sum_x_test = network_sum_input.iloc[idx_dict['test']][network_sum_input.columns[1:]]
+# network_sum_y_train = network_sum_input.iloc[idx_dict['train']][['task']]
+# network_sum_y_test = network_sum_input.iloc[idx_dict['test']][['task']]
+
 parcel_connection_x_train = parcel_connection_input.iloc[idx_dict['train']][parcel_connection_input.columns[1:]]
 parcel_connection_x_test = parcel_connection_input.iloc[idx_dict['test']][parcel_connection_input.columns[1:]]
 parcel_connection_y_train = parcel_connection_input.iloc[idx_dict['train']][['task']]
 parcel_connection_y_test = parcel_connection_input.iloc[idx_dict['test']][['task']]
 
+# network_connection_x_train = network_connection_input.iloc[idx_dict['train']][network_connection_input.columns[1:]]
+# network_connection_x_test = network_connection_input.iloc[idx_dict['test']][network_connection_input.columns[1:]]
+# network_connection_y_train = network_connection_input.iloc[idx_dict['train']][['task']]
+# network_connection_y_test = network_connection_input.iloc[idx_dict['test']][['task']]
+
+# parcel_sum_x_train, parcel_sum_x_test, parcel_sum_y_train, parcel_sum_y_test = train_test_split(parcel_sum_x, parcel_sum_y, test_size = 0.2)
+# network_sum_x_train, network_sum_x_test, network_sum_y_train, network_sum_y_test = train_test_split(network_sum_x, network_sum_y, test_size = 0.2)
+# parcel_connection_x_train, parcel_connection_x_test, parcel_connection_y_train, parcel_connection_y_test = train_test_split(parcel_connection_x, parcel_connection_y, test_size = 0.2)
+# network_connection_x_train, network_connection_x_test, network_connection_y_train, network_connection_y_test = train_test_split(network_connection_x, network_connection_y, test_size = 0.2)
 sub_end_time = dt.datetime.now()
 logging.info(f'Training Test Split Done: {sub_end_time}')
 
@@ -711,6 +724,10 @@ try:
 except:
   cols_to_exclude = ['Subject']
 
+# parcel_sum_x_train = scale_subset(parcel_sum_x_train, cols_to_exclude)
+# parcel_sum_x_test = scale_subset(parcel_sum_x_test, cols_to_exclude)
+# network_sum_x_train = scale_subset(network_sum_x_train, cols_to_exclude)
+# network_sum_x_test = scale_subset(network_sum_x_test, cols_to_exclude)
 parcel_connection_x_train = scale_subset(parcel_connection_x_train, cols_to_exclude)
 parcel_connection_x_test = scale_subset(parcel_connection_x_test, cols_to_exclude)
 # network_connection_x_train = scale_subset(network_connection_x_train, cols_to_exclude)
@@ -720,12 +737,30 @@ logging.info(f'Scaling non-categorical Variables Done: {sub_end_time}')
 
 ##### TO SAVE #####
 feature_set_dict = {
+  # 'parcel_sum':{
+  #   'train_x': parcel_sum_x_train,
+  #   'test_x': parcel_sum_x_test,
+  #   'train_y': parcel_sum_y_train,
+  #   'test_y': parcel_sum_y_test
+  # },
+  # 'network_sum':{
+  #   'train_x': network_sum_x_train,
+  #   'test_x': network_sum_x_test,
+  #   'train_y': network_sum_y_train,
+  #   'test_y': network_sum_y_test
+  # },
   'parcel_connection':{
     'train_x': parcel_connection_x_train,
     'test_x': parcel_connection_x_test,
     'train_y': parcel_connection_y_train,
     'test_y': parcel_connection_y_test
-  }
+  }#,
+  # 'network_connection':{
+  #   'train_x': network_connection_x_train,
+  #   'test_x': network_connection_x_test,
+  #   'train_y': network_connection_y_train,
+  #   'test_y': network_connection_y_test
+  # }
 }
 for k in feature_set_dict.keys():
   try:
@@ -783,192 +818,74 @@ for k in target_keys:
   sub_start_time = dt.datetime.now()
   logging.info(f'\tHierarchical Feature Selection ({k}) Started: {sub_start_time}')
   feature_set_dict[k]['hierarchical_selected_features'] = hierarchical_fs_v2(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],hierarchical_start, hierarchical_end)
-  # for n in range(hierarchical_start, hierarchical_end):
-  #   #feature_set_dict[k]['hierarchical_selected_features'][n] = hierarchical_fs(feature_set_dict[k]['train_x'],n)
-  #   n_len = len(feature_set_dict[k]['hierarchical_selected_features'][n])
-  #   if n==1 or n_len!=len(feature_set_dict[k]['hierarchical_selected_features'][n-1]):
-  #     np.save(f'{fs_outpath}{k}/{run_uid}_hierarchical-{n}.npy',np.array(feature_set_dict[k]['hierarchical_selected_features'][n]))
-  #     print(n, n_len)
-  #     len_list.append(n_len)
+  for n in range(hierarchical_start, hierarchical_end):
+    #feature_set_dict[k]['hierarchical_selected_features'][n] = hierarchical_fs(feature_set_dict[k]['train_x'],n)
+    n_len = len(feature_set_dict[k]['hierarchical_selected_features'][n])
+    if n==1 or n_len!=len(feature_set_dict[k]['hierarchical_selected_features'][n-1]):
+      np.save(f'{fs_outpath}{k}/{run_uid}_hierarchical-{n}.npy',np.array(feature_set_dict[k]['hierarchical_selected_features'][n]))
+      print(n, n_len)
+      len_list.append(n_len)
+# PCA
+for k in target_keys:
+  # PCA
+  sub_end_time = dt.datetime.now()
+  logging.info(f'\tHierarchical Feature Selection ({k}) Done: {sub_end_time}')
+  try:
+    sub_start_time = dt.datetime.now()
+    feature_set_dict[k]['train_pca'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_pca.npy')
+    feature_set_dict[k]['test_pca'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_pca.npy')
+    feature_set_dict[k]['pca'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_pca.pkl', 'rb'))
+    sub_end_time = dt.datetime.now()
+    logging.info('\tPrevious PCA Output imported: {sub_end_time}')
+  except:
+    sub_start_time = dt.datetime.now()
+    logging.info(f'\tPCA Started: {sub_start_time}')
+    train_pca, test_pca, pca = pca_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], k_components=None)
+    feature_set_dict[k]['train_pca'] = train_pca
+    feature_set_dict[k]['test_pca'] = test_pca
+    feature_set_dict[k]['pca'] = pca
+    np.save(f'{fs_outpath}{k}/{run_uid}_train_pca.npy',feature_set_dict[k]['train_pca'])
+    np.save(f'{fs_outpath}{k}/{run_uid}_test_pca.npy',feature_set_dict[k]['test_pca'])
+    pk.dump(feature_set_dict[k]['pca'], open(f'{fs_outpath}{k}/{run_uid}_pca.pkl', "wb"))
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\tPCA Done: {sub_end_time}')
 
-# # PCA
-# for k in target_keys:
-#   # PCA
-#   sub_end_time = dt.datetime.now()
-#   logging.info(f'\tHierarchical Feature Selection ({k}) Done: {sub_end_time}')
-#   try:
-#     sub_start_time = dt.datetime.now()
-#     feature_set_dict[k]['train_pca'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_pca.npy')
-#     feature_set_dict[k]['test_pca'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_pca.npy')
-#     feature_set_dict[k]['pca'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_pca.pkl', 'rb'))
-#     sub_end_time = dt.datetime.now()
-#     logging.info('\tPrevious PCA Output imported: {sub_end_time}')
-#   except:
-#     sub_start_time = dt.datetime.now()
-#     logging.info(f'\tPCA Started: {sub_start_time}')
-#     train_pca, test_pca, pca = pca_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], k_components=None)
-#     feature_set_dict[k]['train_pca'] = train_pca
-#     feature_set_dict[k]['test_pca'] = test_pca
-#     feature_set_dict[k]['pca'] = pca
-#     np.save(f'{fs_outpath}{k}/{run_uid}_train_pca.npy',feature_set_dict[k]['train_pca'])
-#     np.save(f'{fs_outpath}{k}/{run_uid}_test_pca.npy',feature_set_dict[k]['test_pca'])
-#     pk.dump(feature_set_dict[k]['pca'], open(f'{fs_outpath}{k}/{run_uid}_pca.pkl', "wb"))
-#     sub_end_time = dt.datetime.now()
-#     logging.info(f'\tPCA Done: {sub_end_time}')
 
-# length_list3 = [
-#   19900,
-#   19877,
-#   18386,
-#   13745,
-#   9857,
-#   7402,
-#   5773,
-#   4586,
-#   3754,
-#   3125,
-#   2656,
-#   2271,
-#   1958,
-#   1727,
-#   1522,
-#   1331,
-#   1184,
-#   1064,
-#   947,
-#   857,
-#   780,
-#   709,
-#   667,
-#   616,
-#   560,
-#   513,
-#   479,
-#   450,
-#   418,
-#   390,
-#   361,
-#   342,
-#   316,
-#   294,
-#   282,
-#   271,
-#   251,
-#   242,
-#   229,
-#   214,
-#   201,
-#   191,
-#   181,
-#   172,
-#   167,
-#   162,
-#   157,
-#   152,
-#   146,
-#   142,
-#   136,
-#   132,
-#   126,
-#   124,
-#   121,
-#   116,
-#   109,
-#   105,
-#   101,
-#   96,
-#   93,
-#   90,
-#   85,
-#   79,
-#   78,
-#   76,
-#   75,
-#   74,
-#   71,
-#   70,
-#   66,
-#   65,
-#   63,
-#   61,
-#   60,
-#   57,
-#   55,
-#   54,
-#   53,
-#   50,
-#   49,
-#   47,
-#   46,
-#   45,
-#   44,
-#   42,
-#   41,
-#   39,
-#   38,
-#   36,
-#   35,
-#   34,
-#   32,
-#   31,
-#   30,
-#   29,
-#   27,
-#   26,
-#   24,
-#   23,
-#   22,
-#   21,
-#   20,
-#   19,
-#   18,
-#   17,
-#   16,
-#   15,
-#   14,
-#   13,
-#   12,
-#   10,
-#   9,
-#   8,
-#   7,6,5,4,3,2,1
-# ]
-
-# # RFC feature selection
-# ## Select from model
-# for k in target_keys:
-#   # RFC feature selection
-#   ## Select from model
-#   sub_start_time_outer = dt.datetime.now()
-#   logging.info(f'\tSelectFromModel on FRC on {k} started: {sub_start_time_outer}')
-#   # for x_len in len_list:
-#   for x_len in len_list:
-#     # This can be optimized, return to this later
-#     sub_start_time = dt.datetime.now()
-#     # try:
-#     #   feature_set_dict[k][f'rf_selected_{x}'] = np.load(f'{fs_outpath}{k}/{run_uid}_rf_selected_{x}.npy')
-#     #   sub_end_time = dt.datetime.now()
-#     #   logging.info(f'\t\tSelectFromModel on FRC for {x} max features read from previous run')
-#     # except:
-#     logging.info(f'\t\tSelectFromModel FRC FS V1 Started: {sub_start_time}')
-#     feature_set_dict[k][f'rf_selected_n{x_len}'] = list(
-#       compress(
-#         list(feature_set_dict[k]['train_x'].columns),
-#         random_forest_fs(
-#           feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],
-#           np.array(feature_set_dict[k]['train_y']['task']),
-#           n_estimators = 500,
-#           n_repeats=10,
-#           n_jobs=10,
-#           max_features = x_len
-#         )
-#       )
-#     )
-#     np.save(f'{fs_outpath}{k}/{run_uid}_rf_selected_n{x_len}.npy',feature_set_dict[k][f'rf_selected_n{x_len}'])
-#     sub_end_time = dt.datetime.now()
-#     logging.info(f'\t\tSelectFromModel on FRC for {x_len} max features Done: {sub_end_time}')
-#   sub_end_time_outer = dt.datetime.now()
-#   logging.info(f'\tSelectFromModel on RFC on {k} Done: {sub_end_time_outer}')
+# RFC feature selection
+## Select from model
+for k in target_keys:
+  # RFC feature selection
+  ## Select from model
+  sub_start_time_outer = dt.datetime.now()
+  logging.info(f'\tSelectFromModel on FRC on {k} started: {sub_start_time_outer}')
+  # for x_len in len_list:
+  for x_len in [9,8,7,6,5,4,3,2,1]:
+    # This can be optimized, return to this later
+    sub_start_time = dt.datetime.now()
+    # try:
+    #   feature_set_dict[k][f'rf_selected_{x}'] = np.load(f'{fs_outpath}{k}/{run_uid}_rf_selected_{x}.npy')
+    #   sub_end_time = dt.datetime.now()
+    #   logging.info(f'\t\tSelectFromModel on FRC for {x} max features read from previous run')
+    # except:
+    logging.info(f'\t\tSelectFromModel FRC FS V1 Started: {sub_start_time}')
+    feature_set_dict[k][f'rf_selected_n{x_len}'] = list(
+      compress(
+        list(feature_set_dict[k]['train_x'].columns),
+        random_forest_fs(
+          feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],
+          np.array(feature_set_dict[k]['train_y']['task']),
+          n_estimators = 500,
+          n_repeats=10,
+          n_jobs=10,
+          max_features = x_len
+        )
+      )
+    )
+    np.save(f'{fs_outpath}{k}/{run_uid}_rf_selected_n{x_len}.npy',feature_set_dict[k][f'rf_selected_n{x_len}'])
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\t\tSelectFromModel on FRC for {x_len} max features Done: {sub_end_time}')
+  sub_end_time_outer = dt.datetime.now()
+  logging.info(f'\tSelectFromModel on RFC on {k} Done: {sub_end_time_outer}')
 
 len_list = [
   19900,
@@ -1088,253 +1005,248 @@ len_list = [
   7,6,5,4,3,2,1
 ]
 
-# # Select random features
-# info_index = {
-#   'subset':[],
-#   'N_features':[],
-#   'Method':[]
-# }
+# Select random features
+info_index = {
+  'subset':[],
+  'N_features':[],
+  'Method':[]
+}
 
-# for x in len_list:
-#   for y in range (10): # Make 10 random sets per feature set size
-#     target_columns = random.sample(sorted(feature_set_dict[k]['train_x'].columns[1:]), k=x)
-#     info_index['subset'].append(f'Random_{x}_v{y}')
-#     info_index['N_features'].append(len(target_columns))
-#     info_index['Method'].append('Random')
-#     np.save(f'{fs_outpath}{k}/{run_uid}_Random_{x}_v{y}.npy', np.array(target_columns))
+for x in len_list:
+  for y in range (10): # Make 10 random sets per feature set size
+    target_columns = random.sample(sorted(feature_set_dict[k]['train_x'].columns[1:]), k=x)
+    info_index['subset'].append(f'Random_{x}_v{y}')
+    info_index['N_features'].append(len(target_columns))
+    info_index['Method'].append('Random')
+    np.save(f'{fs_outpath}{k}/{run_uid}_Random_{x}_v{y}.npy', np.array(target_columns))
 
+# Permutation importance
+for k in feature_set_dict.keys():
+  ## Permutation importance
+  sub_start_time_outer = dt.datetime.now()
+  n_estimators = 500
+  n_repeats = 50
+  try:
+    feature_set_dict[k][f'feature_importances_{n_estimators}'] = np.load(f'{fs_outpath}{k}/{run_uid}_feature_importances_est-{n_estimators}.npy')
+    logging.info('\tFRC Feature importance and permutation importance on {k} read in from prior run.')
+  except:
+    logging.info(f'\tFRC Feature importance and permutation importance on {k} started: {sub_start_time_outer}')
+    forest = RandomForestClassifier(random_state=42,n_estimators=n_estimators)
+    forest.fit(
+      feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],
+      np.array(feature_set_dict[k]['train_y']['task'])
+    )
+    now = dt.datetime.now()
+    logging.info(f'\tInitial FRC on {n_estimators} estimators from {k} Done: {now}')
+    importances = forest.feature_importances_
+    np.save(f'{fs_outpath}{k}/{run_uid}_feature_importances_est-{n_estimators}.npy', importances)
+    feature_set_dict[k][f'feature_importances_est-{n_estimators}'] = importances
+    permutation_importances_result = permutation_importance(
+      forest, 
+      feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],
+      np.array(feature_set_dict[k]['train_y']['task']),
+      n_repeats=n_repeats,
+      random_state=42, 
+      n_jobs=int(args.n_jobs)
+    )
+    permutation_importances = pd.Series(
+      permutation_importances_result.importances_mean,
+      index=feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'].columns)
+    feature_set_dict[k][f'permutation_importances_est-{n_estimators}_rep-{n_repeats}'] = permutation_importances
+    np.save(f'{fs_outpath}{k}/{run_uid}_permutation_importances_est-{n_estimators}_rep-{n_repeats}.npy', permutation_importances)
+    logging.info(f'\tPermutation Importance on {n_estimators} estimators and {n_repeats} repeats from {k} Done: {now}')
 
+# KPCA
+# https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.KernelPCA.html
+for k in target_keys:
+  for kernel in ['rbf', 'linear']:
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\tKernelPCA Feature Extraction ({k}) Done: {sub_end_time}')
+    try:
+      sub_start_time = dt.datetime.now()
+      feature_set_dict[k][f'train_kpca-{kernel}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_kpca-{kernel}.npy')
+      feature_set_dict[k][f'test_kpca-{kernel}'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_kpca-{kernel}.npy')
+      feature_set_dict[k][f'kpca-{kernel}'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_kpca-{kernel}.pkl', 'rb'))
+      sub_end_time = dt.datetime.now()
+      logging.info('\tPrevious KernelPCA-{kernel} Output imported: {sub_end_time}')
+    except:
+      sub_start_time = dt.datetime.now()
+      logging.info(f'\tKernelPCA-{kernel} Started: {sub_start_time}')
+      train_kpca, test_kpca, kpca = kpca_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_components=None, kernel = kernel, n_jobs=14)
+      feature_set_dict[k]['train_kpca-{kernel}'] = train_kpca
+      feature_set_dict[k]['test_kpca-{kernel}'] = test_kpca
+      feature_set_dict[k]['kpca-{kernel}'] = kpca
+      np.save(f'{fs_outpath}{k}/{run_uid}_train_kpca-{kernel}.npy',feature_set_dict[k]['train_kpca-{kernel}'])
+      np.save(f'{fs_outpath}{k}/{run_uid}_test_kpca-{kernel}.npy',feature_set_dict[k]['test_kpca-{kernel}'])
+      pk.dump(feature_set_dict[k]['kpca-{kernel}'], open(f'{fs_outpath}{k}/{run_uid}_kpca-{kernel}.pkl', "wb"))
+      sub_end_time = dt.datetime.now()
+      logging.info(f'\tKernelPCA-{kernel} Done: {sub_end_time}')
 
-# # Permutation importance
-# for k in feature_set_dict.keys():
-#   ## Permutation importance
-#   sub_start_time_outer = dt.datetime.now()
-#   n_estimators = 500
-#   n_repeats = 50
-#   try:
-#     feature_set_dict[k][f'feature_importances_{n_estimators}'] = np.load(f'{fs_outpath}{k}/{run_uid}_feature_importances_est-{n_estimators}.npy')
-#     logging.info('\tFRC Feature importance and permutation importance on {k} read in from prior run.')
-#   except:
-#     logging.info(f'\tFRC Feature importance and permutation importance on {k} started: {sub_start_time_outer}')
-#     forest = RandomForestClassifier(random_state=42,n_estimators=n_estimators)
-#     forest.fit(
-#       feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],
-#       np.array(feature_set_dict[k]['train_y']['task'])
-#     )
-#     now = dt.datetime.now()
-#     logging.info(f'\tInitial FRC on {n_estimators} estimators from {k} Done: {now}')
-#     importances = forest.feature_importances_
-#     np.save(f'{fs_outpath}{k}/{run_uid}_feature_importances_est-{n_estimators}.npy', importances)
-#     feature_set_dict[k][f'feature_importances_est-{n_estimators}'] = importances
-#     permutation_importances_result = permutation_importance(
-#       forest, 
-#       feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'],
-#       np.array(feature_set_dict[k]['train_y']['task']),
-#       n_repeats=n_repeats,
-#       random_state=42, 
-#       n_jobs=int(args.n_jobs)
-#     )
-#     permutation_importances = pd.Series(
-#       permutation_importances_result.importances_mean,
-#       index=feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'].columns)
-#     feature_set_dict[k][f'permutation_importances_est-{n_estimators}_rep-{n_repeats}'] = permutation_importances
-#     np.save(f'{fs_outpath}{k}/{run_uid}_permutation_importances_est-{n_estimators}_rep-{n_repeats}.npy', permutation_importances)
-#     logging.info(f'\tPermutation Importance on {n_estimators} estimators and {n_repeats} repeats from {k} Done: {now}')
-
-# # KPCA
-# # https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.KernelPCA.html
-# for k in target_keys:
-#   for kernel in ['rbf', 'linear']:
-#     sub_end_time = dt.datetime.now()
-#     logging.info(f'\tKernelPCA Feature Extraction ({k}) Done: {sub_end_time}')
-#     try:
-#       sub_start_time = dt.datetime.now()
-#       feature_set_dict[k][f'train_kpca-{kernel}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_kpca-{kernel}.npy')
-#       feature_set_dict[k][f'test_kpca-{kernel}'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_kpca-{kernel}.npy')
-#       feature_set_dict[k][f'kpca-{kernel}'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_kpca-{kernel}.pkl', 'rb'))
-#       sub_end_time = dt.datetime.now()
-#       logging.info('\tPrevious KernelPCA-{kernel} Output imported: {sub_end_time}')
-#     except:
-#       sub_start_time = dt.datetime.now()
-#       logging.info(f'\tKernelPCA-{kernel} Started: {sub_start_time}')
-#       train_kpca, test_kpca, kpca = kpca_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_components=None, kernel = kernel, n_jobs=14)
-#       feature_set_dict[k][f'train_kpca-{kernel}'] = train_kpca
-#       feature_set_dict[k][f'test_kpca-{kernel}'] = test_kpca
-#       feature_set_dict[k][f'kpca-{kernel}'] = kpca
-#       np.save(f'{fs_outpath}{k}/{run_uid}_train_kpca-{kernel}.npy',feature_set_dict[k]['train_kpca-{kernel}'])
-#       np.save(f'{fs_outpath}{k}/{run_uid}_test_kpca-{kernel}.npy',feature_set_dict[k]['test_kpca-{kernel}'])
-#       pk.dump(feature_set_dict[k][f'kpca-{kernel}'], open(f'{fs_outpath}{k}/{run_uid}_kpca-{kernel}.pkl', "wb"))
-#       sub_end_time = dt.datetime.now()
-#       logging.info(f'\tKernelPCA-{kernel} Done: {sub_end_time}')
-
-# ##### Visualizing Eigenvector to select N vars
-# import pickle as pk
-# import plotly.express as px
-# run_uid = '89952a'
-# fs_outpath = 'S:\\hcp_analysis_output\\89952a\\FeatureSelection\\parcel_connection\\'
-# k = 'parcel_connection'
-# for kernel in ['rbf', 'linear']:
-#   kpca = pk.load(open(f'{fs_outpath}{k}\\{run_uid}_kpca-{kernel}.pkl', 'rb'))
-#   print(kpca.lambdas_[:60])
-#   fig = px.line(kpca.lambdas_[:60])
-#   fig.show()
+##### Visualizing Eigenvector to select N vars
+import pickle as pk
+import plotly.express as px
+run_uid = '89952a'
+fs_outpath = 'S:\\hcp_analysis_output\\89952a\\FeatureSelection\\parcel_connection\\'
+k = 'parcel_connection'
+for kernel in ['rbf', 'linear']:
+  kpca = pk.load(open(f'{fs_outpath}{k}\\{run_uid}_kpca-{kernel}.pkl', 'rb'))
+  print(kpca.lambdas_[:60])
+  fig = px.line(kpca.lambdas_[:60])
+  fig.show()
 
 # TruncatedSVD
 # https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.TruncatedSVD.html
 for k in target_keys:
-  for component_size in len_list:
-    if component_size <19900:
+  for component_size in [50, 100, 150, 200, 300, 400, 500, 600, 700, 800, 900, 1000]:
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\tTruncatedSVD Feature Extraction ({k}) Started: {sub_end_time}')
+    try:
+      sub_start_time = dt.datetime.now()
+      feature_set_dict[k][f'train_tSVD-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_tSVD-{component_size}.npy')
+      feature_set_dict[k][f'test_tSVD-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_tSVD-{component_size}.npy')
+      feature_set_dict[k][f'tSVD-{component_size}'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_tSVD-{component_size}.pkl', 'rb'))
       sub_end_time = dt.datetime.now()
-      logging.info(f'\tTruncatedSVD Feature Extraction ({k}) Started: {sub_end_time}')
-      try:
-        sub_start_time = dt.datetime.now()
-        feature_set_dict[k][f'train_tSVD-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_tSVD-{component_size}.npy')
-        feature_set_dict[k][f'test_tSVD-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_tSVD-{component_size}.npy')
-        feature_set_dict[k][f'tSVD-{component_size}'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_tSVD-{component_size}.pkl', 'rb'))
-        sub_end_time = dt.datetime.now()
-        logging.info('\tPrevious TruncatedSVD-{component_size} Output imported: {sub_end_time}')
-      except:
-        sub_start_time = dt.datetime.now()
-        logging.info(f'\tTruncatedSVD-{component_size} Started: {sub_start_time}')
-        train_tSVD, test_tSVD, tSVD = tSVD_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_components=component_size, )
-        feature_set_dict[k][f'train_tSVD-{component_size}'] = train_tSVD
-        feature_set_dict[k][f'test_tSVD-{component_size}'] = test_tSVD
-        feature_set_dict[k][f'tSVD-{component_size}'] = tSVD
-        np.save(f'{fs_outpath}{k}/{run_uid}_train_tSVD-{component_size}.npy',feature_set_dict[k][f'train_tSVD-{component_size}'])
-        np.save(f'{fs_outpath}{k}/{run_uid}_test_tSVD-{component_size}.npy',feature_set_dict[k][f'test_tSVD-{component_size}'])
-        pk.dump(feature_set_dict[k][f'tSVD-{component_size}'], open(f'{fs_outpath}{k}/{run_uid}_tSVD-{component_size}.pkl', "wb"))
-        sub_end_time = dt.datetime.now()
-        logging.info(f'\tTruncatedSVD-{component_size} Done: {sub_end_time}')
+      logging.info('\tPrevious TruncatedSVD-{component_size} Output imported: {sub_end_time}')
+    except:
+      sub_start_time = dt.datetime.now()
+      logging.info(f'\tTruncatedSVD-{component_size} Started: {sub_start_time}')
+      train_tSVD, test_tSVD, tSVD = tSVD_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_components=component_size, )
+      feature_set_dict[k]['train_tSVD-{component_size}'] = train_tSVD
+      feature_set_dict[k]['test_tSVD-{component_size}'] = test_tSVD
+      feature_set_dict[k]['tSVD-{component_size}'] = tSVD
+      np.save(f'{fs_outpath}{k}/{run_uid}_train_tSVD-{component_size}.npy',feature_set_dict[k]['train_tSVD-{component_size}'])
+      np.save(f'{fs_outpath}{k}/{run_uid}_test_tSVD-{component_size}.npy',feature_set_dict[k]['test_tSVD-{component_size}'])
+      pk.dump(feature_set_dict[k]['tSVD-{component_size}'], open(f'{fs_outpath}{k}/{run_uid}_tSVD-{component_size}.pkl', "wb"))
+      sub_end_time = dt.datetime.now()
+      logging.info(f'\tTruncatedSVD-{component_size} Done: {sub_end_time}')
 
-# # TSNE 
-# # (https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html)
-# # BAD; no transform function, only fit_transform
-# for k in target_keys:
-#   for component_size in [2]:
-#     sub_end_time = dt.datetime.now()
-#     logging.info(f'\TSNE Feature Extraction ({k}) Done: {sub_end_time}')
-#     try:
-#       sub_start_time = dt.datetime.now()
-#       feature_set_dict[k][f'train_TSNE-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_TSNE-{component_size}.npy')
-#       feature_set_dict[k][f'test_TSNE-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_TSNE-{component_size}.npy')
-#       feature_set_dict[k][f'TSNE-{component_size}'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_TSNE-{component_size}.pkl', 'rb'))
-#       sub_end_time = dt.datetime.now()
-#       logging.info('\tPrevious TruncatedSVD-{component_size} Output imported: {sub_end_time}')
-#     except:
-#       sub_start_time = dt.datetime.now()
-#       logging.info(f'\TSNE-{component_size} Started: {sub_start_time}')
-#       train_TSNE, test_TSNE, TSNE = TSNE_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_components=component_size, n_jobs = 14)
-#       feature_set_dict[k]['train_TSNE-{component_size}'] = train_TSNE
-#       feature_set_dict[k]['test_TSNE-{component_size}'] = test_TSNE
-#       feature_set_dict[k]['TSNE-{component_size}'] = TSNE
-#       np.save(f'{fs_outpath}{k}/{run_uid}_train_TSNE-{component_size}.npy',feature_set_dict[k]['train_TSNE-{component_size}'])
-#       np.save(f'{fs_outpath}{k}/{run_uid}_test_TSNE-{component_size}.npy',feature_set_dict[k]['test_TSNE-{component_size}'])
-#       pk.dump(feature_set_dict[k]['TSNE-{component_size}'], open(f'{fs_outpath}{k}/{run_uid}_TSNE-{component_size}.pkl', "wb"))
-#       sub_end_time = dt.datetime.now()
-#       logging.info(f'\TSNE-{component_size} Done: {sub_end_time}')
+# TSNE 
+# (https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html)
+# BAD; no transform function, only fit_transform
+for k in target_keys:
+  for component_size in [2]:
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\TSNE Feature Extraction ({k}) Done: {sub_end_time}')
+    try:
+      sub_start_time = dt.datetime.now()
+      feature_set_dict[k][f'train_TSNE-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_TSNE-{component_size}.npy')
+      feature_set_dict[k][f'test_TSNE-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_TSNE-{component_size}.npy')
+      feature_set_dict[k][f'TSNE-{component_size}'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_TSNE-{component_size}.pkl', 'rb'))
+      sub_end_time = dt.datetime.now()
+      logging.info('\tPrevious TruncatedSVD-{component_size} Output imported: {sub_end_time}')
+    except:
+      sub_start_time = dt.datetime.now()
+      logging.info(f'\TSNE-{component_size} Started: {sub_start_time}')
+      train_TSNE, test_TSNE, TSNE = TSNE_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_components=component_size, n_jobs = 14)
+      feature_set_dict[k]['train_TSNE-{component_size}'] = train_TSNE
+      feature_set_dict[k]['test_TSNE-{component_size}'] = test_TSNE
+      feature_set_dict[k]['TSNE-{component_size}'] = TSNE
+      np.save(f'{fs_outpath}{k}/{run_uid}_train_TSNE-{component_size}.npy',feature_set_dict[k]['train_TSNE-{component_size}'])
+      np.save(f'{fs_outpath}{k}/{run_uid}_test_TSNE-{component_size}.npy',feature_set_dict[k]['test_TSNE-{component_size}'])
+      pk.dump(feature_set_dict[k]['TSNE-{component_size}'], open(f'{fs_outpath}{k}/{run_uid}_TSNE-{component_size}.pkl', "wb"))
+      sub_end_time = dt.datetime.now()
+      logging.info(f'\TSNE-{component_size} Done: {sub_end_time}')
 
-# # ICA 
-# # (https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.FastICA.html)
-# tolerance = 1
-# iterations = 1000
-# for k in target_keys:
-#   sub_end_time = dt.datetime.now()
-#   logging.info(f'\ICA Feature Extraction ({k}) Done: {sub_end_time}')
-#   # try:
-#   #   sub_start_time = dt.datetime.now()
-#   #   feature_set_dict[k][f'train_ICA'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_ICA.npy')
-#   #   feature_set_dict[k][f'test_ICA'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_ICA.npy')
-#   #   feature_set_dict[k][f'ICA'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_ICA.pkl', 'rb'))
-#   #   sub_end_time = dt.datetime.now()
-#   #   logging.info('\tPrevious ICA Output imported: {sub_end_time}')
-#   # except:
-#   sub_start_time = dt.datetime.now()
-#   logging.info(f'\ICA Started: {sub_start_time}')
-#   train_ICA, test_ICA, ICA = ICA_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'],max_iter=iterations, tol=tolerance)
-#   feature_set_dict[k][f'train_ICA_{iterations}iter_{tolerance}tol'] = train_ICA
-#   feature_set_dict[k][f'test_ICA_{iterations}iter_{tolerance}tol'] = test_ICA
-#   feature_set_dict[k][f'ICA_{iterations}iter_{tolerance}tol'] = ICA
-#   np.save(f'{fs_outpath}{k}/{run_uid}_train_ICA_{iterations}iter_{tolerance}tol.npy',feature_set_dict[k][f'train_ICA_{iterations}iter_{tolerance}tol'])
-#   np.save(f'{fs_outpath}{k}/{run_uid}_test_ICA_{iterations}iter_{tolerance}tol.npy',feature_set_dict[k][f'test_ICA_{iterations}iter_{tolerance}tol'])
-#   pk.dump(feature_set_dict[k][f'ICA_{iterations}iter_{tolerance}tol'], open(f'{fs_outpath}{k}/{run_uid}_ICA_{iterations}iter_{tolerance}tol.pkl', "wb"))
-#   sub_end_time = dt.datetime.now()
-#   logging.info(f'\ICA Done: {sub_end_time}')
+# ICA 
+# (https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.FastICA.html)
+for k in target_keys:
+  sub_end_time = dt.datetime.now()
+  logging.info(f'\ICA Feature Extraction ({k}) Done: {sub_end_time}')
+  try:
+    sub_start_time = dt.datetime.now()
+    feature_set_dict[k][f'train_ICA'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_ICA.npy')
+    feature_set_dict[k][f'test_ICA'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_ICA.npy')
+    feature_set_dict[k][f'ICA'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_ICA.pkl', 'rb'))
+    sub_end_time = dt.datetime.now()
+    logging.info('\tPrevious ICA Output imported: {sub_end_time}')
+  except:
+    sub_start_time = dt.datetime.now()
+    logging.info(f'\ICA Started: {sub_start_time}')
+    train_ICA, test_ICA, ICA = ICA_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'])
+    feature_set_dict[k]['train_ICA'] = train_ICA
+    feature_set_dict[k]['test_ICA'] = test_ICA
+    feature_set_dict[k]['ICA'] = ICA
+    np.save(f'{fs_outpath}{k}/{run_uid}_train_ICA.npy',feature_set_dict[k]['train_ICA'])
+    np.save(f'{fs_outpath}{k}/{run_uid}_test_ICA.npy',feature_set_dict[k]['test_ICA'])
+    pk.dump(feature_set_dict[k]['ICA'], open(f'{fs_outpath}{k}/{run_uid}_ICA.pkl', "wb"))
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\ICA Done: {sub_end_time}')
 
-# # LE 
-# # (SpectralEmbedding: https://scikit-learn.org/stable/modules/generated/sklearn.manifold.SpectralEmbedding.html)
-# # Did not work, no transform function, only fit_transform
-# for k in target_keys:
-#   sub_end_time = dt.datetime.now()
-#   logging.info(f'\LE Feature Extraction ({k}) Done: {sub_end_time}')
-#   try:
-#     sub_start_time = dt.datetime.now()
-#     feature_set_dict[k][f'train_LE'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_LE.npy')
-#     feature_set_dict[k][f'test_LE'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_LE.npy')
-#     feature_set_dict[k][f'LE'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_LE.pkl', 'rb'))
-#     sub_end_time = dt.datetime.now()
-#     logging.info('\tPrevious LE Output imported: {sub_end_time}')
-#   except:
-#     sub_start_time = dt.datetime.now()
-#     logging.info(f'\LE Started: {sub_start_time}')
-#     train_LE, test_LE, LE = LE_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_jobs = 14)
-#     feature_set_dict[k]['train_LE'] = train_LE
-#     feature_set_dict[k]['test_LE'] = test_LE
-#     feature_set_dict[k]['LE'] = LE
-#     np.save(f'{fs_outpath}{k}/{run_uid}_train_LE.npy',feature_set_dict[k]['train_LE'])
-#     np.save(f'{fs_outpath}{k}/{run_uid}_test_LE.npy',feature_set_dict[k]['test_LE'])
-#     pk.dump(feature_set_dict[k]['LE'], open(f'{fs_outpath}{k}/{run_uid}_LE.pkl', "wb"))
-#     sub_end_time = dt.datetime.now()
-#     logging.info(f'\LE Done: {sub_end_time}')
+# LE 
+# (SpectralEmbedding: https://scikit-learn.org/stable/modules/generated/sklearn.manifold.SpectralEmbedding.html)
+# Did not work, no transform function, only fit_transform
+for k in target_keys:
+  sub_end_time = dt.datetime.now()
+  logging.info(f'\LE Feature Extraction ({k}) Done: {sub_end_time}')
+  try:
+    sub_start_time = dt.datetime.now()
+    feature_set_dict[k][f'train_LE'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_LE.npy')
+    feature_set_dict[k][f'test_LE'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_LE.npy')
+    feature_set_dict[k][f'LE'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_LE.pkl', 'rb'))
+    sub_end_time = dt.datetime.now()
+    logging.info('\tPrevious LE Output imported: {sub_end_time}')
+  except:
+    sub_start_time = dt.datetime.now()
+    logging.info(f'\LE Started: {sub_start_time}')
+    train_LE, test_LE, LE = LE_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_jobs = 14)
+    feature_set_dict[k]['train_LE'] = train_LE
+    feature_set_dict[k]['test_LE'] = test_LE
+    feature_set_dict[k]['LE'] = LE
+    np.save(f'{fs_outpath}{k}/{run_uid}_train_LE.npy',feature_set_dict[k]['train_LE'])
+    np.save(f'{fs_outpath}{k}/{run_uid}_test_LE.npy',feature_set_dict[k]['test_LE'])
+    pk.dump(feature_set_dict[k]['LE'], open(f'{fs_outpath}{k}/{run_uid}_LE.pkl', "wb"))
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\LE Done: {sub_end_time}')
 
 
-# # MDS 
-# # (https://scikit-learn.org/stable/modules/generated/sklearn.manifold.MDS.html)
-# # Did not work, no transform function, only fit_transform
-# for k in target_keys:
-#   sub_end_time = dt.datetime.now()
-#   logging.info(f'\MDS Feature Extraction ({k}) Done: {sub_end_time}')
-#   try:
-#     sub_start_time = dt.datetime.now()
-#     feature_set_dict[k][f'train_MDS'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_MDS.npy')
-#     feature_set_dict[k][f'test_MDS'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_MDS.npy')
-#     feature_set_dict[k][f'MDS'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_MDS.pkl', 'rb'))
-#     sub_end_time = dt.datetime.now()
-#     logging.info('\tPrevious MDS Output imported: {sub_end_time}')
-#   except:
-#     sub_start_time = dt.datetime.now()
-#     logging.info(f'\MDS Started: {sub_start_time}')
-#     train_MDS, test_MDS, MDS = MDS_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_jobs = 14)
-#     feature_set_dict[k]['train_MDS'] = train_MDS
-#     feature_set_dict[k]['test_MDS'] = test_MDS
-#     feature_set_dict[k]['MDS'] = MDS
-#     np.save(f'{fs_outpath}{k}/{run_uid}_train_MDS.npy',feature_set_dict[k]['train_MDS'])
-#     np.save(f'{fs_outpath}{k}/{run_uid}_test_MDS.npy',feature_set_dict[k]['test_MDS'])
-#     pk.dump(feature_set_dict[k]['MDS'], open(f'{fs_outpath}{k}/{run_uid}_MDS.pkl', "wb"))
-#     sub_end_time = dt.datetime.now()
-#     logging.info(f'\MDS Done: {sub_end_time}')
+# MDS 
+# (https://scikit-learn.org/stable/modules/generated/sklearn.manifold.MDS.html)
+# Did not work, no transform function, only fit_transform
+for k in target_keys:
+  sub_end_time = dt.datetime.now()
+  logging.info(f'\MDS Feature Extraction ({k}) Done: {sub_end_time}')
+  try:
+    sub_start_time = dt.datetime.now()
+    feature_set_dict[k][f'train_MDS'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_MDS.npy')
+    feature_set_dict[k][f'test_MDS'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_MDS.npy')
+    feature_set_dict[k][f'MDS'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_MDS.pkl', 'rb'))
+    sub_end_time = dt.datetime.now()
+    logging.info('\tPrevious MDS Output imported: {sub_end_time}')
+  except:
+    sub_start_time = dt.datetime.now()
+    logging.info(f'\MDS Started: {sub_start_time}')
+    train_MDS, test_MDS, MDS = MDS_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns != 'Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns != 'Subject'], n_jobs = 14)
+    feature_set_dict[k]['train_MDS'] = train_MDS
+    feature_set_dict[k]['test_MDS'] = test_MDS
+    feature_set_dict[k]['MDS'] = MDS
+    np.save(f'{fs_outpath}{k}/{run_uid}_train_MDS.npy',feature_set_dict[k]['train_MDS'])
+    np.save(f'{fs_outpath}{k}/{run_uid}_test_MDS.npy',feature_set_dict[k]['test_MDS'])
+    pk.dump(feature_set_dict[k]['MDS'], open(f'{fs_outpath}{k}/{run_uid}_MDS.pkl', "wb"))
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\MDS Done: {sub_end_time}')
 
 
-# # LDA 
-# # (https://scikit-learn.org/stable/modules/generated/sklearn.discriminant_analysis.LinearDiscriminantAnalysis.html)
-# for k in target_keys:
-#   sub_end_time = dt.datetime.now()
-#   logging.info(f'\LDA Feature Extraction ({k}) Started: {sub_end_time}')
-#   try:
-#     sub_start_time = dt.datetime.now()
-#     feature_set_dict[k][f'train_LDA'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_LDA.npy')
-#     feature_set_dict[k][f'test_LDA'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_LDA.npy')
-#     feature_set_dict[k][f'LDA'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_LDA.pkl', 'rb'))
-#     sub_end_time = dt.datetime.now()
-#     logging.info('\tPrevious LDA Output imported: {sub_end_time}')
-#   except:
-#     sub_start_time = dt.datetime.now()
-#     logging.info(f'\LDA Started: {sub_start_time}')
-#     train_LDA, test_LDA, LDA = LDA_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns!='Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns!='Subject'], feature_set_dict[k]['train_y'].values.ravel())
-#     feature_set_dict[k]['train_LDA'] = train_LDA
-#     feature_set_dict[k]['test_LDA'] = test_LDA
-#     feature_set_dict[k]['LDA'] = LDA
-#     np.save(f'{fs_outpath}{k}/{run_uid}_train_LDA.npy',feature_set_dict[k]['train_LDA'])
-#     np.save(f'{fs_outpath}{k}/{run_uid}_test_LDA.npy',feature_set_dict[k]['test_LDA'])
-#     pk.dump(feature_set_dict[k]['LDA'], open(f'{fs_outpath}{k}/{run_uid}_LDA.pkl', "wb"))
-#     sub_end_time = dt.datetime.now()
-#     logging.info(f'\LDA Done: {sub_end_time}')
+# LDA 
+# (https://scikit-learn.org/stable/modules/generated/sklearn.discriminant_analysis.LinearDiscriminantAnalysis.html)
+for k in target_keys:
+  sub_end_time = dt.datetime.now()
+  logging.info(f'\LDA Feature Extraction ({k}) Started: {sub_end_time}')
+  try:
+    sub_start_time = dt.datetime.now()
+    feature_set_dict[k][f'train_LDA'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_LDA.npy')
+    feature_set_dict[k][f'test_LDA'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_LDA.npy')
+    feature_set_dict[k][f'LDA'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_LDA.pkl', 'rb'))
+    sub_end_time = dt.datetime.now()
+    logging.info('\tPrevious LDA Output imported: {sub_end_time}')
+  except:
+    sub_start_time = dt.datetime.now()
+    logging.info(f'\LDA Started: {sub_start_time}')
+    train_LDA, test_LDA, LDA = LDA_fs(feature_set_dict[k]['train_x'].loc[:,feature_set_dict[k]['train_x'].columns!='Subject'], feature_set_dict[k]['test_x'].loc[:,feature_set_dict[k]['test_x'].columns!='Subject'], feature_set_dict[k]['train_y'].values.ravel())
+    feature_set_dict[k]['train_LDA'] = train_LDA
+    feature_set_dict[k]['test_LDA'] = test_LDA
+    feature_set_dict[k]['LDA'] = LDA
+    np.save(f'{fs_outpath}{k}/{run_uid}_train_LDA.npy',feature_set_dict[k]['train_LDA'])
+    np.save(f'{fs_outpath}{k}/{run_uid}_test_LDA.npy',feature_set_dict[k]['test_LDA'])
+    pk.dump(feature_set_dict[k]['LDA'], open(f'{fs_outpath}{k}/{run_uid}_LDA.pkl', "wb"))
+    sub_end_time = dt.datetime.now()
+    logging.info(f'\LDA Done: {sub_end_time}')
