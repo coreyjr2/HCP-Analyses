@@ -1,0 +1,271 @@
+---
+title: "Dimensionality Reduction Efficacy Modeling"
+author: "Kyle Baacke"
+date: "1/10/2023"
+output: html_document
+---
+# Setup
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Imports
+```{r}
+library(QuantPsyc)
+library(lmSupport)
+library(moments)
+```
+
+# Read Data
+```{r}
+hcp_output = read.csv('S:/hcp_analysis_output/89952a/89952a_Prediction_Accuracies.csv')
+ucla_output = read.csv('S:/ucla_analysis_output/89952a/Prediction_Accuracies.csv')
+# drop duplicates, not necessary currently
+hcp_output = hcp_output[!duplicated(hcp_output[, c("metadata_ref")]),]
+ucla_output = ucla_output[!duplicated(ucla_output[, c("metadata_ref")]),]
+```
+
+# Transform data
+## Add Training Size Variable
+```{r}
+ucla_output$input_size = 1670
+hcp_output$input_size = 6677
+accuracy_df = rbind(ucla_output, hcp_output)
+colnames(accuracy_df)
+accuracy_df$RFC = ifelse(accuracy_df$Classifier=="Random Forest", 1, 0)
+```
+
+## log, sqrt, and cbrt
+```{r}
+accuracy_df$N_Features_log10 = log10(accuracy_df$N_Features)
+accuracy_df$N_Features_sqrt = sqrt(accuracy_df$N_Features)
+accuracy_df$N_Features_cbrt = accuracy_df$N_Features^(1/3)
+table(accuracy_df$FS.FR.Method)
+```
+
+# Fit models for each method
+
+## Hierarchical Clustering
+```{r}
+target_classifier = "Hierarchical Clustering"
+# model1 = lm(test_accuracy ~ RFC + input_size + N_Features, data = accuracy_df[accuracy_df$FS.FR.Method==target_classifier,])
+# summary(model1)
+# 
+# model2 = lm(test_accuracy ~ RFC + input_size + N_Features + N_Features_log10, data = accuracy_df[accuracy_df$FS.FR.Method==target_classifier,])
+# summary(model2)
+# 
+# model3 = lm(test_accuracy ~ RFC + input_size + N_Features + N_Features_sqrt, data = accuracy_df[accuracy_df$FS.FR.Method==target_classifier,])
+# summary(model3)
+
+full_model = lm(test_accuracy ~ RFC + input_size + N_Features + N_Features_sqrt + N_Features_cbrt, data = accuracy_df[accuracy_df$FS.FR.Method==target_classifier,])
+# summary(full_model)
+full_model_step = step(full_model, direction = 'backward', trace = FALSE)
+full_model_step
+final_model_HC = lm(formula = test_accuracy ~ RFC + input_size + N_Features + 
+    N_Features_sqrt + N_Features_cbrt, data = accuracy_df[accuracy_df$FS.FR.Method == 
+    target_classifier, ])
+summary(final_model_HC)
+```
+
+## kPCA
+```{r}
+target_classifier = "kPCA"
+
+full_model = lm(test_accuracy ~ RFC + input_size + N_Features + N_Features_sqrt + N_Features_cbrt, data = accuracy_df[accuracy_df$FS.FR.Method==target_classifier,])
+# summary(full_model)
+full_model_step = step(full_model, direction = 'backward', trace = FALSE)
+full_model_step
+final_model_kPCA = lm(formula = test_accuracy ~ RFC + input_size + N_Features + 
+    N_Features_sqrt + N_Features_cbrt, data = accuracy_df[accuracy_df$FS.FR.Method == 
+    target_classifier, ])
+summary(final_model_kPCA)
+```
+
+## PCA
+```{r}
+target_classifier = "PCA"
+
+full_model = lm(test_accuracy ~ RFC + input_size + N_Features + N_Features_sqrt + N_Features_cbrt, data = accuracy_df[accuracy_df$FS.FR.Method==target_classifier,])
+# summary(full_model)
+full_model_step = step(full_model, direction = 'backward', trace = FALSE)
+full_model_step
+final_model_PCA = lm(formula = test_accuracy ~ RFC + input_size + N_Features + 
+    N_Features_sqrt + N_Features_cbrt, data = accuracy_df[accuracy_df$FS.FR.Method == 
+    target_classifier, ])
+summary(final_model_PCA)
+```
+
+## Select from Model
+```{r}
+target_classifier = "Select From Model"
+
+full_model = lm(test_accuracy ~ RFC + input_size + N_Features + N_Features_sqrt + N_Features_cbrt, data = accuracy_df[accuracy_df$FS.FR.Method==target_classifier,])
+# summary(full_model)
+full_model_step = step(full_model, direction = 'backward', trace = FALSE)
+full_model_step
+final_model_SFM = lm(formula = test_accuracy ~ RFC + input_size + N_Features + 
+    N_Features_sqrt + N_Features_cbrt, data = accuracy_df[accuracy_df$FS.FR.Method == 
+    target_classifier, ])
+summary(final_model_SFM)
+```
+
+## TruncatedSVD
+```{r}
+target_classifier = "TruncatedSVD"
+
+full_model = lm(test_accuracy ~ RFC + input_size + N_Features + N_Features_sqrt + N_Features_cbrt, data = accuracy_df[accuracy_df$FS.FR.Method==target_classifier,])
+# summary(full_model)
+full_model_step = step(full_model, direction = 'backward', trace = FALSE)
+full_model_step
+final_model_tSVD = lm(formula = test_accuracy ~ RFC + input_size + N_Features + 
+    N_Features_sqrt + N_Features_cbrt, data = accuracy_df[accuracy_df$FS.FR.Method == 
+    target_classifier, ])
+summary(final_model_tSVD)
+```
+
+## Permutation Importance
+```{r}
+target_classifier = "Permutation Importance"
+
+full_model = lm(test_accuracy ~ RFC + input_size + N_Features + N_Features_sqrt + N_Features_cbrt, data = accuracy_df[accuracy_df$FS.FR.Method==target_classifier,])
+# summary(full_model)
+full_model_step = step(full_model, direction = 'backward', trace = FALSE)
+full_model_step
+final_model_PI = lm(formula = test_accuracy ~ RFC + input_size + N_Features + 
+    N_Features_sqrt + N_Features_cbrt, data = accuracy_df[accuracy_df$FS.FR.Method == 
+    target_classifier, ])
+summary(final_model_PI)
+```
+
+## LDA
+```{r}
+target_classifier = "LDA"
+
+full_model = lm(test_accuracy ~ RFC + input_size, data = accuracy_df[accuracy_df$FS.FR.Method==target_classifier,])
+summary(full_model)
+# full_model_step = step(full_model, direction = 'backward', trace = FALSE)
+# full_model_step
+# final_model_PI = lm(formula = test_accuracy ~ RFC + input_size + N_Features + 
+#     N_Features_sqrt + N_Features_cbrt, data = accuracy_df[accuracy_df$FS.FR.Method == 
+#     target_classifier, ])
+# summary(final_model_PI)
+```
+
+# Version without RFC
+
+
+## Hierarchical Clustering
+```{r}
+target_classifier = "Hierarchical Clustering"
+
+
+full_model = lm(test_accuracy ~ input_size + N_Features + N_Features_sqrt + N_Features_cbrt, data = accuracy_df[(accuracy_df$FS.FR.Method==target_classifier)&(accuracy_df$RFC==0),])
+# summary(full_model)
+full_model_step = step(full_model, direction = 'backward', trace = FALSE)
+full_model_step
+final_model_HC = lm(formula = test_accuracy ~ input_size + N_Features + 
+    N_Features_sqrt + N_Features_cbrt, data = accuracy_df[(accuracy_df$FS.FR.Method==target_classifier)&(accuracy_df$RFC==0),])
+summary(final_model_HC)
+```
+
+## kPCA
+```{r}
+target_classifier = "kPCA"
+
+full_model = lm(test_accuracy ~ input_size + N_Features + N_Features_sqrt + N_Features_cbrt, data = accuracy_df[(accuracy_df$FS.FR.Method==target_classifier)&(accuracy_df$RFC==0),])
+# summary(full_model)
+full_model_step = step(full_model, direction = 'backward', trace = FALSE)
+full_model_step
+final_model_kPCA = lm(formula = test_accuracy ~ input_size + N_Features + 
+    N_Features_sqrt + N_Features_cbrt, data = accuracy_df[(accuracy_df$FS.FR.Method==target_classifier)&(accuracy_df$RFC==0),])
+summary(final_model_kPCA)
+```
+
+## PCA
+```{r}
+target_classifier = "PCA"
+
+full_model = lm(test_accuracy ~input_size + N_Features + N_Features_sqrt + N_Features_cbrt, data = accuracy_df[(accuracy_df$FS.FR.Method==target_classifier)&(accuracy_df$RFC==0),])
+# summary(full_model)
+full_model_step = step(full_model, direction = 'backward', trace = FALSE)
+full_model_step
+final_model_PCA = lm(formula = test_accuracy ~input_size + N_Features + 
+    N_Features_sqrt + N_Features_cbrt, data = accuracy_df[(accuracy_df$FS.FR.Method==target_classifier)&(accuracy_df$RFC==0),])
+summary(final_model_PCA)
+```
+
+## Select from Model
+```{r}
+target_classifier = "Select From Model"
+
+full_model = lm(test_accuracy ~ input_size + N_Features + N_Features_sqrt + N_Features_cbrt, data = accuracy_df[(accuracy_df$FS.FR.Method==target_classifier)&(accuracy_df$RFC==0),])
+# summary(full_model)
+full_model_step = step(full_model, direction = 'backward', trace = FALSE)
+full_model_step
+final_model_SFM = lm(formula = test_accuracy ~ input_size + N_Features + 
+    N_Features_sqrt + N_Features_cbrt, data = accuracy_df[(accuracy_df$FS.FR.Method==target_classifier)&(accuracy_df$RFC==0),])
+summary(final_model_SFM)
+```
+
+## TruncatedSVD
+```{r}
+target_classifier = "TruncatedSVD"
+
+full_model = lm(test_accuracy ~ input_size + N_Features + N_Features_sqrt + N_Features_cbrt, data = accuracy_df[(accuracy_df$FS.FR.Method==target_classifier)&(accuracy_df$RFC==0),])
+# summary(full_model)
+full_model_step = step(full_model, direction = 'backward', trace = FALSE)
+full_model_step
+final_model_tSVD = lm(formula = test_accuracy ~ input_size + N_Features + 
+    N_Features_sqrt + N_Features_cbrt, data = accuracy_df[(accuracy_df$FS.FR.Method==target_classifier)&(accuracy_df$RFC==0),])
+summary(final_model_tSVD)
+```
+
+## Permutation Importance
+```{r}
+target_classifier = "Permutation Importance"
+
+full_model = lm(test_accuracy ~ input_size + N_Features + N_Features_sqrt + N_Features_cbrt, data = accuracy_df[(accuracy_df$FS.FR.Method==target_classifier)&(accuracy_df$RFC==0),])
+# summary(full_model)
+full_model_step = step(full_model, direction = 'backward', trace = FALSE)
+full_model_step
+final_model_PI = lm(formula = test_accuracy ~ input_size + N_Features + 
+    N_Features_sqrt + N_Features_cbrt, data = accuracy_df[(accuracy_df$FS.FR.Method==target_classifier)&(accuracy_df$RFC==0),])
+summary(final_model_PI)
+```
+
+## LDA
+```{r}
+target_classifier = "LDA"
+
+full_model = lm(test_accuracy ~ input_size, data = accuracy_df[(accuracy_df$FS.FR.Method==target_classifier)&(accuracy_df$RFC==0),])
+summary(full_model)
+# full_model_step = step(full_model, direction = 'backward', trace = FALSE)
+# full_model_step
+# final_model_PI = lm(formula = test_accuracy ~ RFC + input_size + N_Features + 
+#     N_Features_sqrt + N_Features_cbrt, data = accuracy_df[accuracy_df$FS.FR.Method == 
+#     target_classifier, ])
+# summary(final_model_PI)
+```
+
+## Create datafame of functions
+```{r}
+function_df = data.frame(
+    t(
+        cbind(
+            data.frame(final_model_HC$coefficients),
+            data.frame(final_model_kPCA$coefficients),
+            data.frame(final_model_PCA$coefficients),
+            data.frame(final_model_SFM$coefficients),
+            data.frame(final_model_tSVD$coefficients),
+            data.frame(final_model_PI$coefficients)
+        )
+    )
+)
+function_df$Method = rownames(function_df)
+write.csv(function_df, 'C:/Users/kyle/repos/HCP-Analyses/Dimensionality_Reduction_Models.csv', row.names=F)
+```
+
+
+
+
+

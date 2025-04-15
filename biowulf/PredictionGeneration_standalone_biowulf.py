@@ -20,12 +20,12 @@ try:
   import getpass
   import nibabel as nib
   import numpy as np
-  # from nilearn import datasets
-  # from nilearn.input_data import NiftiLabelsMasker, NiftiMapsMasker
-  # from sklearn.preprocessing import StandardScaler
+  from nilearn import datasets
+  from nilearn.input_data import NiftiLabelsMasker, NiftiMapsMasker
+  from sklearn.preprocessing import StandardScaler
   from sklearn.ensemble import RandomForestClassifier
   from sklearn.metrics import confusion_matrix, classification_report
-  # from sklearn.linear_model import LogisticRegression
+  from sklearn.linear_model import LogisticRegression
   from sklearn.model_selection import cross_val_score, train_test_split, KFold, GridSearchCV
   from sklearn.feature_selection import SelectFromModel
   from sklearn.decomposition import PCA
@@ -44,6 +44,8 @@ try:
   from skopt import BayesSearchCV ############################ Mising
   from skopt.space import Real, Categorical, Integer ############################ Mising
   from operator import itemgetter
+  from sklearn.model_selection import GroupShuffleSplit
+  from joblib import Parallel, delayed
 except Exception as e:
   print(f'Error loading libraries: ')
   raise Exception(e)
@@ -109,7 +111,7 @@ except Exception as e:
 #   raise Exception(e)
 
 v1_argslist = [ # for running from L2
-  '-source_path','/mnt/usb1/hcp_analysis_output/',
+  '-source_path','/data/hx-hx1/kbaacke/datasets/hcp_analysis_output/',#'/mnt/usb1/hcp_analysis_output/'
   '-uname','kbaacke',
   '-datahost','r2.psych.uiuc.edu',
   '-local_path','/data/hx-hx1/kbaacke/datasets/hcp_analysis_output/',#'C:\\Users\\kyle\\temp\\',#
@@ -122,7 +124,7 @@ v1_argslist = [ # for running from L2
 # Read args
 args, leforvers = parse_args(v1_argslist)
 
-# # SCP data to temp location
+# SCP data to temp location
 # if args.source_path!=None:
 #   # Interupt request for password and username if none passed
 #   if args.uname == None:
@@ -146,6 +148,7 @@ try:
     os.mkdir(outpath)
 except:
     pass
+
 run_uid = args.run_uid
 total_start_time = dt.datetime.now()
 logging.basicConfig(filename=f'{outpath}{run_uid}_DEBUG.log', level=logging.DEBUG)
@@ -176,14 +179,14 @@ sessions = [
   "tfMRI_SOCIAL"
 ]
 feature_set_dict = {
-  'parcel_sum':{
-  },
-  'network_sum':{
-  },
+  # 'parcel_sum':{
+  # },
+  # 'network_sum':{
+  # },
   'parcel_connection':{
-  },
-  'network_connection':{
-  }
+  }#,
+  # 'network_connection':{
+  # }
 }
 fs_outpath = f'{args.local_path}{run_uid}{sep}FeatureSelection{sep}'
 sub_start_time = dt.datetime.now()
@@ -197,7 +200,6 @@ try:
 except Exception as e:
   print(f'Error reading in raw data: {e}')
   logging.info(f'Error reading in raw data: {e}')
-
 
 length_list2 = [
   1,
@@ -436,81 +438,62 @@ length_list3 = [
   8,
   7,6,5,4,3,2,1
 ]
-k = 'parcel_connection'
-# Read in feature selection 
-# for k in feature_set_dict.keys():
-#   # Hierarchical
-#   sub_start_time = dt.datetime.now()
-#   hierarchical_start = 1
-#   hierarchical_end = 200
-#   feature_set_dict[k]['hierarchical_selected_features'] = {}
-#   for n in range(hierarchical_start, hierarchical_end):
-#     try:
-#       feature_set_dict[k]['hierarchical_selected_features'][n] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_hierarchical-{n}.npy')
-#     except Exception as e:
-#       print(f'Error reading {k} Hierarchical Features, n = {n}, Error: {e}')
-#       logging.info(f'Error reading {k} Hierarchical Features, n = {n}, Error: {e}')
-#   sub_end_time = dt.datetime.now()
-#   logging.info('Previous Hierarchical Feature Selection Output imported: {sub_end_time}')
-#   # PCA
-#   logging.info(f'\tHierarchical Feature Selection ({k}) Done: {sub_end_time}')
-#   try:
-#     sub_start_time = dt.datetime.now()
-#     feature_set_dict[k]['train_pca'] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_train_pca.npy')
-#     feature_set_dict[k]['test_pca'] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_test_pca.npy')
-#     feature_set_dict[k]['pca'] = pk.load(open(f'{fs_outpath}{k}{sep}{run_uid}_pca.pkl', 'rb'))
-#     sub_end_time = dt.datetime.now()
-#     logging.info('\tPrevious PCA Output imported: {sub_end_time}')
-#   except Exception as e:
-#     sub_end_time = dt.datetime.now()
-#     logging.info(f'Error reading {k} PCA: {e}, {sub_end_time}')
-#   logging.info(f'\tPCA import Done: {sub_end_time}')
-#   # RFC feature selection
-#   ## Select from model
-#   sub_start_time_outer = dt.datetime.now()
-#   logging.info(f'\tSelectFromModel on FRC on {k} started: {sub_start_time_outer}')
-#   for x_len in length_list3:
-#     # This can be optimized, return to this later
-#     sub_start_time = dt.datetime.now()
-#     try:
-#       feature_set_dict[k][f'rf_selected_n{x_len}'] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_rf_selected_n{x_len}.npy')
-#       sub_end_time = dt.datetime.now()
-#       logging.info(f'\t\tSelectFromModel on RFC for {x_len} max features read from previous run')
-#     except Exception as e:
-#       sub_end_time = dt.datetime.now()
-#       logging.info(f'\t\tError reading SelectFromModel on RFC for {x_len} max features read from previous run: {e}, {sub_end_time}')
-#   sub_end_time_outer = dt.datetime.now()
-#   logging.info(f'\tSelectFromModel on FRC on {k} Done: {sub_end_time_outer}')
-#   ## Permutation importance
-#   sub_start_time_outer = dt.datetime.now()
-#   n_estimators = 500
-#   n_repeats = 50
-#   try:
-#     feature_set_dict[k][f'feature_importances_{n_estimators}'] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_feature_importances_est-{n_estimators}.npy')
-#     logging.info('\tFRC Feature importance and permutation importance on {k} read in from prior run.')
-#   except Exception as e:
-#     logging.info(f'\tError reading {k} permutation importance features: {e}')
-## KPCA
 
+# Read in feature selection 
 for k in feature_set_dict.keys():
   # Hierarchical
   sub_start_time = dt.datetime.now()
   hierarchical_start = 1
-  hierarchical_end = 30
+  hierarchical_end = 200
   feature_set_dict[k]['hierarchical_selected_features'] = {}
-  try:
-    for n in range(hierarchical_start, hierarchical_end):
+  for n in range(hierarchical_start, hierarchical_end):
+    try:
       feature_set_dict[k]['hierarchical_selected_features'][n] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_hierarchical-{n}.npy')
+    except Exception as e:
+      print(f'Error reading {k} Hierarchical Features, n = {n}, Error: {e}')
+      logging.info(f'Error reading {k} Hierarchical Features, n = {n}, Error: {e}')
+  sub_end_time = dt.datetime.now()
+  logging.info('Previous Hierarchical Feature Selection Output imported: {sub_end_time}')
+  # PCA
+  logging.info(f'\tHierarchical Feature Selection ({k}) Done: {sub_end_time}')
+  try:
+    sub_start_time = dt.datetime.now()
+    feature_set_dict[k]['train_pca'] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_train_pca.npy')
+    feature_set_dict[k]['test_pca'] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_test_pca.npy')
+    feature_set_dict[k]['pca'] = pk.load(open(f'{fs_outpath}{k}{sep}{run_uid}_pca.pkl', 'rb'))
     sub_end_time = dt.datetime.now()
-    logging.info('Previous Hierarchical Feaure Selection Output imported: {sub_end_time}')
+    logging.info('\tPrevious PCA Output imported: {sub_end_time}')
   except Exception as e:
-    print(f'Error reading {k} Hierarchical Feaures, n = {n}, Error: {e}')
-    logging.info(f'Error reading {k} Hierarchical Feaures, n = {n}, Error: {e}')
-  logging.info(f'\tHierarchical Feaure Selection ({k}) Done: {sub_end_time}')
-
-# PCA
+    sub_end_time = dt.datetime.now()
+    logging.info(f'Error reading {k} PCA: {e}, {sub_end_time}')
+  logging.info(f'\tPCA import Done: {sub_end_time}')
+  # RFC feature selection
+  ## Select from model
+  sub_start_time_outer = dt.datetime.now()
+  logging.info(f'\tSelectFromModel on FRC on {k} started: {sub_start_time_outer}')
+  for x_len in length_list3:
+    # This can be optimized, return to this later
+    sub_start_time = dt.datetime.now()
+    try:
+      feature_set_dict[k][f'rf_selected_n{x_len}'] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_rf_selected_n{x_len}.npy')
+      sub_end_time = dt.datetime.now()
+      logging.info(f'\t\tSelectFromModel on RFC for {x_len} max features read from previous run')
+    except Exception as e:
+      sub_end_time = dt.datetime.now()
+      logging.info(f'\t\tError reading SelectFromModel on RFC for {x_len} max features read from previous run: {e}, {sub_end_time}')
+  sub_end_time_outer = dt.datetime.now()
+  logging.info(f'\tSelectFromModel on FRC on {k} Done: {sub_end_time_outer}')
+  ## Permutation importance
+  sub_start_time_outer = dt.datetime.now()
+  n_estimators = 500
+  n_repeats = 50
+  try:
+    feature_set_dict[k][f'feature_importances_{n_estimators}'] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_feature_importances_est-{n_estimators}.npy')
+    logging.info('\tFRC Feature importance and permutation importance on {k} read in from prior run.')
+  except Exception as e:
+    logging.info(f'\tError reading {k} permutation importance features: {e}')
+## KPCA
 for kernel in ['rbf', 'linear']:
-  # Read in feature selection 
   try:
     sub_start_time = dt.datetime.now()
     feature_set_dict[k][f'train_kpca-{kernel}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_kpca-{kernel}.npy')
@@ -522,33 +505,9 @@ for kernel in ['rbf', 'linear']:
     print(e)
 
 ## TruncatedSVD
-for component_size in length_list3:
+for component_size in [50, 100, 150, 200, 300, 400, 500, 600, 700, 800, 900, 1000]:
   sub_end_time = dt.datetime.now()
   logging.info(f'\tTruncatedSVD Feature Extraction ({k}) Started: {sub_end_time}')
-    sub_end_time = dt.datetime.now()
-    logging.info(f'Error reading {k} PCA: {e}, {sub_end_time}')
-  logging.info(f'\tPCA import Done: {sub_end_time}')
-  # RFC feature selection
-  ## Select from model
-  sub_start_time_outer = dt.datetime.now()
-  logging.info(f'\tSelectFromModel on FRC on {k} started: {sub_start_time_outer}')
-  for x in feature_set_dict[k]['hierarchical_selected_features'].keys():
-    if x>1 and x<len(feature_set_dict[k]['train_x'].columns):
-      # This can be optimized, return to this later
-      sub_start_time = dt.datetime.now()
-      try:
-        feature_set_dict[k][f'rf_selected_{x}'] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_rf_selected_{x}.npy')
-        sub_end_time = dt.datetime.now()
-        logging.info(f'\t\tSelectFromModel on RFC for {x} max features read from previous run')
-      except Exception as e:
-        sub_end_time = dt.datetime.now()
-        logging.info(f'\t\tError reading SelectFromModel on RFC for {x} max features read from previous run: {e}, {sub_end_time}')
-  sub_end_time_outer = dt.datetime.now()
-  logging.info(f'\tSelectFromModel on FRC on {k} Done: {sub_end_time_outer}')
-  ## Permutation importance
-  sub_start_time_outer = dt.datetime.now()
-  n_estimators = 500
-  n_repeats = 50
   try:
     sub_start_time = dt.datetime.now()
     feature_set_dict[k][f'train_tSVD-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_tSVD-{component_size}.npy')
@@ -559,30 +518,63 @@ for component_size in length_list3:
   except Exception as e:
     print(e)
 
-# ## ICA
-# try:
-#   sub_start_time = dt.datetime.now()
-#   feature_set_dict[k][f'train_ICA'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_ICA.npy')
-#   feature_set_dict[k][f'test_ICA'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_ICA.npy')
-#   feature_set_dict[k][f'ICA'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_ICA.pkl', 'rb'))
-#   sub_end_time = dt.datetime.now()
-#   logging.info('\tPrevious ICA Output imported: {sub_end_time}')
-# except Exception as e:
-#     print(e)
+## ICA
+try:
+  sub_start_time = dt.datetime.now()
+  feature_set_dict[k][f'train_ICA'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_ICA.npy')
+  feature_set_dict[k][f'test_ICA'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_ICA.npy')
+  feature_set_dict[k][f'ICA'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_ICA.pkl', 'rb'))
+  sub_end_time = dt.datetime.now()
+  logging.info('\tPrevious ICA Output imported: {sub_end_time}')
+except Exception as e:
+    print(e)
 
-# ## LDA
-# sub_end_time = dt.datetime.now()
-# logging.info(f'\LDA Feature Extraction ({k}) Started: {sub_end_time}')
-# try:
-#   sub_start_time = dt.datetime.now()
-#   feature_set_dict[k][f'train_LDA'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_LDA.npy')
-#   feature_set_dict[k][f'test_LDA'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_LDA.npy')
-#   feature_set_dict[k][f'LDA'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_LDA.pkl', 'rb'))
-#   sub_end_time = dt.datetime.now()
-#   logging.info('\tPrevious LDA Output imported: {sub_end_time}')
-# except Exception as e:
-#   print(e)
+## LDA
+sub_end_time = dt.datetime.now()
+logging.info(f'\LDA Feature Extraction ({k}) Started: {sub_end_time}')
+try:
+  sub_start_time = dt.datetime.now()
+  feature_set_dict[k][f'train_LDA'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_LDA.npy')
+  feature_set_dict[k][f'test_LDA'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_LDA.npy')
+  feature_set_dict[k][f'LDA'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_LDA.pkl', 'rb'))
+  sub_end_time = dt.datetime.now()
+  logging.info('\tPrevious LDA Output imported: {sub_end_time}')
+except Exception as e:
+  print(e)
     
+
+atlases_used = {
+  'c1720102':{# !with ICA-Aroma!
+    "atlas_name":"MNINonLinear/aparc+aseg.nii.gz",
+    "Labels": [
+      "Left-Cerebellum-Cortex", "Left-Thalamus", "Left-Caudate", "Left-Putamen", "Left-Pallidum",
+      "Left-Hippocampus", "Left-Amygdala", "Left-Accumbens-area", "Left-VentralDC", "Left-choroid-plexus", 
+      "Right-Cerebellum-Cortex", "Right-Thalamus", "Right-Caudate", "Right-Putamen", "Right-Pallidum", 
+      "Right-Hippocampus", "Right-Amygdala", "Right-Accumbens-area", "Right-VentralDC", "Right-choroid-plexus"
+      ], 
+    "confounds": None
+    },
+  'd8a41be9':{# !with ICA-Aroma!
+    "atlas_name": "Schaefer2018_200Parcels_7Networks_order_FSLMNI152_2mm", 
+    "confounds": None
+    },
+  '69354adf':{
+    "atlas_name": "Schaefer2018_200Parcels_7Networks_order_FSLMNI152_2mm", 
+    "confounds": None, 
+    "Note_1": "No Smoothing, no Confounds"
+  },
+  '056537de':{
+    "atlas_name": "MNINonLinear/aparc+aseg.nii.gz",
+    "Labels": [
+      "Left-Cerebellum-Cortex", "Left-Thalamus", "Left-Caudate", "Left-Putamen", "Left-Pallidum",
+      "Left-Hippocampus", "Left-Amygdala", "Left-Accumbens-area", "Left-VentralDC", "Left-choroid-plexus", 
+      "Right-Cerebellum-Cortex", "Right-Thalamus", "Right-Caudate", "Right-Putamen", "Right-Pallidum", 
+      "Right-Hippocampus", "Right-Amygdala", "Right-Accumbens-area", "Right-VentralDC", "Right-choroid-plexus"
+      ], 
+      "confounds": None, 
+    "Note_1": "No ICA-Aroma"
+  }
+}
 
 # Select data set (parcel vs network and _sum and _connection)
 k = 'parcel_connection'
@@ -620,7 +612,7 @@ def run_svc(train_x, train_y, test_x, test_y, dataset, subset, split_ind, method
   y_pred = clf_svm.predict(test_x)
   training_accuracy = clf_svm.score(train_x, train_y)
   test_accuracy = clf_svm.score(test_x, test_y)
-  classification_rep = classification_report(test_y, y_pred, output_dict=True)
+  classification_rep = classification_report(test_y, y_pred)
   confusion_mat = confusion_matrix(test_y, y_pred)
   # Create a UID without accuracy to prevent repeat runs due to mis-aligned accuracies
   meta_dict = {
@@ -661,24 +653,23 @@ def run_svc(train_x, train_y, test_x, test_y, dataset, subset, split_ind, method
     'FS/FR Method':[method],
     'N_Features':[feature_len],
     'metadata_ref':[pred_uid],
-    'runtime':[(end_time - start_time).total_seconds()]
+    'runtime':(end_time - start_time).total_seconds()
     # 'classification_report':classification_rep,
     # 'confusion_matrix':confusion_mat
   }
   clf_param_df.to_csv(f'{weight_path}{pred_uid}_weights.csv', index=False)
   np.savetxt(f'{confusion_path}{pred_uid}_confusion_matrix.csv', confusion_mat, delimiter=",")
-  # np.savetxt(f'{classification_path}{pred_uid}_classification_report.csv', classification_rep, delimiter=",")
-  pd.DataFrame(classification_rep).transpose().to_csv(f'{classification_path}{pred_uid}_classification_report.csv')
+  np.savetxt(f'{classification_path}{pred_uid}_classification_report.csv', confusion_mat, delimiter=",")
   return results_dict
 
 def run_rfc(train_x, train_y, test_x, test_y, dataset, subset, split_ind, method, n_estimators=500, max_depth = None):
   start_time = dt.datetime.now()
-  forest = RandomForestClassifier(random_state=random_state ,n_estimators=n_estimators, max_depth = max_depth)
+  forest = RandomForestClassifier(random_state=random_state ,n_estimators=n_estimators, max_depth = None)
   forest.fit(train_x, train_y)
   y_pred = forest.predict(test_x)
   training_accuracy = forest.score(train_x, train_y)
   test_accuracy = forest.score(test_x, test_y)
-  classification_rep = classification_report(test_y, y_pred, output_dict=True)
+  classification_rep = classification_report(test_y, y_pred)
   confusion_mat = confusion_matrix(test_y, y_pred)
   # Create a UID without accuracy to prevent repeat runs due to mis-aligned accuracies
   meta_dict = {
@@ -719,14 +710,13 @@ def run_rfc(train_x, train_y, test_x, test_y, dataset, subset, split_ind, method
     'FS/FR Method':[method],
     'N_Features':[feature_len],
     'metadata_ref':[pred_uid],
-    'runtime':[(end_time - start_time).total_seconds()]
+    'runtime':(end_time - start_time).total_seconds()
     # 'classification_report':classification_rep,
     # 'confusion_matrix':confusion_mat
   }
   forest_param_df.to_csv(f'{weight_path}{pred_uid}_weights.csv', index=False)
   np.savetxt(f'{confusion_path}{pred_uid}_confusion_matrix.csv', confusion_mat, delimiter=",")
-  # np.savetxt(f'{classification_path}{pred_uid}_classification_report.csv', classification_rep, delimiter=",")
-  pd.DataFrame(classification_rep).transpose().to_csv(f'{classification_path}{pred_uid}_classification_report.csv')
+  np.savetxt(f'{classification_path}{pred_uid}_classification_report.csv', confusion_mat, delimiter=",")
   return results_dict
 
 # gss_holdout = GroupShuffleSplit(n_splits=1, train_size = .9, random_state = random_state)
@@ -1128,83 +1118,83 @@ accuracy_df = pd.read_csv(f'{outpath}{run_uid}_Prediction_Accuracies.csv')
 # accuracy_df.to_csv(f'{outpath}Prediction_Accuracies.csv', index=False)
 # accuracy_df.to_csv(f'{outpath}Prediction_Accuracies_{datetime_str}.csv', index=False)
 
-# # Permutation Importance
-# n_estimators = 500
-# n_repeats = 50
-# ranked_features = feature_set_dict[k][f'feature_importances_{n_estimators}']
-# feature_names = full_data.columns
-# rank_df = pd.DataFrame({
-#   'feature':list(full_data.columns)[1:],
-#   'importance':ranked_features
-# })
-# rank_df.sort_values(by='importance', ascending=False,inplace=True)
-# ordered_features = list(rank_df['feature'])
-# data_dict = {}
-# for length in length_list3:
-#   data_dict[length] = {}
-#   input_subset = full_data[ordered_features[:length]]
-#   info_index['subset'].append(f'Permutation-importance_{length}')
-#   info_index['N_features'].append(length)
-#   info_index['Method'].append('Permutation Importance')
-#   for split_ind in cv_split_dict.keys():
-#     data_dict[length][split_ind] = {
-#       'train_x':input_subset.iloc[cv_split_dict[split_ind][0]],
-#       'train_y':full_data_outcome.iloc[cv_split_dict[split_ind][0]]['task'].values.ravel().astype('int'),
-#       'test_x':input_subset.iloc[cv_split_dict[split_ind][1]],
-#       'test_y':full_data_outcome.iloc[cv_split_dict[split_ind][1]]['task'].values.ravel().astype('int')
-#     }
+# Permutation Importance
+n_estimators = 500
+n_repeats = 50
+ranked_features = feature_set_dict[k][f'feature_importances_{n_estimators}']
+feature_names = full_data.columns
+rank_df = pd.DataFrame({
+  'feature':list(full_data.columns)[1:],
+  'importance':ranked_features
+})
+rank_df.sort_values(by='importance', ascending=False,inplace=True)
+ordered_features = list(rank_df['feature'])
+data_dict = {}
+for length in length_list3:
+  data_dict[length] = {}
+  input_subset = full_data[ordered_features[:length]]
+  info_index['subset'].append(f'Permutation-importance_{length}')
+  info_index['N_features'].append(length)
+  info_index['Method'].append('Permutation Importance')
+  for split_ind in cv_split_dict.keys():
+    data_dict[length][split_ind] = {
+      'train_x':input_subset.iloc[cv_split_dict[split_ind][0]],
+      'train_y':full_data_outcome.iloc[cv_split_dict[split_ind][0]]['task'].values.ravel().astype('int'),
+      'test_x':input_subset.iloc[cv_split_dict[split_ind][1]],
+      'test_y':full_data_outcome.iloc[cv_split_dict[split_ind][1]]['task'].values.ravel().astype('int')
+    }
 
 
-# results_rfc_list = Parallel(n_jobs = 10)(
-#   delayed(run_rfc)(
-#     train_x = data_dict[length][split_ind]['train_x'],
-#     train_y = data_dict[length][split_ind]['train_y'],
-#     test_x = data_dict[length][split_ind]['test_x'],
-#     test_y = data_dict[length][split_ind]['test_y'],
-#     dataset = 'HCP_1200',
-#     subset = f'Permutation-Importance_{length}',
-#     split_ind = split_ind,
-#     method='Permutation Importance'
-#     ) for split_ind in cv_split_dict.keys() for length in length_list3
-#   )
+results_rfc_list = Parallel(n_jobs = 10)(
+  delayed(run_rfc)(
+    train_x = data_dict[length][split_ind]['train_x'],
+    train_y = data_dict[length][split_ind]['train_y'],
+    test_x = data_dict[length][split_ind]['test_x'],
+    test_y = data_dict[length][split_ind]['test_y'],
+    dataset = 'HCP_1200',
+    subset = f'Permutation-Importance_{length}',
+    split_ind = split_ind,
+    method='Permutation Importance'
+    ) for split_ind in cv_split_dict.keys() for length in length_list3
+  )
 
-# df_concat_list = [accuracy_df]
-# for res_dict in results_rfc_list:
-#   df_concat_list.append(pd.DataFrame(res_dict))
-#   print(f'Dataset: {res_dict["dataset"]}, subset {res_dict["subset"]}, {res_dict["split_ind"]}')
-#   print(f'\tTraining Accuracy: {res_dict["train_accuracy"]}')
-#   print(f'\tTest Accuracy: {res_dict["test_accuracy"]}')
+df_concat_list = [accuracy_df]
+for res_dict in results_rfc_list:
+  df_concat_list.append(pd.DataFrame(res_dict))
+  print(f'Dataset: {res_dict["dataset"]}, subset {res_dict["subset"]}, {res_dict["split_ind"]}')
+  print(f'\tTraining Accuracy: {res_dict["train_accuracy"]}')
+  print(f'\tTest Accuracy: {res_dict["test_accuracy"]}')
 
-# accuracy_df = pd.concat(df_concat_list)
-# print(accuracy_df)
-# datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
-# accuracy_df.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
-# accuracy_df.to_csv(f'{outpath}Prediction_Accuracies.csv', index=False)
-# accuracy_df.to_csv(f'{outpath}Prediction_Accuracies_{datetime_str}.csv', index=False)
+accuracy_df = pd.concat(df_concat_list)
+print(accuracy_df)
+datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+accuracy_df.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
+accuracy_df.to_csv(f'{outpath}Prediction_Accuracies.csv', index=False)
+accuracy_df.to_csv(f'{outpath}Prediction_Accuracies_{datetime_str}.csv', index=False)
 
-# results_svc_list = Parallel(n_jobs = 10)(
-#   delayed(run_svc)(
-#     train_x = data_dict[length][split_ind]['train_x'],
-#     train_y = data_dict[length][split_ind]['train_y'],
-#     test_x = data_dict[length][split_ind]['test_x'],
-#     test_y = data_dict[length][split_ind]['test_y'],
-#     dataset = 'HCP_1200',
-#     subset = f'Permutation-Importance_{length}',
-#     split_ind = split_ind,
-#     method='Permutation Importance'
-#     ) for split_ind in cv_split_dict.keys() for length in length_list3
-#   )
+results_svc_list = Parallel(n_jobs = 10)(
+  delayed(run_svc)(
+    train_x = data_dict[length][split_ind]['train_x'],
+    train_y = data_dict[length][split_ind]['train_y'],
+    test_x = data_dict[length][split_ind]['test_x'],
+    test_y = data_dict[length][split_ind]['test_y'],
+    dataset = 'HCP_1200',
+    subset = f'Permutation-Importance_{length}',
+    split_ind = split_ind,
+    method='Permutation Importance'
+    ) for split_ind in cv_split_dict.keys() for length in length_list3
+  )
 
-# for res_dict in results_svc_list:
-#   df_concat_list.append(pd.DataFrame(res_dict))
+for res_dict in results_svc_list:
+  df_concat_list.append(pd.DataFrame(res_dict))
 
-# accuracy_df = pd.concat(df_concat_list)
+accuracy_df = pd.concat(df_concat_list)
 
-# print(accuracy_df)
-# datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
-# accuracy_df.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
-# accuracy_df.to_csv(f'{outpath}Prediction_Accuracies.csv', index=False)
-# accuracy_df.to_csv(f'{outpath}Prediction_Accuracies_{datetime_str}.csv', index=False)
+print(accuracy_df)
+datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+accuracy_df.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
+accuracy_df.to_csv(f'{outpath}Prediction_Accuracies.csv', index=False)
+accuracy_df.to_csv(f'{outpath}Prediction_Accuracies_{datetime_str}.csv', index=False)
 
 # info_df2 = pd.DataFrame(info_index)
 # info_df3 = pd.concat([info_df, info_df2])
@@ -1214,187 +1204,196 @@ accuracy_df = pd.read_csv(f'{outpath}{run_uid}_Prediction_Accuracies.csv')
 # This will be too big if I do it all at once. Cluster time?
 # Cluster time = Big fail; time to try the run around and click method
 
-k = 'parcel_connection'
+
+
 # KPCA
 n_components = 25
-for n_components in length_list3:
-  if n_components <= 6676:
-    data_dict = {}
-    for kernel in ['rbf', 'linear']:
-      data_dict[kernel] = {}
-      for split_ind in cv_split_dict.keys():
-        data_dict[kernel][split_ind] = {
-          'train_x':feature_set_dict[k][f'train_kpca-{kernel}'][cv_split_dict[split_ind][0],0:n_components],
-          'train_y':full_data_outcome.iloc[cv_split_dict[split_ind][0]]['task'].values.ravel().astype('int'),
-          'test_x':feature_set_dict[k][f'train_kpca-{kernel}'][cv_split_dict[split_ind][1],0:n_components],
-          'test_y':full_data_outcome.iloc[cv_split_dict[split_ind][1]]['task'].values.ravel().astype('int')
-        }
-    results_rfc_list = Parallel(n_jobs = 10)(
-    delayed(run_rfc)(
-      train_x = data_dict[kernel][split_ind]['train_x'],
-      train_y = data_dict[kernel][split_ind]['train_y'],
-      test_x = data_dict[kernel][split_ind]['test_x'],
-      test_y = data_dict[kernel][split_ind]['test_y'],
-      dataset = 'HCP_1200',
-      subset = f'kPCA_{kernel}-{n_components}',
-      split_ind = split_ind,
-      method='kPCA'
-      ) for split_ind in cv_split_dict.keys() for kernel in ['rbf', 'linear']
-    )
-    df_concat_list = [accuracy_df]
-    for res_dict in results_rfc_list:g
-      df_concat_list.append(pd.DataFrame(res_dict))
-      print(f'Dataset: {res_dict["dataset"]}, subset {res_dict["subset"]}, {res_dict["split_ind"]}')
-      print(f'\tTraining Accuracy: {res_dict["train_accuracy"]}')
-      print(f'\tTest Accuracy: {res_dict["test_accuracy"]}')
-    accuracy_df = pd.concat(df_concat_list)
-    print(accuracy_df)
-    datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
-    accuracy_df.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
-    accuracy_df.to_csv(f'{outpath}{run_uid}_Prediction_Accuracies.csv', index=False)
-    # accuracy_df.to_csv(f'{outpath}Prediction_Accuracies_{datetime_str}.csv', index=False)
-    results_svc_list = Parallel(n_jobs = 10)(
-      delayed(run_svc)(
-        train_x = data_dict[kernel][split_ind]['train_x'],
-        train_y = data_dict[kernel][split_ind]['train_y'],
-        test_x = data_dict[kernel][split_ind]['test_x'],
-        test_y = data_dict[kernel][split_ind]['test_y'],
-        dataset = 'HCP_1200',
-        subset = f'kPCA_{kernel}-{n_components}',
-        split_ind = split_ind,
-        method='kPCA'
-        ) for split_ind in cv_split_dict.keys() for kernel in ['rbf', 'linear']
-      )
-    for res_dict in results_svc_list:
-      df_concat_list.append(pd.DataFrame(res_dict))
-    accuracy_df = pd.concat(df_concat_list)
-    print(accuracy_df)
-    datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
-    accuracy_df.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
-    accuracy_df.to_csv(f'{outpath}{run_uid}_Prediction_Accuracies.csv', index=False)
-    # accuracy_df.to_csv(f'{outpath}Prediction_Accuracies_{datetime_str}.csv', index=False)
-  
+data_dict = {}
+for kernel in ['rbf', 'linear']:
+  data_dict[kernel] = {}
+  for split_ind in cv_split_dict.keys():
+    data_dict[kernel][split_ind] = {
+      'train_x':feature_set_dict[k][f'train_kpca-{kernel}'][cv_split_dict[split_ind][0],0:n_components],
+      'train_y':full_data_outcome.iloc[cv_split_dict[split_ind][0]]['task'].values.ravel().astype('int'),
+      'test_x':feature_set_dict[k][f'train_kpca-{kernel}'][cv_split_dict[split_ind][1],0:n_components],
+      'test_y':full_data_outcome.iloc[cv_split_dict[split_ind][1]]['task'].values.ravel().astype('int')
+    }
+
+results_rfc_list = Parallel(n_jobs = 10)(
+delayed(run_rfc)(
+  train_x = data_dict[kernel][split_ind]['train_x'],
+  train_y = data_dict[kernel][split_ind]['train_y'],
+  test_x = data_dict[kernel][split_ind]['test_x'],
+  test_y = data_dict[kernel][split_ind]['test_y'],
+  dataset = 'HCP_1200',
+  subset = f'kPCA_{kernel}-{n_components}',
+  split_ind = split_ind,
+  method='kPCA'
+  ) for split_ind in cv_split_dict.keys() for kernel in ['rbf', 'linear']
+)
+
+df_concat_list = [accuracy_df]
+for res_dict in results_rfc_list:
+  df_concat_list.append(pd.DataFrame(res_dict))
+  print(f'Dataset: {res_dict["dataset"]}, subset {res_dict["subset"]}, {res_dict["split_ind"]}')
+  print(f'\tTraining Accuracy: {res_dict["train_accuracy"]}')
+  print(f'\tTest Accuracy: {res_dict["test_accuracy"]}')
+
+accuracy_df = pd.concat(df_concat_list)
+print(accuracy_df)
+datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+accuracy_df.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
+accuracy_df.to_csv(f'{outpath}{run_uid}_Prediction_Accuracies.csv', index=False)
+# accuracy_df.to_csv(f'{outpath}Prediction_Accuracies_{datetime_str}.csv', index=False)
+
+results_svc_list = Parallel(n_jobs = 10)(
+  delayed(run_svc)(
+    train_x = data_dict[kernel][split_ind]['train_x'],
+    train_y = data_dict[kernel][split_ind]['train_y'],
+    test_x = data_dict[kernel][split_ind]['test_x'],
+    test_y = data_dict[kernel][split_ind]['test_y'],
+    dataset = 'HCP_1200',
+    subset = f'kPCA_{kernel}-{n_components}',
+    split_ind = split_ind,
+    method='kPCA'
+    ) for split_ind in cv_split_dict.keys() for kernel in ['rbf', 'linear']
+  )
+
+for res_dict in results_svc_list:
+  df_concat_list.append(pd.DataFrame(res_dict))
+
+accuracy_df = pd.concat(df_concat_list)
+
+print(accuracy_df)
+datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+accuracy_df.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
+accuracy_df.to_csv(f'{outpath}{run_uid}_Prediction_Accuracies.csv', index=False)
+# accuracy_df.to_csv(f'{outpath}Prediction_Accuracies_{datetime_str}.csv', index=False)
 
 
 
 # TruncatedSVD
-# comp_sizes = length_list3
-
+comp_sizes = [50, 100, 150, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+data_dict = {}
 for component_size in comp_sizes:
-  try:
-    data_dict = {}
-    for split_ind in cv_split_dict.keys():
-      data_dict[split_ind] = {
-        'train_x':feature_set_dict[k][f'train_tSVD-{component_size}'][cv_split_dict[split_ind][0]],
-        'train_y':full_data_outcome.iloc[cv_split_dict[split_ind][0]]['task'].values.ravel().astype('int'),
-        'test_x':feature_set_dict[k][f'train_tSVD-{component_size}'][cv_split_dict[split_ind][1]],
-        'test_y':full_data_outcome.iloc[cv_split_dict[split_ind][1]]['task'].values.ravel().astype('int')
-      }
-    results_rfc_list = Parallel(n_jobs = 10)(
-    delayed(run_rfc)(
-      train_x = data_dict[split_ind]['train_x'],
-      train_y = data_dict[split_ind]['train_y'],
-      test_x = data_dict[split_ind]['test_x'],
-      test_y = data_dict[split_ind]['test_y'],
-      dataset = 'HCP_1200',
-      subset = f'TruncatedSVD_{component_size}',
-      split_ind = split_ind,
-      method='TruncatedSVD'
-      ) for split_ind in cv_split_dict.keys()
-    )
-    df_concat_list = [accuracy_df]
-    for res_dict in results_rfc_list:
-      df_concat_list.append(pd.DataFrame(res_dict))
-      print(f'Dataset: {res_dict["dataset"]}, subset {res_dict["subset"]}, {res_dict["split_ind"]}')
-      print(f'\tTraining Accuracy: {res_dict["train_accuracy"]}')
-      print(f'\tTest Accuracy: {res_dict["test_accuracy"]}')
-    accuracy_df = pd.concat(df_concat_list)
-    print(accuracy_df)
-    datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
-    accuracy_df.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
-    accuracy_df.to_csv(f'{outpath}{run_uid}_Prediction_Accuracies.csv', index=False)
-    # accuracy_df.to_csv(f'{outpath}Prediction_Accuracies_{datetime_str}.csv', index=False)
-    results_svc_list = Parallel(n_jobs = 10)(
-      delayed(run_svc)(
-        train_x = data_dict[split_ind]['train_x'],
-        train_y = data_dict[split_ind]['train_y'],
-        test_x = data_dict[split_ind]['test_x'],
-        test_y = data_dict[split_ind]['test_y'],
-        dataset = 'HCP_1200',
-        subset = f'TruncatedSVD_{component_size}',
-        split_ind = split_ind,
-        method='TruncatedSVD'
-        ) for split_ind in cv_split_dict.keys()
-      )
-    for res_dict in results_svc_list:
-      df_concat_list.append(pd.DataFrame(res_dict))
-    accuracy_df = pd.concat(df_concat_list)
-    print(accuracy_df)
-    datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
-    accuracy_df.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
-    accuracy_df.to_csv(f'{outpath}{run_uid}_Prediction_Accuracies.csv', index=False)
-  except Exception as e:
-    print(f'{component_size} failed: {e}')
+  data_dict[component_size] = {}
+  for split_ind in cv_split_dict.keys():
+    data_dict[component_size][split_ind] = {
+      'train_x':feature_set_dict[k][f'train_tSVD-{component_size}'][cv_split_dict[split_ind][0]],
+      'train_y':full_data_outcome.iloc[cv_split_dict[split_ind][0]]['task'].values.ravel().astype('int'),
+      'test_x':feature_set_dict[k][f'train_tSVD-{component_size}'][cv_split_dict[split_ind][1]],
+      'test_y':full_data_outcome.iloc[cv_split_dict[split_ind][1]]['task'].values.ravel().astype('int')
+    }
 
-# # LDA
-# data_dict = {}
-# for split_ind in cv_split_dict.keys():
-#   data_dict[split_ind] = {
-#     'train_x':feature_set_dict[k][f'train_LDA'][cv_split_dict[split_ind][0]],
-#     'train_y':full_data_outcome.iloc[cv_split_dict[split_ind][0]]['task'].values.ravel().astype('int'),
-#     'test_x':feature_set_dict[k][f'train_LDA'][cv_split_dict[split_ind][1]],
-#     'test_y':full_data_outcome.iloc[cv_split_dict[split_ind][1]]['task'].values.ravel().astype('int')
-#   }
+results_rfc_list = Parallel(n_jobs = 10)(
+delayed(run_rfc)(
+  train_x = data_dict[component_size][split_ind]['train_x'],
+  train_y = data_dict[component_size][split_ind]['train_y'],
+  test_x = data_dict[component_size][split_ind]['test_x'],
+  test_y = data_dict[component_size][split_ind]['test_y'],
+  dataset = 'HCP_1200',
+  subset = f'TruncatedSVD_{component_size}',
+  split_ind = split_ind,
+  method='TruncatedSVD'
+  ) for split_ind in cv_split_dict.keys() for component_size in comp_sizes
+)
 
-# results_rfc_list = Parallel(n_jobs = 10)(
-# delayed(run_rfc)(
-#   train_x = data_dict[split_ind]['train_x'],
-#   train_y = data_dict[split_ind]['train_y'],
-#   test_x = data_dict[split_ind]['test_x'],
-#   test_y = data_dict[split_ind]['test_y'],
-#   dataset = 'HCP_1200',
-#   subset = f'LDA',
-#   split_ind = split_ind,
-#   method='LDA'
-#   ) for split_ind in cv_split_dict.keys()
-# )
+df_concat_list = [accuracy_df]
+for res_dict in results_rfc_list:
+  df_concat_list.append(pd.DataFrame(res_dict))
+  print(f'Dataset: {res_dict["dataset"]}, subset {res_dict["subset"]}, {res_dict["split_ind"]}')
+  print(f'\tTraining Accuracy: {res_dict["train_accuracy"]}')
+  print(f'\tTest Accuracy: {res_dict["test_accuracy"]}')
 
-# df_concat_list = [accuracy_df]
-# for res_dict in results_rfc_list:
-#   df_concat_list.append(pd.DataFrame(res_dict))
-#   print(f'Dataset: {res_dict["dataset"]}, subset {res_dict["subset"]}, {res_dict["split_ind"]}')
-#   print(f'\tTraining Accuracy: {res_dict["train_accuracy"]}')
-#   print(f'\tTest Accuracy: {res_dict["test_accuracy"]}')
+accuracy_df = pd.concat(df_concat_list)
+print(accuracy_df)
+datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+accuracy_df.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
+accuracy_df.to_csv(f'{outpath}{run_uid}_Prediction_Accuracies.csv', index=False)
+# accuracy_df.to_csv(f'{outpath}Prediction_Accuracies_{datetime_str}.csv', index=False)
 
-# accuracy_df = pd.concat(df_concat_list)
-# print(accuracy_df)
-# datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
-# accuracy_df.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
-# accuracy_df.to_csv(f'{outpath}{run_uid}_Prediction_Accuracies.csv', index=False)
-# # accuracy_df.to_csv(f'{outpath}Prediction_Accuracies_{datetime_str}.csv', index=False)
+results_svc_list = Parallel(n_jobs = 10)(
+  delayed(run_svc)(
+    train_x = data_dict[component_size][split_ind]['train_x'],
+    train_y = data_dict[component_size][split_ind]['train_y'],
+    test_x = data_dict[component_size][split_ind]['test_x'],
+    test_y = data_dict[component_size][split_ind]['test_y'],
+    dataset = 'HCP_1200',
+    subset = f'TruncatedSVD_{component_size}',
+    split_ind = split_ind,
+    method='TruncatedSVD'
+    ) for split_ind in cv_split_dict.keys() for component_size in comp_sizes
+  )
 
-# results_svc_list = Parallel(n_jobs = 10)(
-#   delayed(run_svc)(
-#     train_x = data_dict[split_ind]['train_x'],
-#     train_y = data_dict[split_ind]['train_y'],
-#     test_x = data_dict[split_ind]['test_x'],
-#     test_y = data_dict[split_ind]['test_y'],
-#     dataset = 'HCP_1200',
-#     subset = f'LDA',
-#     split_ind = split_ind,
-#     method='LDA'
-#     ) for split_ind in cv_split_dict.keys()
-#   )
+for res_dict in results_svc_list:
+  df_concat_list.append(pd.DataFrame(res_dict))
 
-# for res_dict in results_svc_list:
-#   df_concat_list.append(pd.DataFrame(res_dict))
+accuracy_df = pd.concat(df_concat_list)
 
-# accuracy_df = pd.concat(df_concat_list)
+print(accuracy_df)
+datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+accuracy_df.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
+accuracy_df.to_csv(f'{outpath}{run_uid}_Prediction_Accuracies.csv', index=False)
 
-# print(accuracy_df)
-# datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
-# accuracy_df.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
-# accuracy_df.to_csv(f'{outpath}{run_uid}_Prediction_Accuracies.csv', index=False)
+# LDA
+data_dict = {}
+for split_ind in cv_split_dict.keys():
+  data_dict[split_ind] = {
+    'train_x':feature_set_dict[k][f'train_LDA'][cv_split_dict[split_ind][0]],
+    'train_y':full_data_outcome.iloc[cv_split_dict[split_ind][0]]['task'].values.ravel().astype('int'),
+    'test_x':feature_set_dict[k][f'train_LDA'][cv_split_dict[split_ind][1]],
+    'test_y':full_data_outcome.iloc[cv_split_dict[split_ind][1]]['task'].values.ravel().astype('int')
+  }
+
+results_rfc_list = Parallel(n_jobs = 10)(
+delayed(run_rfc)(
+  train_x = data_dict[split_ind]['train_x'],
+  train_y = data_dict[split_ind]['train_y'],
+  test_x = data_dict[split_ind]['test_x'],
+  test_y = data_dict[split_ind]['test_y'],
+  dataset = 'HCP_1200',
+  subset = f'LDA',
+  split_ind = split_ind,
+  method='LDA'
+  ) for split_ind in cv_split_dict.keys()
+)
+
+df_concat_list = [accuracy_df]
+for res_dict in results_rfc_list:
+  df_concat_list.append(pd.DataFrame(res_dict))
+  print(f'Dataset: {res_dict["dataset"]}, subset {res_dict["subset"]}, {res_dict["split_ind"]}')
+  print(f'\tTraining Accuracy: {res_dict["train_accuracy"]}')
+  print(f'\tTest Accuracy: {res_dict["test_accuracy"]}')
+
+accuracy_df = pd.concat(df_concat_list)
+print(accuracy_df)
+datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+accuracy_df.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
+accuracy_df.to_csv(f'{outpath}{run_uid}_Prediction_Accuracies.csv', index=False)
+# accuracy_df.to_csv(f'{outpath}Prediction_Accuracies_{datetime_str}.csv', index=False)
+
+results_svc_list = Parallel(n_jobs = 10)(
+  delayed(run_svc)(
+    train_x = data_dict[split_ind]['train_x'],
+    train_y = data_dict[split_ind]['train_y'],
+    test_x = data_dict[split_ind]['test_x'],
+    test_y = data_dict[split_ind]['test_y'],
+    dataset = 'HCP_1200',
+    subset = f'LDA',
+    split_ind = split_ind,
+    method='LDA'
+    ) for split_ind in cv_split_dict.keys()
+  )
+
+for res_dict in results_svc_list:
+  df_concat_list.append(pd.DataFrame(res_dict))
+
+accuracy_df = pd.concat(df_concat_list)
+
+print(accuracy_df)
+datetime_str = dt.datetime.now().strftime('%m-%d-%Y_%H-%M-%S')
+accuracy_df.drop_duplicates(keep='last', subset='metadata_ref', inplace=True)
+accuracy_df.to_csv(f'{outpath}{run_uid}_Prediction_Accuracies.csv', index=False)
 
 # ICA
 data_dict = {}
@@ -1521,58 +1520,3 @@ if False:
   #   )
   #   res = opt.fit(sub_train_x, train_y)
   #   print(opt.score(sub_test_x, test_y))
-
-
-
-train_x = feature_set_dict[k]['train_x']
-train_y = feature_set_dict[k]['train_y'].values.ravel()
-test_x = feature_set_dict[k]['test_x']
-test_y = feature_set_dict[k]['test_y'].values.ravel()
-# Iterate through feature sets with same sizes 
-# Levels of hierarchical selection:
-h_levels = list(feature_set_dict[k]['hierarchical_selected_features'].keys())
-h_levels.reverse()
-# subset h_levels
-# h_levels = h_levels[:1]
-res_dict = {}
-
-for level in h_levels[:1]:
-  feature_index = feature_set_dict[k]['hierarchical_selected_features'][level]
-  sub_train_x = feature_set_dict[k]['train_x'][feature_set_dict[k]['train_x'].columns[feature_index]]
-  sub_test_x = feature_set_dict[k]['test_x'][feature_set_dict[k]['train_x'].columns[feature_index]]
-  n_folds = 5
-  opt_SVC = BayesSearchCV(
-    SVC(probability=True),
-    {
-      'C': [0.001, 0.01, 0.1, 1., 10., 100.],
-      'kernel': Categorical(['linear', 'rbf']),
-    },
-    n_iter=12,
-    random_state=0,
-    refit=True,
-    cv=n_folds,
-    n_jobs = int(args.n_jobs),
-    n_points = int(args.n_jobs),
-    return_train_score = True
-  )
-  res_SVC = opt_SVC.fit(sub_train_x, train_y)
-  res_dict[f'HFS_SVC_{level}'] = [res_SVC, opt_SVC]
-  print(opt_SVC.score(sub_test_x, test_y))
-
-  opt_RFC = BayesSearchCV(
-    RandomForestClassifier(),
-    {
-      'max_depth':[4,16,64,256,1024],
-      'n_estimators':[100, 200, 400, 800, 1600],
-    },
-    n_iter=12,
-    random_state=0,
-    refit=True,
-    cv=n_folds,
-    n_jobs = int(args.n_jobs),
-    n_points = int(args.n_jobs),
-    return_train_score = True
-  )
-  res_RFC = opt_RFC.fit(sub_train_x, train_y)
-  res_dict[f'HFS_RFC_{level}'] = [res_RFC, opt_RFC]
-  print(opt_RFC.score(sub_test_x, test_y))
