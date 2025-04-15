@@ -1,0 +1,11 @@
+Training Data,Test Data,Analysis Method,Training Accuracy,Test Accuracy,Training N,Test N,Notes
+confounds,confounds,SVM,0.1256934306569343,0.13134851138353765,6850,1713,
+confounds,confounds,RFC,0.9998540145985402,0.013426736719206071,6850,1713,n_estimators=1000
+parcel_sum,parcel_sum,SVM,0.1393939393939394,0.14747474747474748,5940,1485,
+parcel_sum,parcel_sum,RFC,1.0,0.36363636363636365,5940,1485,n_estimators=1000
+network_sum,network_sum,SVM,0.14023569023569024,0.16902356902356902,5940,1485,
+network_sum,network_sum,RFC,1.0,0.2801346801346801,5940,1485,n_estimators=1000
+parcel_connection,parcel_connection,SVM,0.14292929292929293,0.14882154882154883,5940,1485,
+parcel_connection,parcel_connection,RFC,1.0,0.9259259259259259,5940,1485,n_estimators=1000
+network_connection,network_connection,SVM,0.14057239057239057,0.14074074074074075,5940,1485,
+network_connection,network_connection,RFC,1.0,0.7542087542087542,5940,1485,n_estimators=1000

@@ -44,8 +44,6 @@ try:
   from skopt import BayesSearchCV ############################ Mising
   from skopt.space import Real, Categorical, Integer ############################ Mising
   from operator import itemgetter
-  from sklearn.model_selection import GroupShuffleSplit
-  from joblib import Parallel, delayed
 except Exception as e:
   print(f'Error loading libraries: ')
   raise Exception(e)
@@ -111,22 +109,14 @@ except Exception as e:
 #   raise Exception(e)
 
 v1_argslist = [ # for running from L2
-  '-source_path','/data/hx-hx1/kbaacke/datasets/hcp_analysis_output/',#'/mnt/usb1/hcp_analysis_output/'
+  '-source_path','/mnt/usb1/hcp_analysis_output/',
   '-uname','kbaacke',
   '-datahost','r2.psych.uiuc.edu',
-<<<<<<< HEAD
   '-local_path','/data/hx-hx1/kbaacke/datasets/hcp_analysis_output/',#'C:\\Users\\kyle\\temp\\',#
   '--output','/data/hx-hx1/kbaacke/datasets/hcp_analysis_output/',#'C:\\Users\\kyle\\output\\',#
   '--remote_output','/data/hx-hx1/kbaacke/datasets/hcp_analysis_output/',#'/mnt/usb1/hcp_analysis_output/'
   '--n_jobs','4',
   '-run_uid','89952a'
-=======
-  '-local_path','C:\\Users\\kyle\\temp\\',
-  '--output','C:\\Users\\kyle\\output\\',
-  '--remote_output','/mnt/usb1/hcp_analysis_output/',
-  '--n_jobs','6',
-  '-run_uid','8d2513'
->>>>>>> origin/kyle_L2
 ]
 
 # Read args
@@ -156,7 +146,6 @@ try:
     os.mkdir(outpath)
 except:
     pass
-
 run_uid = args.run_uid
 total_start_time = dt.datetime.now()
 logging.basicConfig(filename=f'{outpath}{run_uid}_DEBUG.log', level=logging.DEBUG)
@@ -187,14 +176,14 @@ sessions = [
   "tfMRI_SOCIAL"
 ]
 feature_set_dict = {
-  # 'parcel_sum':{
-  # },
-  # 'network_sum':{
-  # },
+  'parcel_sum':{
+  },
+  'network_sum':{
+  },
   'parcel_connection':{
-  }#,
-  # 'network_connection':{
-  # }
+  },
+  'network_connection':{
+  }
 }
 fs_outpath = f'{args.local_path}{run_uid}{sep}FeatureSelection{sep}'
 sub_start_time = dt.datetime.now()
@@ -208,6 +197,7 @@ try:
 except Exception as e:
   print(f'Error reading in raw data: {e}')
   logging.info(f'Error reading in raw data: {e}')
+
 
 length_list2 = [
   1,
@@ -501,7 +491,26 @@ k = 'parcel_connection'
 #   except Exception as e:
 #     logging.info(f'\tError reading {k} permutation importance features: {e}')
 ## KPCA
+
+for k in feature_set_dict.keys():
+  # Hierarchical
+  sub_start_time = dt.datetime.now()
+  hierarchical_start = 1
+  hierarchical_end = 30
+  feature_set_dict[k]['hierarchical_selected_features'] = {}
+  try:
+    for n in range(hierarchical_start, hierarchical_end):
+      feature_set_dict[k]['hierarchical_selected_features'][n] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_hierarchical-{n}.npy')
+    sub_end_time = dt.datetime.now()
+    logging.info('Previous Hierarchical Feaure Selection Output imported: {sub_end_time}')
+  except Exception as e:
+    print(f'Error reading {k} Hierarchical Feaures, n = {n}, Error: {e}')
+    logging.info(f'Error reading {k} Hierarchical Feaures, n = {n}, Error: {e}')
+  logging.info(f'\tHierarchical Feaure Selection ({k}) Done: {sub_end_time}')
+
+# PCA
 for kernel in ['rbf', 'linear']:
+  # Read in feature selection 
   try:
     sub_start_time = dt.datetime.now()
     feature_set_dict[k][f'train_kpca-{kernel}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_kpca-{kernel}.npy')
@@ -516,6 +525,30 @@ for kernel in ['rbf', 'linear']:
 for component_size in length_list3:
   sub_end_time = dt.datetime.now()
   logging.info(f'\tTruncatedSVD Feature Extraction ({k}) Started: {sub_end_time}')
+    sub_end_time = dt.datetime.now()
+    logging.info(f'Error reading {k} PCA: {e}, {sub_end_time}')
+  logging.info(f'\tPCA import Done: {sub_end_time}')
+  # RFC feature selection
+  ## Select from model
+  sub_start_time_outer = dt.datetime.now()
+  logging.info(f'\tSelectFromModel on FRC on {k} started: {sub_start_time_outer}')
+  for x in feature_set_dict[k]['hierarchical_selected_features'].keys():
+    if x>1 and x<len(feature_set_dict[k]['train_x'].columns):
+      # This can be optimized, return to this later
+      sub_start_time = dt.datetime.now()
+      try:
+        feature_set_dict[k][f'rf_selected_{x}'] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_rf_selected_{x}.npy')
+        sub_end_time = dt.datetime.now()
+        logging.info(f'\t\tSelectFromModel on RFC for {x} max features read from previous run')
+      except Exception as e:
+        sub_end_time = dt.datetime.now()
+        logging.info(f'\t\tError reading SelectFromModel on RFC for {x} max features read from previous run: {e}, {sub_end_time}')
+  sub_end_time_outer = dt.datetime.now()
+  logging.info(f'\tSelectFromModel on FRC on {k} Done: {sub_end_time_outer}')
+  ## Permutation importance
+  sub_start_time_outer = dt.datetime.now()
+  n_estimators = 500
+  n_repeats = 50
   try:
     sub_start_time = dt.datetime.now()
     feature_set_dict[k][f'train_tSVD-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_tSVD-{component_size}.npy')
@@ -550,39 +583,6 @@ for component_size in length_list3:
 # except Exception as e:
 #   print(e)
     
-
-atlases_used = {
-  'c1720102':{# !with ICA-Aroma!
-    "atlas_name":"MNINonLinear/aparc+aseg.nii.gz",
-    "Labels": [
-      "Left-Cerebellum-Cortex", "Left-Thalamus", "Left-Caudate", "Left-Putamen", "Left-Pallidum",
-      "Left-Hippocampus", "Left-Amygdala", "Left-Accumbens-area", "Left-VentralDC", "Left-choroid-plexus", 
-      "Right-Cerebellum-Cortex", "Right-Thalamus", "Right-Caudate", "Right-Putamen", "Right-Pallidum", 
-      "Right-Hippocampus", "Right-Amygdala", "Right-Accumbens-area", "Right-VentralDC", "Right-choroid-plexus"
-      ], 
-    "confounds": None
-    },
-  'd8a41be9':{# !with ICA-Aroma!
-    "atlas_name": "Schaefer2018_200Parcels_7Networks_order_FSLMNI152_2mm", 
-    "confounds": None
-    },
-  '69354adf':{
-    "atlas_name": "Schaefer2018_200Parcels_7Networks_order_FSLMNI152_2mm", 
-    "confounds": None, 
-    "Note_1": "No Smoothing, no Confounds"
-  },
-  '056537de':{
-    "atlas_name": "MNINonLinear/aparc+aseg.nii.gz",
-    "Labels": [
-      "Left-Cerebellum-Cortex", "Left-Thalamus", "Left-Caudate", "Left-Putamen", "Left-Pallidum",
-      "Left-Hippocampus", "Left-Amygdala", "Left-Accumbens-area", "Left-VentralDC", "Left-choroid-plexus", 
-      "Right-Cerebellum-Cortex", "Right-Thalamus", "Right-Caudate", "Right-Putamen", "Right-Pallidum", 
-      "Right-Hippocampus", "Right-Amygdala", "Right-Accumbens-area", "Right-VentralDC", "Right-choroid-plexus"
-      ], 
-      "confounds": None, 
-    "Note_1": "No ICA-Aroma"
-  }
-}
 
 # Select data set (parcel vs network and _sum and _connection)
 k = 'parcel_connection'
@@ -1278,7 +1278,7 @@ for n_components in length_list3:
 
 
 # TruncatedSVD
-comp_sizes = length_list3
+# comp_sizes = length_list3
 
 for component_size in comp_sizes:
   try:
@@ -1521,6 +1521,9 @@ if False:
   #   )
   #   res = opt.fit(sub_train_x, train_y)
   #   print(opt.score(sub_test_x, test_y))
+
+
+
 train_x = feature_set_dict[k]['train_x']
 train_y = feature_set_dict[k]['train_y'].values.ravel()
 test_x = feature_set_dict[k]['test_x']
