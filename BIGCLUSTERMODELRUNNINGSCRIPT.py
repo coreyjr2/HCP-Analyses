@@ -23,54 +23,36 @@ sep = os.path.sep
 source_path = os.path.dirname(os.path.abspath(__file__)) + sep
 outpath = "/raid-18/LS/medinak/kbaacke/dr-fs/" ####
 local_path = "/raid-18/LS/medinak/kbaacke/dr-fs/" ###
-input_path = "" ###
+input_path = "/raid-18/LS/medinak/kbaacke/dr-fs/" ###
 run_uid = '89952a'
 
-total_start_time = dt.datetime.now()
-# logging.basicConfig(filename=f'{outpath}{run_uid}_DEBUG.log', level=logging.DEBUG)
-# arch = str(platform.architecture()[0])
-# logging.debug(f'Architecture: {arch}')
-# machine = platform.machine()
-# logging.debug(f'Processor: {machine}')
-# node = platform.node()
-# logging.debug(f'Node Name: {node}')
-# logging.info(f'Started; {total_start_time}') #Adds a line to the logfile to be exported after analysis
-
-meta_dict = json.load(open(local_path + run_uid + sep + run_uid + 'metadata.json'))
-
-feature_set_dict = {
-  'parcel_connection':{
-  }
-}
-fs_outpath = f'{local_path}{run_uid}{sep}FeatureSelection{sep}'
-sub_start_time = dt.datetime.now()
-# logging.info(f'Attempting to read data from {fs_outpath}: {sub_start_time}')
-
-
-# Setting which parameters to run
-
-## Slurm version
 sys.stdout = sys.__stdout__
 sys.stdout = io.StringIO()
-
 job_id = os.getenv('SLURM_ARRAY_TASK_ID') #This will only work in an actual job.
 array_index = int(job_id)
-
-# TODO: Write script to assign method, split and model to a csv file to designate indices of models runs
 runtime_df = pd.read_csv(f'{local_path}array_assignment.csv')
-
 method = runtime_df.iloc[array_index]['model']
 split_index = runtime_df.iloc[array_index]['split']
+dataset = runtime_df.iloc[array_index]['dataset']
+total_start_time = dt.datetime.now()
 
 # Read in the training-test split indices
 train_index = np.load(f'{input_path}{run_uid}_split_{split_index}_train.npy')
 test_index = np.load(f'{input_path}{run_uid}_split_{split_index}_test.npy')
 
+fs_outpath = f'{local_path}{dataset}{run_uid}{sep}FeatureSelection{sep}parcel_connection{sep}'
+sub_start_time = dt.datetime.now()
+# logging.info(f'Attempting to read data from {fs_outpath}: {sub_start_time}')
+meta_dict = json.load(open(local_path + run_uid + sep + run_uid + 'metadata.json'))
+
+
+if method =='All':
+    train = np.load(f'{fs_outpath}{run_uid}_{target_df}.npy')
+
 random_state = 42
 
 def train_models_with_gridsearch(train_data, test_data, y_train, y_test, label='fc'):
     results = {}
-
     # Define model hyperparameter grids
     model_configs = {
         'svm': {
@@ -132,13 +114,13 @@ def train_models_with_gridsearch(train_data, test_data, y_train, y_test, label='
         grid.fit(train_data, y_train['Age'])
         best_model = grid.best_estimator_
         predictions = best_model.predict(test_data)
-
         # Save results with descriptive keys
         # results[f'{name}_{label}_model'] = best_model
         results[f'{name}_{label}_predictions'] = predictions
         results[f'{name}_{label}_best_params'] = grid.best_params_
-
     return results
+
+
 # Method
 ## Split
 ### Model

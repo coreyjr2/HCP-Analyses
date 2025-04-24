@@ -20,12 +20,12 @@ sep = os.path.sep
 dest_sep = '/'
 
 
-base = f'S:\\dr-fs\\'
+base = f'E:\\dr-fs\\'
 dest_base = '/raid-18/LS/medinak/kbaacke/dr-fs/'
 
 
 start_time = dt.datetime.now()
-ssh = createSSHClient(f'{hostname}', 22, f'{username}', psswd = getpass.getpass(f'Password for {username}@{hostname}:'))
+ssh = createSSHClient(f'{hostname}', 22, f'{username}', getpass.getpass(f'Password for {username}@{hostname}:'))
 scp = SCPClient(ssh.get_transport())
 
 subject_folders = os.listdir(base)
