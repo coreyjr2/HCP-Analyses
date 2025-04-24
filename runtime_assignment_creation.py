@@ -9,12 +9,18 @@ methods = list(method_list['0'])
 
 splits = [x for x in range(10)]
 
-out_dict = {"method":[],"split":[]}
+out_dict = {
+    "method":[],
+    # "split":[],
+    "dataset":[]
+}
 
 for split in splits:
     for method in methods:
-        out_dict['method'].append(method)
-        out_dict['split'].append(split)
+        for dataset in ['ucla', 'hcp']:
+            out_dict['method'].append(method)
+            # out_dict['split'].append(split)
+            out_dict['dataset'].append(dataset)
         
 out_df = pd.DataFrame.from_dict(out_dict)
 
