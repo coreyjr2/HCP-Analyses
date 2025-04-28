@@ -17,6 +17,7 @@ import json
 import hashlib
 import logging
 import platform
+import pickle as pk
 
 # Global Variables
 sep = os.path.sep
@@ -45,10 +46,48 @@ sub_start_time = dt.datetime.now()
 # logging.info(f'Attempting to read data from {fs_outpath}: {sub_start_time}')
 meta_dict = json.load(open(local_path + run_uid + sep + run_uid + 'metadata.json'))
 
+feature_set_dict = {}
+k = 'parcel_connection'
+for target_df in ['train_x','test_x','train_y','test_y']:
+    feature_set_dict[target_df] = pd.DataFrame(np.load(f'{fs_outpath}{k}{sep}{run_uid}_{target_df}.npy', allow_pickle=True), columns = np.load(f'{fs_outpath}{k}{sep}{run_uid}_{target_df}_colnames.npy', allow_pickle=True))
 
-if method =='All':
-    train = np.load(f'{fs_outpath}{run_uid}_{target_df}.npy')
-
+if 'Hierarchical' in method:
+    feature_set_dict['hierarchical_selected_features'] = {}
+    n = int(method.split('-')[1])
+    try:
+        feature_set_dict['hierarchical_selected_features'][n] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_hierarchical-{n}.npy')
+    except Exception as e:
+        print(f'Error reading {k} Hierarchical Features, n = {n}, Error: {e}')
+elif 'PCA' in method:
+    feature_set_dict['train_pca'] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_train_pca.npy')
+    feature_set_dict['test_pca'] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_test_pca.npy')
+    feature_set_dict['pca'] = pk.load(open(f'{fs_outpath}{k}{sep}{run_uid}_pca.pkl', 'rb'))
+elif 'rf_selected' in method:
+    x_len = int(method.split('_n')[1])
+    try:
+        feature_set_dict[f'rf_selected_n{x_len}'] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_rf_selected_n{x_len}.npy')
+    except Exception as e:
+        sub_end_time = dt.datetime.now()
+        print(f'Error reading SelectFromModel on RFC for {x_len} max features read from previous run: {e}, {sub_end_time}')
+elif 'Permutation-Importance' in method:
+    n_estimators = 500
+    n_repeats = 50
+    feature_set_dict[f'feature_importances_{n_estimators}'] = np.load(f'{fs_outpath}{k}{sep}{run_uid}_feature_importances_est-{n_estimators}.npy')
+elif 'kPCA' in method:
+    kernel = method.split('_')[1].split('-')[0]
+    feature_set_dict[f'train_kpca-{kernel}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_kpca-{kernel}.npy')
+    feature_set_dict[f'test_kpca-{kernel}'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_kpca-{kernel}.npy')
+    feature_set_dict[f'kpca-{kernel}'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_kpca-{kernel}.pkl', 'rb'))
+elif 'TruncatedSVD' in method:
+    component_size = int(method.split('_')[1])
+    feature_set_dict[f'train_tSVD-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_tSVD-{component_size}.npy')
+    feature_set_dict[f'test_tSVD-{component_size}'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_tSVD-{component_size}.npy')
+    feature_set_dict[f'tSVD-{component_size}'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_tSVD-{component_size}.pkl', 'rb'))
+elif 'LDA' in method:
+    feature_set_dict[f'train_LDA'] = np.load(f'{fs_outpath}{k}/{run_uid}_train_LDA.npy')
+    feature_set_dict[f'test_LDA'] = np.load(f'{fs_outpath}{k}/{run_uid}_test_LDA.npy')
+    feature_set_dict[f'LDA'] = pk.load(open(f'{fs_outpath}{k}/{run_uid}_LDA.pkl', 'rb'))
+    
 random_state = 42
 
 def train_models_with_gridsearch(train_data, test_data, y_train, y_test, label='fc'):
