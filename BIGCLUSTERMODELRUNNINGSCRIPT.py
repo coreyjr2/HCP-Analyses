@@ -38,11 +38,14 @@ split_index = runtime_df.iloc[array_index]['split']
 dataset = runtime_df.iloc[array_index]['dataset']
 total_start_time = dt.datetime.now()
 
-# Read in the training-test split indices
-train_index = np.load(f'{input_path}{run_uid}_split_{split_index}_train.npy')
-test_index = np.load(f'{input_path}{run_uid}_split_{split_index}_test.npy')
-
+# DOUBLE-CHECK THESE PATHS BEFORE RUNNING!!!
 fs_outpath = f'{local_path}{dataset}{run_uid}{sep}FeatureSelection{sep}parcel_connection{sep}'
+pred_path = f'{local_path}{dataset}{run_uid}{sep}predictions{sep}'
+# Read in the training-test split indices
+train_index = np.load(f'{fs_outpath}{run_uid}_split_{split_index}_train.npy')
+test_index = np.load(f'{fs_outpath}{run_uid}_split_{split_index}_test.npy')
+
+
 sub_start_time = dt.datetime.now()
 # logging.info(f'Attempting to read data from {fs_outpath}: {sub_start_time}')
 meta_dict = json.load(open(local_path + run_uid + sep + run_uid + 'metadata.json'))
@@ -147,8 +150,9 @@ def generate_uid(metadata, length = 8):
   run_uid = dhash.hexdigest()[:length]
   return f'_{run_uid}_'
 
-def train_models_with_gridsearch(train_data, test_data, y_train, y_test, cv, label='fc'):
-    results = {}
+def train_models_with_gridsearch(train_data, test_data, y_train, y_test, dataset, cv=5):
+    start_time = dt.datetime.now()
+    results = []
     # Define model hyperparameter grids
     model_configs = {
         'svm': {
@@ -198,53 +202,68 @@ def train_models_with_gridsearch(train_data, test_data, y_train, y_test, cv, lab
         # }
     }
     for name, config in model_configs.items():
-        print(f"Training {name.upper()} model for {label.upper()} data...")
+        print(f"Training {name.upper()} model for {dataset.upper()} data...")
         meta_dict = {
             'data_uid':run_uid,
-            'Classifier':'SVC',
-            'C':c,
-            'kernal':kernel,
-            'class_weight':class_weight,
+            'Classifier':name,
             'random_state':random_state,
-            'feature_selection': selection_method,
-            'features':list(train_x.columns),
-            'split_index':split_index
+            'feature_selection': method,
+            'features':list(train_data.columns),
+            'dataset':dataset
         }
+        meta_uid = generate_uid(meta_dict)
         grid = GridSearchCV(
             estimator=config['model'],
             param_grid=config['params'],
             scoring='neg_mean_absolute_error',
-            cv=5,
+            cv=cv,
             n_jobs=-1
         )
         grid.fit(train_data, y_train)
         best_model = grid.best_estimator_
         predictions = best_model.predict(test_data)
+        prediction_df = pd.DataFrame({
+            'Subject':test_x['Subject'],
+            'Task':test_y,
+            'prediction':predictions
+        })
+        prediction_df.to_csv(f'{pred_path}{pred_uid}_predictions.csv', index=False)
         training_accuracy = best_model.score(train_data, y_train)
         test_accuracy = best_model.score(test_data, y_test)
         classification_rep = classification_report(test_data, predictions, output_dict=True)
         confusion_mat = confusion_matrix(test_data, predictions)
+        end_time = dt.datetime.now()
         results_dict = {
-            'pred_uid':[pred_uid],
             'data_uid':[run_uid],
-            'Classifier':['SVC'],
-            'C':[c],
-            'kernal':[kernel],
-            'class_weight':[class_weight],
+            'dataset':[dataset],
+            'Classifier':[name],
             'random_state':[random_state],
-            'feature_selection': [selection_method],
+            'feature_selection': [method],
             'n_features':[len(train_x.columns)],
             'training_accuracy':[training_accuracy],
             'test_accuracy':[test_accuracy],
-            'split_index':[split_index],
-            'runtime':[(end_time - start_time).total_seconds()]
+            'runtime':[(end_time - start_time).total_seconds()],
+            'uid': [meta_uid]
         }
-        results[f'{name}_{label}_predictions'] = predictions
-        results[f'{name}_{label}_best_params'] = grid.best_params_
-    return results
+        for param, value in grid.best_params_:
+            results_dict[param] = value
+        for level in ['macro avg',  'weighted avg']:
+            for k in classification_rep[level]:
+                results_dict[f'{level}|{k}'] = [classification_rep[level][k]]
+        for group in set(test_y):
+            results_dict[f'Class{group}|N'] = [np.sum(confusion_mat[group,])]
+            results_dict[f'Class{group}|accuracy'] = [confusion_mat[group,group]/np.sum(confusion_mat[group,])]
+            for k in classification_rep[str(group)].keys():
+                results_dict[f'Class{group}|{k}'] = [classification_rep[str(group)][k]]
+            for group2 in set(test_y):
+                results_dict[f'Class{group}|Predicted{group2}'] = [confusion_mat[group,group2]]
+            for group2 in set(test_y):
+                results_dict[f'Class{group}|Predicted{group2}_percent'] = [confusion_mat[group,group2]/np.sum(confusion_mat[group,])]
+        res_df = pd.DataFrame(results_dict)
+        results.append(res_df)      
+    return pd.concat(results)
 
 
-# Method
-## Split
-### Model
-#### Hyperparameters
+# define CV here
+
+cv_results = train_models_with_gridsearch(train_x, test_x, train_y, test_y, dataset, cv = cv)
