@@ -10,20 +10,34 @@ methods = list(method_list['0'])
 splits = [x for x in range(10)]
 
 out_dict = {
-    "method":[],
+    "method":[]#,
     # "split":[],
-    "dataset":[]
+    # "dataset":[]
 }
 
-for split in splits:
-    for method in methods:
-        for dataset in ['ucla', 'hcp']:
-            out_dict['method'].append(method)
-            # out_dict['split'].append(split)
-            out_dict['dataset'].append(dataset)
-        
+# for dataset in ['ucla', 'hcp']:
+for method in methods:
+    out_dict['method'].append(method)
+    # out_dict['split'].append(split)
+    # out_dict['dataset'].append(dataset)
+    
 out_df = pd.DataFrame.from_dict(out_dict)
 
 len(out_df)
 
 out_df.to_csv('array_assignment.csv', index=False)
+
+
+
+for dataset in ['ucla', 'hcp']:
+    out_dict = {
+        "method":[],
+        # "split":[],
+        "dataset":[]
+    }
+    for method in methods:
+        out_dict['method'].append(method)
+        # out_dict['split'].append(split)
+        out_dict['dataset'].append(dataset)
+    out_df = pd.DataFrame.from_dict(out_dict)
+    out_df.to_csv(f'{dataset}_array_assignment.csv', index=False)
