@@ -735,17 +735,17 @@ info_index = {
 }
 
 
-gss_holdout = GroupShuffleSplit(n_splits=1, train_size = .8, random_state = random_state)
-idx_1 = gss_holdout.split(
-    X = full_data,
-    y = feature_set_dict[k]['train_y'],
-    groups = full_data['Subject']
-  )
+# gss_holdout = GroupShuffleSplit(n_splits=1, train_size = .8, random_state = random_state)
+# idx_1 = gss_holdout.split(
+#     X = full_data,
+#     y = feature_set_dict[k]['train_y'],
+#     groups = full_data['Subject']
+#   )
 
 
-for train, test in idx_1:
-  train_data = train
-  test_data = test
+# for train, test in idx_1:
+#   train_data = train
+#   test_data = test
 
 
 # Split into training and test sets and save the indices into a dict for later
