@@ -6,8 +6,8 @@ import paramiko
 from scp import SCPClient
 import zipfile
 import getpass
-username = 'kbaacke' # Change this to be your username
-hostname = 'r2.psych.uiuc.edu'
+username = 'corey' # Change this to be your username
+hostname = 'hx.psych.uiuc.edu'
 
 def createSSHClient(server, port, user, password):
     client = paramiko.SSHClient()
