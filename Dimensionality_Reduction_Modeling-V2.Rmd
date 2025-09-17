@@ -1,0 +1,408 @@
+---
+title: "Dimensionality Reduction Efficacy Modeling"
+author: "Kyle Baacke"
+date: "1/10/2023"
+output: html_document
+---
+# Setup
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Imports
+```{r}
+library(QuantPsyc)
+library(stats)
+library(dplyr)
+library(pwr)
+library(effectsize)
+# library(moments)
+```
+
+# Custom Functions
+```{r}
+summary_dfs = list()
+detail_dfs = list()
+lm_summary_dataframe = function(label_col_1, label_col_2, label_col_3, label_col_4, lm_object){
+  # label_col_2, label_col_3, terms, Adjusted_R_Squared, F, df_1, df_2, p_value, residual_SE, n_terms
+  summary_obj = summary(lm_object)
+  res_data_frame = data.frame(
+    label_col_1 = c(label_col_1),
+    label_col_2 = c(label_col_2),
+    label_col_3 = c(label_col_3),
+    label_col_4 = c(label_col_4),
+    terms = c(toString(lm_object$terms)),
+    adjusted_r_squared = c(summary_obj$adj.r.squared),
+    f = c(summary_obj$fstatistic['value']), 
+    df_1 = c(summary_obj$fstatistic['numdf']), 
+    df_2 = c(summary_obj$fstatistic['dendf']), 
+    p_value = c(pf(
+      summary_obj$fstatistic['value'],
+      summary_obj$fstatistic['numdf'],
+      summary_obj$fstatistic['dendf'],
+      lower.tail=F
+      )),
+    # residual_SE = c(), # TODO
+    n_terms = c(length(names(lm_object$model))-1) 
+  )
+  return(res_data_frame)
+}
+lm_detail_dataframe = function(label_col_1, label_col_2, label_col_3, label_col_4, lm_object){
+  # subject_subset, variable_subset, variable_name, Estimate, Std_Error, t_value, p_value, VIF, beta, partial_eta_squared
+  coef_df = as.data.frame(summary(lm_object)$coefficients)
+  # coef_df = coef_df[c(2:length(rownames(coef_df))),]
+  coef_df$variable_name = rownames(coef_df)
+  tryCatch(
+    {
+      coef_df$VIF = c(c(NA),vif(lm_object))
+    },
+    error=function(e){
+      # print(e)
+      coef_df$VIF = c(NA)
+    }
+  )
+  tryCatch(
+    {
+      coef_df$Cohens_f2_partial_vec = c(NA,cohens_f_squared(lm_object)$Cohens_f2_partial)
+      coef_df$Eta2_partial_vec = c(NA,eta_squared(lm_object)$Eta2_partial)
+      coef_df$r2_partial_vec = c(NA,r2_semipartial(lm_object)$r2_semipartial)
+    },
+    error=function(e){
+      coef_df$Cohens_f2_partial_vec = NA
+      coef_df$Eta2_partial_vec = NA
+      coef_df$r2_partial_vec = NA
+    }
+  )
+  
+  power_vec = c()
+  summary_obj = summary(lm_object)
+  for (f_val in coef_df$Cohens_f2_partial_vec){
+    # print(f_val)
+    tryCatch(
+      {
+        power = pwr.f2.test(u=summary_obj$df[1]-1, v=summary_obj$df[2], f2=f_val, sig.level=0.05)$power
+      },
+      error=function(e){
+        power = c(NA)
+      }
+    )
+    power_vec = c(power_vec, power)
+  }
+  coef_df$power = unlist(power_vec, use.names = FALSE)
+  coef_df$label_col_1 = label_col_1
+  coef_df$label_col_2 = label_col_2
+  coef_df$label_col_3 = label_col_3
+  coef_df$label_col_4 = label_col_4
+  return(coef_df)
+}
+```
+
+
+# Read Data
+```{r}
+acc_df = read.csv('big_acc_df_02a.csv')
+```
+
+# Transform data
+
+## Extract method info
+
+Use this in Excel instead:
+=IFS(LEFT(E2,4)="kPCA","kPCA",LEFT(E2, 9)="Truncated","TSVD",E2="LDA","LDA",LEFT(E2, 3)="PCA","PCA",LEFT(E2, 4)="Perm","PermutationImportance",LEFT(E2,3)="rf_","rfSelected",E2="All","All",LEFT(E2,4)="Hier","Hierarchical", LEFT(E2, 4)="Rand","Random")
+```{r}
+acc_df$method_factor = as.factor(acc_df$Method)
+acc_df_1 = fastDummies::dummy_cols(acc_df, select_columns = c("dataset", "Classifier","Method"))
+
+
+# acc_df$method_factor = ""
+# for(method in c('All','Hierarchical','rf_selected','Permutation-Importance','kPCA','PCA','TruncatedSVD','LDA','Random')){
+#   acc_df[,c(method)] = ifelse(grepl(method, acc_df$feature_selection),1,0)
+#   acc_df[acc_df[,c(method)]==1,c('method_factor')]  = method
+# }
+# acc_df_1 = fastDummies::dummy_cols(acc_df, select_columns = c("dataset","Classifier"))
+# acc_df_1$method_factor = as.factor(acc_df_1$method_factor)
+# # names(acc_df_1)
+# colnames(acc_df_1)[colnames(acc_df_1)=="Permutation-Importance"] = 'PermutationImportance'
+# # names(acc_df_1)
+```
+
+## log, sqrt, and cbrt
+```{r}
+acc_df_1$n_features_log10 = log10(acc_df_1$n_features)
+acc_df_1$n_features_sqrt = sqrt(acc_df_1$n_features)
+acc_df_1$n_features_cbrt = acc_df_1$n_features^(1/3)
+table(acc_df_1$Method)
+```
+# Fit models for each dataset
+
+## HCP
+
+```{r}
+dataset='hcp'
+hcp_subset = acc_df_1[((acc_df_1$dataset==dataset) & (acc_df_1$Method_All!=1) & (acc_df_1$Method_LDA!=1)),]
+
+```
+
+### Baseline model (only n features and transformations thereof)
+```{r}
+hcp_lm_1 = lm(
+  test_accuracy ~ n_features + n_features_log10 + n_features_sqrt + n_features_cbrt,
+  data=hcp_subset
+)
+summary(hcp_lm_1)
+```
+
+An initial model regressing test_accuracy on number of features, log10(n features), sqrt(n_features), and cuberoot(n_features) accounted for a significant 15% of variance in test accuracy (*p*<.0001)
+
+### Model including classifier
+```{r}
+hcp_lm_2 = lm(
+  test_accuracy ~ 
+    n_features + n_features_log10 + n_features_sqrt + n_features_cbrt +
+    Classifier_rf +  Classifier_rr,
+  data=hcp_subset
+)
+summary(hcp_lm_2)
+anova(hcp_lm_1, hcp_lm_2)
+```
+
+The addition of dummy coded variables to indicate which type of classifier was used (SVM, Ridge Regression, or Random Forest) resulted in a significant increase of .7 in the adjusted R-squared (.85, *p*<.0001).
+
+### Model including classifier and dr/fs method
+```{r}
+hcp_lm_3 = lm(
+  test_accuracy ~ 
+    n_features + n_features_log10 + n_features_sqrt + n_features_cbrt +
+    Classifier_rf +  Classifier_rr + 
+    Method_Hierarchical + Method_rfSelected + Method_PermutationImportance + Method_kPCA + Method_PCA + Method_TSVD,
+  data=hcp_subset
+)
+
+summary(hcp_lm_3)
+anova(hcp_lm_2, hcp_lm_3)
+```
+
+The inclusion of Dr/FS method (dummy coded for Hierarchical, fr-selected, PermutationImportance, kPCA, PCA, and TSVD with the implicit comparison to Randomly selected features) further increased the adjusted R-squared by .03. This difference was also statistically significant (*F*[6,5726]=234.9, *p*<.0001).
+
+### Interaction mode 1 (classifier*method)
+```{r}
+hcp_lm_4 = lm(
+  test_accuracy ~ 
+    n_features + n_features_log10 + n_features_sqrt + n_features_cbrt +
+    (Classifier_rf +  Classifier_rr)*
+    (Method_Hierarchical + Method_rfSelected + Method_PermutationImportance + Method_kPCA + Method_PCA + Method_TSVD),
+  data=hcp_subset
+)
+
+summary(hcp_lm_4)
+anova(hcp_lm_3, hcp_lm_4)
+```
+
+The addition of interaction terms between Classifiers and DR/FS methods further increased the amount of variability in test accuracy accounted for (delta R-squared = .02, *F*[5714, 12] = 123.24, *p*<.0001).
+
+## UCLA
+
+```{r}
+dataset='ucla'
+ucla_subset = acc_df_1[((acc_df_1$dataset==dataset) & (acc_df_1$Method_All!=1) & (acc_df_1$Method_LDA!=1)),]
+
+```
+
+### Baseline model (only n features and transformations thereof)
+```{r}
+ucla_lm_1 = lm(
+  test_accuracy ~ n_features + n_features_log10 + n_features_sqrt + n_features_cbrt,
+  data=ucla_subset
+)
+summary(ucla_lm_1)
+```
+
+An initial model regressing test_accuracy on number of features, log10(n features), sqrt(n_features), and cuberoot(n_features) accounted for a significant 57.6% of variance in test accuracy (*p*<.0001)
+
+### Model including classifier
+```{r}
+ucla_lm_2 = lm(
+  test_accuracy ~ 
+    n_features + n_features_log10 + n_features_sqrt + n_features_cbrt +
+    Classifier_rf +  Classifier_rr,
+  data=ucla_subset
+)
+summary(ucla_lm_2)
+anova(ucla_lm_1, ucla_lm_2)
+```
+
+The addition of dummy coded variables to indicate which type of classifier was used (SVM, Ridge Regression, or Random Forest) resulted in a significant increase of .02 in the adjusted R-squared (.62, *p*<.0001).
+
+### Model including classifier and dr/fs method
+```{r}
+ucla_lm_3 = lm(
+  test_accuracy ~ 
+    n_features + n_features_log10 + n_features_sqrt + n_features_cbrt +
+    Classifier_rf +  Classifier_rr + 
+    Method_Hierarchical + Method_rfSelected + Method_PermutationImportance + Method_kPCA + Method_PCA + Method_TSVD,
+  data=ucla_subset
+)
+
+summary(ucla_lm_3)
+anova(ucla_lm_2, ucla_lm_3)
+```
+
+The inclusion of Dr/FS method (dummy coded for Hierarchical, fr-selected, PermutationImportance, kPCA, PCA, and TSVD with the implicit comparison to Randomly selected features) further increased the adjusted R-squared by .20. This difference was also statistically significant (*F*[6,5726]=234.9, *p*<.0001).
+
+### Interaction mode 1 (classifier*method)
+```{r}
+ucla_lm_4 = lm(
+  test_accuracy ~ 
+    n_features + n_features_log10 + n_features_sqrt + n_features_cbrt +
+    (Classifier_rf +  Classifier_rr)*
+    (Method_Hierarchical + Method_rfSelected + Method_PermutationImportance + Method_kPCA + Method_PCA + Method_TSVD),
+  data=ucla_subset
+)
+
+summary(ucla_lm_4)
+anova(ucla_lm_3, ucla_lm_4)
+```
+
+The addition of interaction terms between Classifiers and DR/FS methods further increased the amount of variability in test accuracy accounted for (delta R-squared = .01, *F*[5714, 12] = 123.24, *p*<.0001).
+
+
+
+# OLD
+
+## HCP
+```{r}
+dataset='hcp'
+subset = acc_df_1[acc_df_1$dataset==dataset,]
+
+full_model = lm(test_accuracy ~ 
+                  (n_features + n_features_log10 + n_features_sqrt + n_features_cbrt)*# +
+                  (Classifier_rf +  Classifier_rr)*# + #Classifier_svm +
+                  (Hierarchical + rf_selected + PermutationImportance + kPCA + PCA)# + TruncatedSVD)# + #LDA +
+                  , data=subset
+                )
+
+summary(full_model)
+lm_summary_df_full = lm_summary_dataframe(dataset,'full','','',full_model)
+summary_dfs[[length(summary_dfs)+1]] = lm_summary_df_full
+lm_detail_df_full = lm_detail_dataframe(dataset,'full','','',full_model)
+detail_dfs[[length(detail_dfs)+1]] = lm_detail_df_full
+
+full_model_step = step(full_model, direction = 'backward', trace = FALSE)
+summary(full_model_step)
+
+lm_summary_df_final = lm_summary_dataframe(dataset,'final','','',full_model_step)
+summary_dfs[[length(summary_dfs)+1]] = lm_summary_df_final
+lm_detail_df_final = lm_detail_dataframe(dataset,'final','','',full_model_step)
+detail_dfs[[length(detail_dfs)+1]] = lm_detail_df_final
+
+feature_model = lm(test_accuracy ~ 
+                  n_features + n_features_log10 + n_features_sqrt + n_features_cbrt
+                  , data=subset
+                )
+summary(feature_model)
+
+feature_method_model = lm(test_accuracy ~ 
+                  n_features + n_features_log10 + n_features_sqrt + n_features_cbrt + 
+                  Hierarchical + rf_selected + PermutationImportance + kPCA + PCA
+                  , data=subset
+                )
+summary(feature_method_model)
+
+feature_classifier_model = lm(test_accuracy ~ 
+                  n_features + n_features_log10 + n_features_sqrt + n_features_cbrt + 
+                  Classifier_rf +  Classifier_rr
+                  , data=subset
+                )
+summary(feature_classifier_model)
+
+feature_method_int_model = lm(test_accuracy ~ 
+                  (n_features + n_features_log10 + n_features_sqrt + n_features_cbrt)*
+                  (Hierarchical + rf_selected + PermutationImportance + kPCA + PCA)
+                  , data=subset
+                )
+summary(feature_method_int_model)
+
+feature_classifier_int_model = lm(test_accuracy ~ 
+                  (n_features + n_features_log10 + n_features_sqrt + n_features_cbrt)* 
+                  (Classifier_rf +  Classifier_rr)
+                  , data=subset
+                )
+summary(feature_classifier_int_model)
+
+
+feature_method_classifier_int_model = lm(test_accuracy ~ 
+                  n_features + n_features_log10 + n_features_sqrt + n_features_cbrt + 
+                  (Hierarchical + rf_selected + PermutationImportance + kPCA + PCA)*(Classifier_rf +  Classifier_rr)
+                  , data=subset
+                )
+summary(feature_method_classifier_int_model)
+```
+
+## UCLA
+```{r}
+dataset='ucla'
+subset = acc_df_1[acc_df_1$dataset==dataset,]
+
+full_model = lm(test_accuracy ~ 
+                  (n_features + n_features_log10 + n_features_sqrt + n_features_cbrt)*# +
+                  (Classifier_rf +  Classifier_rr)*# + #Classifier_svm +
+                  (Hierarchical + rf_selected + PermutationImportance + kPCA + PCA)# + TruncatedSVD)# + #LDA +
+                  , data=subset
+                )
+
+# summary(full_model)
+lm_summary_df_full = lm_summary_dataframe(dataset,'full','','',full_model)
+summary_dfs[[length(summary_dfs)+1]] = lm_summary_df_full
+lm_detail_df_full = lm_detail_dataframe(dataset,'full','','',full_model)
+detail_dfs[[length(detail_dfs)+1]] = lm_detail_df_full
+
+full_model_step = step(full_model, direction = 'backward', trace = FALSE)
+# summary(full_model_step)
+feature_model = lm(test_accuracy ~ 
+                  n_features + n_features_log10 + n_features_sqrt + n_features_cbrt
+                  , data=subset
+                )
+summary(feature_model)
+
+feature_method_model = lm(test_accuracy ~ 
+                  n_features + n_features_log10 + n_features_sqrt + n_features_cbrt + 
+                  Hierarchical + rf_selected + PermutationImportance + kPCA + PCA
+                  , data=subset
+                )
+summary(feature_method_model)
+
+feature_classifier_model = lm(test_accuracy ~ 
+                  n_features + n_features_log10 + n_features_sqrt + n_features_cbrt + 
+                  Classifier_rf +  Classifier_rr
+                  , data=subset
+                )
+summary(feature_classifier_model)
+
+feature_method_int_model = lm(test_accuracy ~ 
+                  (n_features + n_features_log10 + n_features_sqrt + n_features_cbrt)*
+                  (Hierarchical + rf_selected + PermutationImportance + kPCA + PCA)
+                  , data=subset
+                )
+summary(feature_method_int_model)
+
+feature_classifier_int_model = lm(test_accuracy ~ 
+                  (n_features + n_features_log10 + n_features_sqrt + n_features_cbrt)* 
+                  (Classifier_rf +  Classifier_rr)
+                  , data=subset
+                )
+summary(feature_classifier_int_model)
+
+
+```
+
+# Consolidate results and save as file
+```{r}
+summary_df_consolidated = bind_rows(summary_dfs)
+summary_df_consolidated <- apply(summary_df_consolidated,2,as.character)
+write.csv(summary_df_consolidated,  "RegressionSummaryResults_v1.csv")
+detail_df_consolidated = bind_rows(detail_dfs)
+detail_df_consolidated <- apply(detail_df_consolidated,2,as.character)
+write.csv(detail_df_consolidated,  "RegressionDetailResults_v1.csv")
+```
+
+
