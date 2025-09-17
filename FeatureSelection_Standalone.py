@@ -45,12 +45,9 @@ try:
   from skopt import BayesSearchCV ############################ Mising
   from skopt.space import Real, Categorical, Integer ############################ Mising
   from operator import itemgetter
-<<<<<<< HEAD
   import random
   from sklearn.model_selection import GroupShuffleSplit
   # import brainconn.utils as bc
-=======
->>>>>>> master
 except Exception as e:
   print(f'Error loading libraries: ')
   raise Exception(e)
