@@ -598,14 +598,12 @@ except:
   sub_end_time = dt.datetime.now()
   logging.info(f'Premade data failed to load. Importing from data from parcellated timeseries: {sub_end_time}')
 
-<<<<<<< HEAD
 # sub_start_time = dt.datetime.now()
 # logging.info(f'Reading parcellated data Started: {sub_start_time}')
 # parcellated_data = {}
 # for session in sessions:
 #   #Read in parcellated data, or parcellate data if meta-data conditions not met by available data
 #   parcellated_data[session] = load_parcellated_task_timeseries_v2(meta_dict, subjects, session, npy_template = npy_template_hcp, basepath = f'{basepath}{sep}') # remote version: f'{basepath}HCP_{args.atlas_name}{sep}'
-=======
 sub_start_time = dt.datetime.now()
 logging.info(f'Reading parcellated data Started: {sub_start_time}')
 parcellated_data = {}
@@ -624,7 +622,6 @@ logging.info(f'generate_network_input_features Started: {sub_start_time}')
 network_sums = generate_network_input_features(parcels_sums, network_labels)
 sub_end_time = dt.datetime.now()
 logging.info(f'generate_network_input_features Done: {sub_end_time}')
->>>>>>> master
 
 # sub_end_time = dt.datetime.now()
 # logging.info(f'Reading parcellated data Done: {sub_end_time}')
