@@ -184,7 +184,7 @@ anova(hcp_lm_2, hcp_lm_3)
 
 The inclusion of Dr/FS method (dummy coded for Hierarchical, fr-selected, PermutationImportance, kPCA, PCA, and TSVD with the implicit comparison to Randomly selected features) further increased the adjusted R-squared by .03. This difference was also statistically significant (*F*[6,5726]=234.9, *p*<.0001).
 
-### Interaction mode 1 (classifier*method)
+### Interaction model 1 (classifier*method)
 ```{r}
 hcp_lm_4 = lm(
   test_accuracy ~ 
@@ -249,7 +249,7 @@ anova(ucla_lm_2, ucla_lm_3)
 
 The inclusion of Dr/FS method (dummy coded for Hierarchical, fr-selected, PermutationImportance, kPCA, PCA, and TSVD with the implicit comparison to Randomly selected features) further increased the adjusted R-squared by .20. This difference was also statistically significant (*F*[6,5726]=234.9, *p*<.0001).
 
-### Interaction mode 1 (classifier*method)
+### Interaction model 1 (classifier*method)
 ```{r}
 ucla_lm_4 = lm(
   test_accuracy ~ 
@@ -265,6 +265,111 @@ anova(ucla_lm_3, ucla_lm_4)
 
 The addition of interaction terms between Classifiers and DR/FS methods further increased the amount of variability in test accuracy accounted for (delta R-squared = .01, *F*[5714, 12] = 123.24, *p*<.0001).
 
+## HCP (No SVM)
+
+```{r}
+dataset='hcp'
+hcp_subset_noSVM = acc_df_1[((acc_df_1$dataset==dataset) & (acc_df_1$Method_All!=1) & (acc_df_1$Method_LDA!=1) & (acc_df_1$Classifier_svm!=1)),]
+
+```
+
+### Baseline model (only n features and transformations thereof)
+```{r}
+hcp_noSVM_lm_1 = lm(
+  test_accuracy ~ n_features + n_features_log10 + n_features_sqrt + n_features_cbrt,
+  data=hcp_subset_noSVM
+)
+summary(hcp_noSVM_lm_1)
+```
+
+An initial model regressing test_accuracy on number of features, log10(n features), sqrt(n_features), and cuberoot(n_features) accounted for a significant 15% of variance in test accuracy (*p*<.0001)
+
+### Model including classifier
+```{r}
+hcp_noSVM_lm_2 = lm(
+  test_accuracy ~ 
+    n_features + n_features_log10 + n_features_sqrt + n_features_cbrt +
+    Classifier_rr,
+  data=hcp_subset_noSVM
+)
+summary(hcp_noSVM_lm_2)
+anova(hcp_noSVM_lm_1, hcp_noSVM_lm_2)
+```
+
+The addition of dummy coded variables to indicate which type of classifier was used (SVM, Ridge Regression, or Random Forest) resulted in a significant increase of .7 in the adjusted R-squared (.85, *p*<.0001).
+
+### Model including classifier and dr/fs method
+```{r}
+hcp_noSVM_lm_3 = lm(
+  test_accuracy ~ 
+    n_features + n_features_log10 + n_features_sqrt + n_features_cbrt +
+    Classifier_rr + 
+    Method_Hierarchical + Method_rfSelected + Method_PermutationImportance + Method_kPCA + Method_PCA + Method_TSVD,
+  data=hcp_subset_noSVM
+)
+
+summary(hcp_noSVM_lm_3)
+anova(hcp_noSVM_lm_2, hcp_noSVM_lm_3)
+```
+
+The inclusion of Dr/FS method (dummy coded for Hierarchical, fr-selected, PermutationImportance, kPCA, PCA, and TSVD with the implicit comparison to Randomly selected features) further increased the adjusted R-squared by .03. This difference was also statistically significant (*F*[6,5726]=234.9, *p*<.0001).
+
+### Interaction model 1 (classifier*method)
+```{r}
+hcp_noSVM_lm_4 = lm(
+  test_accuracy ~ 
+    n_features + n_features_log10 + n_features_sqrt + n_features_cbrt +
+    ( Classifier_rr)*
+    (Method_Hierarchical + Method_rfSelected + Method_PermutationImportance + Method_kPCA + Method_PCA + Method_TSVD),
+  data=hcp_subset_noSVM
+)
+
+summary(hcp_noSVM_lm_4)
+anova(hcp_noSVM_lm_3, hcp_noSVM_lm_4)
+```
+
+The addition of interaction terms between Classifiers and DR/FS methods further increased the amount of variability in test accuracy accounted for (delta R-squared = .02, *F*[5714, 12] = 123.24, *p*<.0001).
+
+
+## Consolidate and output results 
+```{r}
+summary_dfs = list(
+  lm_summary_dataframe("HCP",'baseline','','',hcp_lm_1),
+  lm_summary_dataframe("HCP",'classifier','','',hcp_lm_2),
+  lm_summary_dataframe("HCP",'classifier-method','','',hcp_lm_3),
+  lm_summary_dataframe("HCP",'classifier-method-interaction','','',hcp_lm_4),
+  lm_summary_dataframe("HCP",'baseline','noSVM','',hcp_noSVM_lm_1),
+  lm_summary_dataframe("HCP",'classifier','noSVM','',hcp_noSVM_lm_2),
+  lm_summary_dataframe("HCP",'classifier-method','noSVM','',hcp_noSVM_lm_3),
+  lm_summary_dataframe("HCP",'classifier-method-interaction','noSVM','',hcp_noSVM_lm_4),
+  lm_summary_dataframe("UCLA",'baseline','','',ucla_lm_1),
+  lm_summary_dataframe("UCLA",'classifier','','',ucla_lm_2),
+  lm_summary_dataframe("UCLA",'classifier-method','','',ucla_lm_3),
+  lm_summary_dataframe("UCLA",'classifier-method-interaction','','',ucla_lm_4)
+)
+summary_df_consolidated = bind_rows(summary_dfs)
+summary_df_consolidated <- apply(summary_df_consolidated,2,as.character)
+write.csv(summary_df_consolidated,  "RegressionSummaryResults_v2.csv")
+
+detail_dfs = list(
+  lm_detail_dataframe("HCP",'baseline','','',hcp_lm_1),
+  lm_detail_dataframe("HCP",'classifier','','',hcp_lm_2),
+  lm_detail_dataframe("HCP",'classifier-method','','',hcp_lm_3),
+  lm_detail_dataframe("HCP",'classifier-method-interaction','','',hcp_lm_4),
+  lm_detail_dataframe("HCP",'baseline','noSVM','',hcp_noSVM_lm_1),
+  lm_detail_dataframe("HCP",'classifier','noSVM','',hcp_noSVM_lm_2),
+  lm_detail_dataframe("HCP",'classifier-method','noSVM','',hcp_noSVM_lm_3),
+  lm_detail_dataframe("HCP",'classifier-method-interaction','noSVM','',hcp_noSVM_lm_4),
+  lm_detail_dataframe("UCLA",'baseline','','',ucla_lm_1),
+  lm_detail_dataframe("UCLA",'classifier','','',ucla_lm_2),
+  lm_detail_dataframe("UCLA",'classifier-method','','',ucla_lm_3),
+  lm_detail_dataframe("UCLA",'classifier-method-interaction','','',ucla_lm_4)
+)
+detail_df_consolidated = bind_rows(detail_dfs)
+detail_df_consolidated <- apply(detail_df_consolidated,2,as.character)
+write.csv(detail_df_consolidated,  "RegressionDetailResults_v2.csv")
+```
+
 
 
 # OLD
@@ -277,7 +382,7 @@ subset = acc_df_1[acc_df_1$dataset==dataset,]
 full_model = lm(test_accuracy ~ 
                   (n_features + n_features_log10 + n_features_sqrt + n_features_cbrt)*# +
                   (Classifier_rf +  Classifier_rr)*# + #Classifier_svm +
-                  (Hierarchical + rf_selected + PermutationImportance + kPCA + PCA)# + TruncatedSVD)# + #LDA +
+                  (MethodHierarchical + rf_selected + PermutationImportance + kPCA + PCA)# + TruncatedSVD)# + #LDA +
                   , data=subset
                 )
 
@@ -395,7 +500,7 @@ summary(feature_classifier_int_model)
 
 ```
 
-# Consolidate results and save as file
+## Consolidate results and save as file
 ```{r}
 summary_df_consolidated = bind_rows(summary_dfs)
 summary_df_consolidated <- apply(summary_df_consolidated,2,as.character)
